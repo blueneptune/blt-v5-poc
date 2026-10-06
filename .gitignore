@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.locks/
+
+# Real credentials live here; only the *.example files are tracked.
+config/*.env
+config/.*.renewed.json
+config/.*.tmp
+
+# Lab rig: generated passwords and run state.
+lab/.state/
+lab/media/

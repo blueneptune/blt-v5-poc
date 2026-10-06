@@ -1,0 +1,69 @@
+[project]
+name = "blt"
+version = "0.1.0"
+description = "Commvault job-history collector: per-CommCell collection script, FastAPI ingest API, Postgres store."
+requires-python = ">=3.12"
+# Only what both halves share (the API schemas in blt.schemas). Everything
+# else lives behind an extra so the API container never needs the
+# collector's git dependency, and a collector host never needs Postgres
+# drivers.
+dependencies = [
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.6",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sqlmodel>=0.0.22",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+]
+collector = [
+    "sdk-primer",
+]
+
+[project.scripts]
+blt-collect = "blt.collector.cli:main"
+blt-migrate = "blt.api.migrate:main"
+
+[tool.uv.sources]
+sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag = "v0.1.0" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blt"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "respx>=0.23.1",
+    "ruff>=0.16.8",
+]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's Depends()/Query() as parameter defaults - see sdk-primer-v2's
+# examples/user-service for the same exemption.
+"src/blt/api/*.py" = ["B008"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+files = ["src"]
+# Alembic-generated; not worth type-checking.
+exclude = ["src/blt/migrations/versions/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
