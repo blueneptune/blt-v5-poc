@@ -1,0 +1,15 @@
+# A bare Linux "server" for the lab. It contains no Commvault software:
+# on first start the container installs the file system agent from the
+# install media mounted at /media and registers itself with the
+# CommServe (see entrypoint.sh). Nothing in it listens for connections
+# from outside - the agent opens its own tunnel out to the CommServe.
+FROM docker.io/library/rockylinux:9
+
+RUN dnf -y install hostname procps-ng iproute iputils tar gzip bzip2 which findutils \
+        chkconfig glibc-langpack-en libxcrypt-compat net-tools \
+    && dnf clean all \
+    && mkdir -p /data
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
