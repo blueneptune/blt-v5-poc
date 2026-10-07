@@ -355,9 +355,20 @@ which of these it is:
   ```
 
   The API and Postgres then listen on `BLT_API_PORT` and `BLT_PG_PORT`
-  directly, on `BLT_BIND_ADDRESS`, so the URLs do not change. This mode
-  is tested on Linux; whether it cures the WSL case is not yet
-  confirmed. The other route, for a Podman Desktop machine, is to make
+  directly, on `BLT_BIND_ADDRESS`, so the URLs do not change. (It also
+  means the in-container check above must use `BLT_API_PORT` instead of
+  8000 - in host mode nothing listens on 8000.)
+
+  Confirmed on one Windows + WSL machine on 2026-10-07, with one
+  wrinkle: on the original ports the API could not reach Postgres
+  ("server closed the connection unexpectedly", although Postgres was
+  up and listening), and moving both to ports nothing had used -
+  `BLT_API_PORT=8188`, `BLT_PG_PORT=5544` - made it work, reachable from
+  Windows on `localhost`. The likeliest reason is something left holding
+  the old port numbers from the earlier forwarded pod, or on the Windows
+  side; not established. If host mode fails that way, change the ports
+  before anything else, and point `BLT_API_URL` and DataGrip at the new
+  ones. The other route, for a Podman Desktop machine, is to make
   the machine rootful (`podman machine set --rootful`), which does not
   use pasta at all - but rootful and rootless keep separate storage, so
   the pod and its data volume start again from empty.
