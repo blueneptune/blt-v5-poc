@@ -26,6 +26,12 @@ podman build -t blt-api -f Containerfile .
 # BLT_BIND_ADDRESS or either port, remove the pod first
 # (./deploy/down.sh - the data volume is kept) and run this again.
 BIND="${BLT_BIND_ADDRESS:-127.0.0.1}"
+if [[ ! "$BIND" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "BLT_BIND_ADDRESS in config/blt.env is '${BIND}', which is not an IP address." >&2
+    echo "It should be 127.0.0.1 or 0.0.0.0 (or be left out). The network backend" >&2
+    echo "(slirp4netns, pasta, ...) goes in BLT_POD_NETWORK, on its own line." >&2
+    exit 1
+fi
 # BLT_POD_NETWORK picks how rootless podman connects the pod to the host
 # (e.g. slirp4netns). Unset means podman's default, which is pasta on
 # podman 5 - and pasta is known to misbehave under WSL, where published
