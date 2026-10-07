@@ -32,27 +32,48 @@ if [[ ! "$BIND" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "(slirp4netns, pasta, ...) goes in BLT_POD_NETWORK, on its own line." >&2
     exit 1
 fi
-# BLT_POD_NETWORK picks how rootless podman connects the pod to the host
-# (e.g. slirp4netns). Unset means podman's default, which is pasta on
-# podman 5 - and pasta is known to misbehave under WSL, where published
-# ports can answer "No route to host" or with an empty reply.
-NETWORK_ARGS=()
-[[ -n "${BLT_POD_NETWORK:-}" ]] && NETWORK_ARGS=(--network "$BLT_POD_NETWORK")
+API_PORT="${BLT_API_PORT:-8088}"
+PG_PORT="${BLT_PG_PORT:-5433}"
+
+# Two ways to put the pod on the network.
+#
+# Normally podman publishes the two ports: the containers listen on
+# their usual ports (8000, 5432) and podman forwards API_PORT and PG_PORT
+# to them. For rootless podman that forwarding is done by pasta, which
+# does not work everywhere - under WSL it has been seen to answer "No
+# route to host" for every published port.
+#
+# BLT_POD_NETWORK=host avoids forwarding altogether: the pod shares the
+# host's network, and the API and Postgres listen on API_PORT and PG_PORT
+# themselves, on BLT_BIND_ADDRESS. Same addresses from the outside,
+# nothing in between.
+if [[ "${BLT_POD_NETWORK:-}" == "host" ]]; then
+    POD_ARGS=(--network host)
+    API_LISTEN_HOST="$BIND" API_LISTEN_PORT="$API_PORT" PG_LISTEN_PORT="$PG_PORT"
+    PG_LISTEN_ADDRESSES="$BIND"
+    [[ "$BIND" == "0.0.0.0" ]] && PG_LISTEN_ADDRESSES="*"
+else
+    POD_ARGS=(-p "${BIND}:${API_PORT}:8000" -p "${BIND}:${PG_PORT}:5432")
+    [[ -n "${BLT_POD_NETWORK:-}" ]] && POD_ARGS+=(--network "$BLT_POD_NETWORK")
+    API_LISTEN_HOST="0.0.0.0" API_LISTEN_PORT=8000 PG_LISTEN_PORT=5432
+    PG_LISTEN_ADDRESSES="*"
+fi
 if ! podman pod exists blt; then
-    podman pod create --name blt "${NETWORK_ARGS[@]}" \
-        -p "${BIND}:${BLT_API_PORT:-8088}:8000" \
-        -p "${BIND}:${BLT_PG_PORT:-5433}:5432"
+    podman pod create --name blt "${POD_ARGS[@]}"
 fi
 
 podman run -d --replace --pod blt --name blt-postgres \
     -e POSTGRES_USER=blt -e POSTGRES_DB=blt -e POSTGRES_PASSWORD \
+    -e "PGPORT=${PG_LISTEN_PORT}" \
     -v blt-pgdata:/var/lib/postgresql/data \
-    docker.io/library/postgres:17
+    docker.io/library/postgres:17 \
+    postgres -c "listen_addresses=${PG_LISTEN_ADDRESSES}"
 
 # Containers in a pod share localhost, so the API reaches Postgres there.
 podman run -d --replace --pod blt --name blt-api \
     -e BLT_API_KEY \
-    -e "BLT_DATABASE_URL=postgresql+psycopg://blt:${POSTGRES_PASSWORD}@127.0.0.1:5432/blt" \
+    -e "BLT_LISTEN_HOST=${API_LISTEN_HOST}" -e "BLT_LISTEN_PORT=${API_LISTEN_PORT}" \
+    -e "BLT_DATABASE_URL=postgresql+psycopg://blt:${POSTGRES_PASSWORD}@127.0.0.1:${PG_LISTEN_PORT}/blt" \
     localhost/blt-api
 
 # "Started" is not "working": the API container first waits for Postgres
@@ -61,10 +82,10 @@ podman run -d --replace --pod blt --name blt-api \
 # if there isn't one.
 LOCAL="127.0.0.1"
 [[ "$BIND" != "0.0.0.0" && "$BIND" != "127.0.0.1" ]] && LOCAL="$BIND"
-URL="http://${LOCAL}:${BLT_API_PORT:-8088}/healthz"
+URL="http://${LOCAL}:${API_PORT}/healthz"
 for _ in $(seq 1 45); do
     if curl -fsS -m 3 "$URL" 2>/dev/null | grep -q '"ok"'; then
-        echo "blt pod is up: API on http://${BIND}:${BLT_API_PORT:-8088}, Postgres on ${BIND}:${BLT_PG_PORT:-5433}"
+        echo "blt pod is up: API on http://${BIND}:${API_PORT}, Postgres on ${BIND}:${PG_PORT}"
         exit 0
     fi
     sleep 2

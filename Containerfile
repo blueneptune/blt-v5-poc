@@ -14,4 +14,6 @@ RUN uv sync --frozen --no-dev --extra api
 
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
-CMD ["sh", "-c", "blt-migrate && exec uvicorn --factory blt.api.app:create_app --host 0.0.0.0 --port 8000"]
+# Listens on 0.0.0.0:8000 unless told otherwise; deploy/up.sh overrides
+# both when the pod uses the host's network (BLT_POD_NETWORK=host).
+CMD ["sh", "-c", "blt-migrate && exec uvicorn --factory blt.api.app:create_app --host ${BLT_LISTEN_HOST:-0.0.0.0} --port ${BLT_LISTEN_PORT:-8000}"]

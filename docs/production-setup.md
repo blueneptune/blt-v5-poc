@@ -334,19 +334,33 @@ which of these it is:
   on http://0.0.0.0:8000" and nothing after it). Then the API is fine
   and the request never reached it: the fault is in podman's port
   forwarding. Seen with rootless podman under WSL, where `curl
-  http://127.0.0.1:8088/healthz` from the WSL shell itself fails with an
-  empty reply or "No route to host". Podman 5 uses `pasta` for rootless
-  networking and it does not always work under WSL. Switch the pod to
-  the older `slirp4netns`:
+  http://127.0.0.1:8088/healthz` from the WSL shell itself failed with
+  "No route to host". Rootless podman forwards published ports with
+  `pasta`, which does not work in every environment (and the older
+  `slirp4netns` has been removed from current podman, so it is not an
+  alternative).
+
+  Confirm the API itself first:
+  `podman exec blt-api python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read())"`
+
+  Then take forwarding out of the picture by putting the pod on the
+  host's network:
 
   ```
-  sudo apt install slirp4netns            # or dnf
-  echo 'BLT_POD_NETWORK=slirp4netns' >> config/blt.env
+  # in config/blt.env
+  BLT_POD_NETWORK=host
+  ```
+  ```
   ./deploy/down.sh && ./deploy/up.sh      # the data volume is kept
   ```
 
-  To confirm the API itself first:
-  `podman exec blt-api python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read())"`
+  The API and Postgres then listen on `BLT_API_PORT` and `BLT_PG_PORT`
+  directly, on `BLT_BIND_ADDRESS`, so the URLs do not change. This mode
+  is tested on Linux; whether it cures the WSL case is not yet
+  confirmed. The other route, for a Podman Desktop machine, is to make
+  the machine rootful (`podman machine set --rootful`), which does not
+  use pasta at all - but rootful and rootless keep separate storage, so
+  the pod and its data volume start again from empty.
 - **Still starting.** The API waits for Postgres (up to a minute), then
   applies migrations, then starts. Try again shortly.
 - **`password authentication failed`.** `POSTGRES_PASSWORD` in
