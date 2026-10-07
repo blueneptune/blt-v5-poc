@@ -26,8 +26,14 @@ podman build -t blt-api -f Containerfile .
 # BLT_BIND_ADDRESS or either port, remove the pod first
 # (./deploy/down.sh - the data volume is kept) and run this again.
 BIND="${BLT_BIND_ADDRESS:-127.0.0.1}"
+# BLT_POD_NETWORK picks how rootless podman connects the pod to the host
+# (e.g. slirp4netns). Unset means podman's default, which is pasta on
+# podman 5 - and pasta is known to misbehave under WSL, where published
+# ports can answer "No route to host" or with an empty reply.
+NETWORK_ARGS=()
+[[ -n "${BLT_POD_NETWORK:-}" ]] && NETWORK_ARGS=(--network "$BLT_POD_NETWORK")
 if ! podman pod exists blt; then
-    podman pod create --name blt \
+    podman pod create --name blt "${NETWORK_ARGS[@]}" \
         -p "${BIND}:${BLT_API_PORT:-8088}:8000" \
         -p "${BIND}:${BLT_PG_PORT:-5433}:5432"
 fi

@@ -330,6 +330,23 @@ anything is listening behind it. An empty reply means the API process is
 not up. `podman ps -a --filter pod=blt` and `podman logs blt-api` say
 which of these it is:
 
+- **The API log looks healthy and shows no requests** ("Uvicorn running
+  on http://0.0.0.0:8000" and nothing after it). Then the API is fine
+  and the request never reached it: the fault is in podman's port
+  forwarding. Seen with rootless podman under WSL, where `curl
+  http://127.0.0.1:8088/healthz` from the WSL shell itself fails with an
+  empty reply or "No route to host". Podman 5 uses `pasta` for rootless
+  networking and it does not always work under WSL. Switch the pod to
+  the older `slirp4netns`:
+
+  ```
+  sudo apt install slirp4netns            # or dnf
+  echo 'BLT_POD_NETWORK=slirp4netns' >> config/blt.env
+  ./deploy/down.sh && ./deploy/up.sh      # the data volume is kept
+  ```
+
+  To confirm the API itself first:
+  `podman exec blt-api python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/healthz').read())"`
 - **Still starting.** The API waits for Postgres (up to a minute), then
   applies migrations, then starts. Try again shortly.
 - **`password authentication failed`.** `POSTGRES_PASSWORD` in
