@@ -1,0 +1,31 @@
+#!/bin/bash
+# Lab stand-in for systemctl. There is no systemd in this container, but
+# Commvault's SQL Server discovery decides whether an instance exists by
+# running "systemctl status mssql-server" (seen in its cvd.log: "Failed
+# to get SQL Service status" -> "No instance found"). This answers that
+# one question from the process table and refuses everything else, so
+# nothing can mistake the container for a host that really has systemd.
+# Every call is logged, to show what else asks.
+echo "$(date -u +%FT%TZ) systemctl $*" >> /var/log/lab-systemctl.log
+unit="${*: -1}"
+unit="${unit%.service}"
+case " $* " in
+*" status "* | *" is-active "*)
+    if [[ "$unit" == "mssql-server" ]] && pgrep -x sqlservr >/dev/null; then
+        if [[ " $* " == *" is-active "* ]]; then
+            echo active
+            exit 0
+        fi
+        cat <<OUT
+● mssql-server.service - Microsoft SQL Server Database Engine
+     Loaded: loaded (/usr/lib/systemd/system/mssql-server.service; enabled; preset: disabled)
+     Active: active (running) since $(date -u "+%a %Y-%m-%d %H:%M:%S UTC"); 1h ago
+       Docs: https://docs.microsoft.com/en-us/sql/linux
+   Main PID: $(pgrep -x sqlservr | head -1) (sqlservr)
+OUT
+        exit 0
+    fi
+    exit 3
+    ;;
+esac
+exit 1

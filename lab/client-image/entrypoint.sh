@@ -54,4 +54,14 @@ else
 fi
 
 # Stay up either way, so a failed install can be inspected in place.
-exec sleep infinity
+#
+# This shell stays as PID 1 rather than exec-ing sleep, because PID 1 is
+# who inherits every daemon the agent forks, and something has to reap
+# them when they exit. With nothing reaping, stopped Commvault services
+# linger as zombies, `commvault start` sees their names in the process
+# table, reports "All services started" and starts nothing - which is how
+# a CommServe-initiated update left a client permanently offline.
+while true; do
+    sleep 30 &
+    wait $!
+done
