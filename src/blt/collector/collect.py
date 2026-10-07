@@ -264,10 +264,16 @@ def run_backfill(
     return finished
 
 
+# Objects are posted in pieces of this size, so one request never has to
+# carry a whole large CommCell's clients.
+_OBJECT_BATCH = 500
+
+
 def run_inventory(
     batches: Callable[[], Iterator[list[ObjectIn]]],
     store: BltStore,
     *,
+    problems: list[str] | None = None,
     now: Callable[[], datetime] = _now,
 ) -> RunOut:
     """Collect what the source says exists - clients, instances,
@@ -278,16 +284,22 @@ def run_inventory(
     watermark. When it succeeds the API marks everything it did not see
     as no longer present; a failed run marks nothing, because it saw
     less for a different reason.
+
+    `problems` is the list the source appends to when it had to skip
+    something. Whatever it did read is still stored, so the reports work,
+    but the run is recorded as failed: an inventory with holes in it must
+    not be taken as proof that the things in the holes are gone.
     """
     run = store.start_run(RunStart(mode="inventory", started_at=now(), lookup_seconds=0))
     logger.info("Inventory run {} started", run.id)
     collected = 0
     try:
         for batch in batches():
+            for start in range(0, len(batch), _OBJECT_BATCH):
+                store.upsert_objects(run.id, now(), batch[start : start + _OBJECT_BATCH])
             if batch:
-                store.upsert_objects(run.id, now(), batch)
                 collected += len(batch)
-                logger.info("Inventory: {} {}(s)", len(batch), batch[0].kind)
+                logger.info("Inventory: stored {} {}(s)", len(batch), batch[0].kind)
     except BaseException as exc:
         store.finish_run(
             run.id,
@@ -299,6 +311,26 @@ def run_inventory(
             ),
         )
         raise
+
+    if problems:
+        for problem in problems[:20]:
+            logger.error("Inventory could not read {}", problem)
+        summary = f"{len(problems)} could not be read, e.g. {problems[0]}"
+        finished = store.finish_run(
+            run.id,
+            RunFinish(
+                status="failed", finished_at=now(), jobs_collected=collected, error=summary[:1000]
+            ),
+        )
+        logger.error(
+            "Inventory run {} stored {} objects but is INCOMPLETE ({} skipped): reports will "
+            "work on what was read; nothing has been marked as gone.",
+            run.id,
+            collected,
+            len(problems),
+        )
+        return finished
+
     finished = store.finish_run(
         run.id, RunFinish(status="succeeded", finished_at=now(), jobs_collected=collected)
     )

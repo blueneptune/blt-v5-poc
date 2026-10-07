@@ -503,3 +503,35 @@ def test_report_instance_with_no_sql_backup_still_gets_a_row(
     assert "no SQL backup has ever run" in row["notes"]
     history = http.get("/commcells/prod/instance-report", params={"history": "true"}).json()
     assert [(r["instance"], r["job_id"]) for r in history] == [("sql02", None)]
+
+
+@respx.mock
+def test_one_unreadable_client_is_skipped_not_fatal(http: TestClient, store: BltStore) -> None:
+    respx.post(f"{BASE}/Login").respond(json={"token": "QSDK abc"})
+    respx.get(f"{BASE}/Client").respond(
+        json={
+            "clientProperties": [
+                {"client": {"clientEntity": {"clientId": 15, "clientName": "good"}}},
+                {"client": {"clientEntity": {"clientId": 16, "clientName": "broken"}}},
+            ]
+        }
+    )
+    respx.get(f"{BASE}/Agent", params={"clientId": 15}).respond(json={})
+    respx.get(f"{BASE}/Instance", params={"clientId": 15}).respond(json={})
+    respx.get(f"{BASE}/Agent", params={"clientId": 16}).respond(500)
+
+    # Something stored earlier that this inventory will not see.
+    run_inventory(_inventory([_client("99", "old")]), store)
+
+    skipped: list[str] = []
+    with CommvaultClient(BASE, "svc", "pw") as commvault:
+        run = run_inventory(lambda: iter_inventory(commvault, skipped), store, problems=skipped)
+
+    assert len(skipped) == 1 and skipped[0].startswith("client broken:")
+    # What could be read is stored...
+    objects = {o["name"]: o for o in http.get("/commcells/prod/objects").json()}
+    assert {"good", "broken", "old"} <= set(objects)
+    # ...but an inventory with a hole in it is not a complete one, so it
+    # is recorded as failed and nothing is declared gone.
+    assert run.status == "failed" and "1 could not be read" in (run.error or "")
+    assert objects["old"]["present"] is True

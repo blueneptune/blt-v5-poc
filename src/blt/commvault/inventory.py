@@ -25,11 +25,15 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
+from loguru import logger
+from sdk_primer import SDKError
+
 from blt.schemas import ObjectIn
 
 from .client import CommvaultClient
 
 SQL_SERVER = "SQL Server"
+_PROGRESS_EVERY = 100
 
 
 def _epoch(value: Any) -> datetime | None:
@@ -47,8 +51,35 @@ def _instance_key(instance: dict[str, Any]) -> str:
     return f"{instance['clientId']}/{instance.get('applicationId', 0)}/{instance['instanceId']}"
 
 
-def iter_inventory(commvault: CommvaultClient) -> Iterator[list[ObjectIn]]:
+def iter_inventory(
+    commvault: CommvaultClient, problems: list[str] | None = None
+) -> Iterator[list[ObjectIn]]:
+    """Clients, then instances, then databases.
+
+    On a CommCell with thousands of clients this is thousands of calls,
+    made one after another, and some client will always be odd. A client
+    or instance that cannot be read is skipped and named in `problems`
+    rather than ending the whole inventory; the caller decides what an
+    incomplete inventory is allowed to conclude.
+    """
+    if problems is None:
+        problems = []
     clients = commvault.list_clients()
+    total = len(clients)
+    logger.info("Inventory: {} clients to read", total)
+
+    agents: dict[int, list[str]] = {}
+    instances: list[dict[str, Any]] = []
+    for count, entity in enumerate(clients, start=1):
+        client_id = entity["clientId"]
+        try:
+            agents[client_id] = commvault.list_agents(client_id)
+            instances.extend(commvault.list_instances(client_id))
+        except SDKError as exc:
+            problems.append(f"client {entity.get('clientName')}: {exc}")
+        if count % _PROGRESS_EVERY == 0 or count == total:
+            logger.info("Inventory: read {} of {} clients", count, total)
+
     yield [
         ObjectIn(
             kind="client",
@@ -58,29 +89,30 @@ def iter_inventory(commvault: CommvaultClient) -> Iterator[list[ObjectIn]]:
                 "hostName": entity.get("hostName"),
                 "displayName": entity.get("displayName"),
                 "clientGUID": entity.get("clientGUID"),
-                "agents": commvault.list_agents(entity["clientId"]),
+                "agents": agents.get(entity["clientId"]),
             },
         )
         for entity in clients
     ]
-
-    instances: list[dict[str, Any]] = []
-    for entity in clients:
-        instances.extend(commvault.list_instances(entity["clientId"]))
 
     # Databases are worked out before instances are sent, because an
     # instance's row carries a fact that comes from them: which job was
     # its latest full, and what the CommServe says that job took.
     databases: list[ObjectIn] = []
     last_full: dict[str, dict[str, Any]] = {}
-    for instance in instances:
-        if instance.get("appName") != SQL_SERVER:
-            continue
-        found = _sql_databases(commvault, instance)
-        databases.extend(found)
-        latest = max((d.last_full_job_id or 0 for d in found), default=0)
-        if latest:
-            last_full[_instance_key(instance)] = commvault.job_counts(latest)
+    sql_instances = [i for i in instances if i.get("appName") == SQL_SERVER]
+    logger.info("Inventory: {} SQL Server instances to read", len(sql_instances))
+    for count, instance in enumerate(sql_instances, start=1):
+        try:
+            found = _sql_databases(commvault, instance)
+            latest = max((d.last_full_job_id or 0 for d in found), default=0)
+            if latest:
+                last_full[_instance_key(instance)] = commvault.job_counts(latest)
+            databases.extend(found)
+        except SDKError as exc:
+            problems.append(f"SQL instance {instance.get('instanceName')}: {exc}")
+        if count % _PROGRESS_EVERY == 0 or count == len(sql_instances):
+            logger.info("Inventory: read {} of {} SQL Server instances", count, len(sql_instances))
 
     yield [
         ObjectIn(

@@ -220,7 +220,12 @@ def _run(args: argparse.Namespace) -> None:
                 print_validation(report)
                 sys.exit(2 if report.problems else 0)
             elif args.inventory:
-                run_inventory(lambda: iter_inventory(commvault), store)
+                skipped: list[str] = []
+                inventory = run_inventory(
+                    lambda: iter_inventory(commvault, skipped), store, problems=skipped
+                )
+                if inventory.status != "succeeded":
+                    sys.exit(1)
             elif args.backfill:
                 run_backfill(
                     commvault,
