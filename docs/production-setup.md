@@ -312,6 +312,7 @@ they are not all querying at once.
 
 | If | It probably means | Do |
 |---|---|---|
+| `curl .../healthz` gives "(52) Empty reply from server" | the port is published but the API inside is not answering - still starting, or it exited | `./deploy/up.sh` now waits and prints the reason; or `podman logs blt-api`. See below. |
 | `--check` fails on TLS | private CA | set `CV_CA_BUNDLE` |
 | `--check` says "Access denied" | wrong token, or it has expired with no refresh token in the file | new token (step 3) |
 | First run times out or the CommServe struggles | too much in one window | `CV_INITIAL_LOOKBACK_HOURS=4`, `CV_PAGE_SIZE=200`, `CV_TIMEOUT_SECONDS=300` |
@@ -321,6 +322,30 @@ they are not all querying at once.
 | Backfill slices are slow | a day is too big a slice here | `CV_BACKFILL_CHUNK_HOURS=6` |
 | Inventory takes too long | per-client calls, done in sequence | do not schedule it yet; this needs batching (TODO item 16) |
 | Job times look hours out | the CommServe's clock, not blt | check the CommServe; blt stores what it is given |
+
+### "Empty reply from server" from the API
+
+Podman publishes the port as soon as the pod exists, whether or not
+anything is listening behind it. An empty reply means the API process is
+not up. `podman ps -a --filter pod=blt` and `podman logs blt-api` say
+which of these it is:
+
+- **Still starting.** The API waits for Postgres (up to a minute), then
+  applies migrations, then starts. Try again shortly.
+- **`password authentication failed`.** `POSTGRES_PASSWORD` in
+  `config/blt.env` is not the one the database was created with.
+  Postgres only uses that setting the first time, when the `blt-pgdata`
+  volume is empty; changing it later changes what the API sends but not
+  what the database expects. Put the original back - or, if there is no
+  data worth keeping, `./deploy/down.sh && podman volume rm blt-pgdata`
+  and start again.
+- **Windows line endings.** If `config/blt.env` was saved with CRLF,
+  each value used to end in a carriage return. `up.sh` now strips them,
+  and `.gitattributes` keeps the scripts LF on checkout; on an older
+  checkout, `git pull`, then `git add --renormalize . && git checkout .`
+  if scripts still fail with `$'\r': command not found`.
+- **The image did not build.** `up.sh` would have stopped with the
+  error; scroll up.
 
 ## Backing it out
 

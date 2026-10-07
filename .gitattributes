@@ -1,0 +1,12 @@
+# Shell scripts, container entrypoints and env files are read by bash and
+# by Linux containers, which treat a Windows line ending as part of the
+# line: a CRLF checkout turns "exit 0" into a command not found and puts
+# a carriage return on the end of every password. Keep them LF on every
+# platform, whatever core.autocrlf says.
+*.sh            text eol=lf
+*.env           text eol=lf
+*.env.example   text eol=lf
+Containerfile   text eol=lf
+lab/sql-image/systemctl  text eol=lf
+*.py            text eol=lf
+*.mako          text eol=lf

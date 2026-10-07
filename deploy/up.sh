@@ -10,9 +10,12 @@ if [[ ! -f config/blt.env ]]; then
     echo "config/blt.env not found - copy config/blt.env.example and fill it in." >&2
     exit 1
 fi
+# Read with any carriage returns removed: a blt.env saved by a Windows
+# editor would otherwise put one on the end of the API key and the
+# database password, and the API could then never log in to Postgres.
 set -a
-# shellcheck disable=SC1091
-source config/blt.env
+# shellcheck disable=SC1090
+source <(tr -d '\r' < config/blt.env)
 set +a
 : "${BLT_API_KEY:?set BLT_API_KEY in config/blt.env}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in config/blt.env}"
@@ -40,4 +43,26 @@ podman run -d --replace --pod blt --name blt-api \
     -e "BLT_DATABASE_URL=postgresql+psycopg://blt:${POSTGRES_PASSWORD}@127.0.0.1:5432/blt" \
     localhost/blt-api
 
-echo "blt pod is up: API on http://${BIND}:${BLT_API_PORT:-8088}, Postgres on ${BIND}:${BLT_PG_PORT:-5433}"
+# "Started" is not "working": the API container first waits for Postgres
+# and applies migrations, and if that fails it exits and the published
+# port answers with an empty reply. Wait for a real answer, and show why
+# if there isn't one.
+LOCAL="127.0.0.1"
+[[ "$BIND" != "0.0.0.0" && "$BIND" != "127.0.0.1" ]] && LOCAL="$BIND"
+URL="http://${LOCAL}:${BLT_API_PORT:-8088}/healthz"
+for _ in $(seq 1 45); do
+    if curl -fsS -m 3 "$URL" 2>/dev/null | grep -q '"ok"'; then
+        echo "blt pod is up: API on http://${BIND}:${BLT_API_PORT:-8088}, Postgres on ${BIND}:${BLT_PG_PORT:-5433}"
+        exit 0
+    fi
+    sleep 2
+done
+
+echo "The API did not become healthy at ${URL} within 90 seconds." >&2
+echo "--- podman ps" >&2
+podman ps -a --filter pod=blt --format '{{.Names}}  {{.Status}}' >&2
+echo "--- last lines from blt-api" >&2
+podman logs --tail 25 blt-api >&2 2>&1 || true
+echo "--- last lines from blt-postgres" >&2
+podman logs --tail 10 blt-postgres >&2 2>&1 || true
+exit 1
