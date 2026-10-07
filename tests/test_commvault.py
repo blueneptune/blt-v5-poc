@@ -79,7 +79,7 @@ def test_login_then_pages_until_a_short_page() -> None:
     assert first_body["jobFilter"]["showAgedJobs"] is True
     assert first_body["pagingConfig"] == {
         "sortField": "jobId",
-        "sortDirection": 1,
+        "sortDirection": 0,
         "offset": 0,
         "limit": 2,
     }
@@ -157,3 +157,41 @@ def test_get_job_returns_none_when_the_commcell_has_no_such_job() -> None:
     with _client() as client:
         assert client.get_job(8) is None
         assert client.get_job(9) is None
+
+
+@respx.mock
+def test_a_history_slice_asks_for_finished_jobs_in_an_end_time_range() -> None:
+    from datetime import UTC, datetime
+
+    respx.post(f"{BASE}/Login").respond(json={"token": "QSDK abc"})
+    jobs = respx.post(f"{BASE}/Jobs").respond(json={"jobs": [_summary(4)]})
+    low = datetime(2026, 9, 1, tzinfo=UTC)
+    high = datetime(2026, 9, 2, tzinfo=UTC)
+
+    with _client() as client:
+        pages = list(client.iter_job_pages(86_400, ended_between=(low, high)))
+        oldest = client.oldest_job_start(86_400)
+
+    assert [job.job_id for job in pages[0]] == [4]
+    sliced = json.loads(jobs.calls[0].request.content)
+    assert sliced["category"] == 2  # finished only
+    assert sliced["jobFilter"]["endTimeRange"] == {
+        "fromTime": int(low.timestamp()),
+        "toTime": int(high.timestamp()),
+    }
+    probe = json.loads(jobs.calls[1].request.content)
+    assert probe["pagingConfig"]["limit"] == 1 and probe["pagingConfig"]["sortDirection"] == 0
+    assert oldest is not None and oldest.timestamp() == 1_700_000_000
+
+
+@respx.mock
+def test_one_unreadable_job_does_not_stop_the_collection(log_messages: list[str]) -> None:
+    respx.post(f"{BASE}/Login").respond(json={"token": "QSDK abc"})
+    bad = {"jobSummary": {"jobId": 2, "status": "Completed", "jobStartTime": "not-a-time"}}
+    respx.post(f"{BASE}/Jobs").respond(json={"jobs": [_summary(1), bad, _summary(3)]})
+
+    with _client(page_size=10) as client:
+        pages = list(client.iter_job_pages(lookup_seconds=60))
+
+    assert [job.job_id for job in pages[0]] == [1, 3]
+    assert any("Skipping job 2" in message for message in log_messages)

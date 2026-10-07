@@ -11,15 +11,21 @@ from datetime import datetime
 from sdk_primer import APIClient
 
 from blt.schemas import (
+    BackfillState,
+    BackfillUpdate,
+    InstanceReportRow,
     JobBatch,
     JobIn,
     JobOut,
     JobPatch,
     LastRun,
+    ObjectBatch,
+    ObjectIn,
     RunFinish,
     RunOut,
     RunStart,
     UpsertResult,
+    ValidationReport,
 )
 
 _PAGE = 1000
@@ -32,6 +38,32 @@ class BltStore:
 
     def last_run(self) -> LastRun:
         return LastRun.model_validate(self._client.get(f"{self._base}/last-run").json())
+
+    def upsert_objects(
+        self, run_id: int, collected_at: datetime, objects: list[ObjectIn]
+    ) -> UpsertResult:
+        batch = ObjectBatch(run_id=run_id, collected_at=collected_at, objects=objects)
+        response = self._client.post(f"{self._base}/objects", json=batch.model_dump(mode="json"))
+        return UpsertResult.model_validate(response.json())
+
+    def instance_report(self, history: bool = False) -> list[InstanceReportRow]:
+        response = self._client.get(
+            f"{self._base}/instance-report", params={"history": str(history).lower()}
+        )
+        return [InstanceReportRow.model_validate(row) for row in response.json()]
+
+    def validation(self, max_age_hours: float) -> ValidationReport:
+        response = self._client.get(
+            f"{self._base}/validation", params={"max_age_hours": max_age_hours}
+        )
+        return ValidationReport.model_validate(response.json())
+
+    def backfill_state(self) -> BackfillState:
+        return BackfillState.model_validate(self._client.get(f"{self._base}/backfill").json())
+
+    def save_backfill(self, update: BackfillUpdate) -> BackfillState:
+        response = self._client.put(f"{self._base}/backfill", json=update.model_dump(mode="json"))
+        return BackfillState.model_validate(response.json())
 
     def start_run(self, start: RunStart) -> RunOut:
         response = self._client.post(f"{self._base}/runs", json=start.model_dump(mode="json"))

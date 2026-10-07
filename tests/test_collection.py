@@ -6,10 +6,11 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sdk_primer import APIClient
 
-from blt.collector.collect import run_collection
+from blt.collector.collect import run_backfill, run_collection
 from blt.collector.store import BltStore
 from blt.schemas import JobIn
 
@@ -24,12 +25,36 @@ class FakeCommvault:
         self.listed: list[JobIn] = []
         self.by_id: dict[int, JobIn] = {}
         self.lookups: list[int] = []
+        # What time-sliced (backfill) queries can find, and the slices asked for.
+        self.history: list[JobIn] = []
+        self.slices: list[tuple[datetime, datetime]] = []
         self.looked_up: list[int] = []
 
-    def iter_job_pages(self, lookup_seconds: int) -> Iterator[list[JobIn]]:
+    def iter_job_pages(
+        self,
+        lookup_seconds: int,
+        *,
+        ended_between: tuple[datetime, datetime] | None = None,
+    ) -> Iterator[list[JobIn]]:
+        if ended_between is not None:
+            # A slice of history: finished jobs by end time, inclusive.
+            self.slices.append(ended_between)
+            low, high = ended_between
+            matching = [
+                job
+                for job in self.history
+                if job.end_time is not None and low <= job.end_time <= high
+            ]
+            if matching:
+                yield matching
+            return
         self.lookups.append(lookup_seconds)
         for start in range(0, len(self.listed), 2):
             yield self.listed[start : start + 2]
+
+    def oldest_job_start(self, lookup_seconds: int) -> datetime | None:
+        starts = [job.start_time for job in self.history if job.start_time is not None]
+        return min(starts) if starts else None
 
     def get_job(self, job_id: int) -> JobIn | None:
         self.looked_up.append(job_id)
@@ -62,19 +87,19 @@ def test_full_then_delta_then_reconcile(http: TestClient, blt_api: APIClient) ->
     # Never collected: no watermark, and that is not an error.
     assert http.get("/commcells/prod/last-run").json()["watermark"] is None
 
-    # --- Run 1: nothing stored yet, so everything, as far back as it goes.
+    # --- Run 1: nothing stored yet, so what is active plus a short window.
     commvault.listed = [
         _job(1, "Completed"),
         _job(2, "Running", percent_complete=40),
         _job(3, "Queued"),
         _job(4, "Waiting"),
     ]
-    first = run_collection(commvault, store, initial_lookback_days=30, now=clock)
+    first = run_collection(commvault, store, initial_lookback_hours=6, now=clock)
 
-    assert first.mode == "full"
+    assert first.mode == "initial"
     assert first.status == "succeeded"
     assert first.jobs_collected == 4
-    assert commvault.lookups == [30 * 86_400]
+    assert commvault.lookups == [6 * 3600]
     assert commvault.looked_up == []  # everything active was just seen
     assert _states(http) == {1: "completed", 2: "running", 3: "queued", 4: "waiting"}
     first_seen = http.get("/commcells/prod/jobs/2").json()["first_seen_at"]
@@ -124,7 +149,12 @@ def test_a_failed_run_does_not_move_the_watermark(http: TestClient, blt_api: API
     good = run_collection(commvault, store, now=clock)
 
     class Exploding(FakeCommvault):
-        def iter_job_pages(self, lookup_seconds: int) -> Iterator[list[JobIn]]:
+        def iter_job_pages(
+            self,
+            lookup_seconds: int,
+            *,
+            ended_between: tuple[datetime, datetime] | None = None,
+        ) -> Iterator[list[JobIn]]:
             yield [_job(2, "Running")]
             raise RuntimeError("CommServe went away")
 
@@ -172,3 +202,85 @@ def test_an_older_batch_cannot_overwrite_a_newer_one(http: TestClient) -> None:
 def test_requests_without_the_key_are_rejected(http: TestClient) -> None:
     assert http.get("/commcells/prod/last-run", headers={"X-API-Key": "wrong"}).status_code == 401
     assert http.get("/healthz", headers={"X-API-Key": "wrong"}).status_code == 200
+
+
+def test_forced_full_asks_for_the_whole_history(http: TestClient, blt_api: APIClient) -> None:
+    commvault = FakeCommvault()
+    run = run_collection(
+        commvault, BltStore(blt_api, "prod"), history_limit_days=90, force_full=True, now=Clock(T0)
+    )
+    assert run.mode == "full"
+    assert commvault.lookups == [90 * 86_400]
+
+
+def _old_job(job_id: int, days_ago: float) -> JobIn:
+    ended = T0 - timedelta(days=days_ago)
+    return _job(job_id, "Completed", start_time=ended - timedelta(minutes=10), end_time=ended)
+
+
+def test_backfill_walks_back_in_slices_and_resumes(http: TestClient, blt_api: APIClient) -> None:
+    store = BltStore(blt_api, "prod")
+    commvault = FakeCommvault()
+    clock = Clock(T0)
+    # History: one job a day, 1.5 to 9.5 days back.
+    commvault.history = [_old_job(100 + n, n + 0.5) for n in range(1, 10)]
+
+    # Nothing collected yet: there is nothing to backfill *behind*.
+    with pytest.raises(RuntimeError, match="normal collection first"):
+        run_backfill(commvault, store, now=clock, sleep=lambda _: None)
+
+    # The initial run covers the last 24 hours only.
+    commvault.listed = [_job(1, "Running")]
+    initial = run_collection(commvault, store, initial_lookback_hours=24, now=clock)
+    assert _states(http) == {1: "running"}
+
+    # First batch: at most 4 one-day slices.
+    first = run_backfill(
+        commvault, store, chunk_hours=24, max_chunks=4, now=clock, sleep=lambda _: None
+    )
+    assert first is not None and first.mode == "backfill"
+    assert len(commvault.slices) == 4
+    # Starts a day *above* where the initial run reached, so a clock
+    # disagreement with the CommServe can't leave a gap between them.
+    top = commvault.slices[0][1]
+    assert top > initial.started_at - timedelta(hours=24)
+    # Slices are contiguous, newest first.
+    for newer, older in zip(commvault.slices, commvault.slices[1:], strict=False):
+        assert older[1] == newer[0]
+    state = http.get("/commcells/prod/backfill").json()
+    assert state["complete"] is False
+    assert datetime.fromisoformat(state["backfilled_to"]) == commvault.slices[-1][0]
+    stored = set(_states(http))
+    assert {101, 102}.issubset(stored) and 109 not in stored
+
+    # A backfill run must not move the watermark the deltas work from.
+    assert datetime.fromisoformat(http.get("/commcells/prod/last-run").json()["watermark"]) == (
+        initial.started_at
+    )
+
+    # Second batch picks up exactly where the first stopped, and finishes.
+    resumed_from = commvault.slices[-1][0]
+    run_backfill(commvault, store, chunk_hours=24, max_chunks=50, now=clock, sleep=lambda _: None)
+    assert commvault.slices[4][1] == resumed_from
+    assert http.get("/commcells/prod/backfill").json()["complete"] is True
+    assert set(_states(http)) == {1, *range(101, 110)}
+    # It stopped at the oldest job rather than walking back ten years.
+    assert len(commvault.slices) < 20
+
+    # Once complete, there is nothing left to do.
+    before = len(commvault.slices)
+    assert run_backfill(commvault, store, now=clock, sleep=lambda _: None) is None
+    assert len(commvault.slices) == before
+
+
+def test_backfill_after_a_forced_full_has_nothing_to_do(
+    http: TestClient, blt_api: APIClient
+) -> None:
+    store = BltStore(blt_api, "prod")
+    commvault = FakeCommvault()
+    commvault.history = [_old_job(100, 40)]
+    run_collection(commvault, store, force_full=True, now=Clock(T0))
+
+    assert run_backfill(commvault, store, now=Clock(T0), sleep=lambda _: None) is None
+    assert commvault.slices == []
+    assert http.get("/commcells/prod/backfill").json()["complete"] is True

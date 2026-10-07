@@ -32,10 +32,20 @@ class CollectorSettings(BaseSettings):
     cv_verify_tls: bool = True
     cv_ca_bundle: Path | None = None
     cv_page_size: int = 500
-    # How far back the first run asks for. Commvault only returns what its
-    # own job-history retention has kept, so "ten years" just means "all
-    # of it".
-    cv_initial_lookback_days: int = 3650
+    # The first run for a CommCell is deliberately small: what is active
+    # now plus what finished in this many hours. Older history is fetched
+    # separately, a slice at a time (--backfill).
+    cv_initial_lookback_hours: int = 24
+    # How far back "all of it" means, for --full and as the limit a
+    # backfill will not go behind. Commvault only returns what its own
+    # job-history retention has kept.
+    cv_history_limit_days: int = 3650
+    # Backfill: the width of one time slice, how many slices one
+    # invocation may fetch, and a pause between them - together, the
+    # throttle that keeps a long history from being one heavy pull.
+    cv_backfill_chunk_hours: int = 24
+    cv_backfill_max_chunks: int = 30
+    cv_backfill_pause_seconds: float = 1.0
     # Each delta run re-collects this much before the watermark, so a job
     # that finished right around the last run, or a clock that disagrees
     # with the CommServe's, can't open a gap. Upserts make the overlap free.

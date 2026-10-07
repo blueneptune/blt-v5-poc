@@ -58,6 +58,8 @@ select = ["E", "F", "I", "UP", "B"]
 # FastAPI's Depends()/Query() as parameter defaults - see sdk-primer-v2's
 # examples/user-service for the same exemption.
 "src/blt/api/*.py" = ["B008"]
+# Alembic-generated; long lines are how it writes them.
+"src/blt/migrations/versions/*.py" = ["E501"]
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
