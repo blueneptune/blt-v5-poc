@@ -19,10 +19,14 @@ set +a
 
 podman build -t blt-api -f Containerfile .
 
+# Published ports are fixed when the pod is created. After changing
+# BLT_BIND_ADDRESS or either port, remove the pod first
+# (./deploy/down.sh - the data volume is kept) and run this again.
+BIND="${BLT_BIND_ADDRESS:-127.0.0.1}"
 if ! podman pod exists blt; then
     podman pod create --name blt \
-        -p "127.0.0.1:${BLT_API_PORT:-8088}:8000" \
-        -p "127.0.0.1:${BLT_PG_PORT:-5433}:5432"
+        -p "${BIND}:${BLT_API_PORT:-8088}:8000" \
+        -p "${BIND}:${BLT_PG_PORT:-5433}:5432"
 fi
 
 podman run -d --replace --pod blt --name blt-postgres \
@@ -36,4 +40,4 @@ podman run -d --replace --pod blt --name blt-api \
     -e "BLT_DATABASE_URL=postgresql+psycopg://blt:${POSTGRES_PASSWORD}@127.0.0.1:5432/blt" \
     localhost/blt-api
 
-echo "blt pod is up: API on http://127.0.0.1:${BLT_API_PORT:-8088}, Postgres on 127.0.0.1:${BLT_PG_PORT:-5433}"
+echo "blt pod is up: API on http://${BIND}:${BLT_API_PORT:-8088}, Postgres on ${BIND}:${BLT_PG_PORT:-5433}"

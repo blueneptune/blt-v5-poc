@@ -231,6 +231,46 @@ could run for many minutes. If it is tolerable, schedule it:
 Run a job collection shortly before it, so the report can show each
 backup job's status.
 
+## Connecting DataGrip (or psql) to the database
+
+| Field | Value |
+|---|---|
+| Host | `localhost` |
+| Port | `5433` (`BLT_PG_PORT`) |
+| Database | `blt` |
+| User | `blt` |
+| Password | `POSTGRES_PASSWORD` from `config/blt.env` |
+
+JDBC URL: `jdbc:postgresql://localhost:5433/blt`. No SSL. Tables are in
+the `public` schema. The `blt` user owns them, so mark the data source
+read-only in DataGrip unless you mean to edit.
+
+**With podman inside WSL and DataGrip on Windows** the same values
+should work: WSL2 forwards Windows' `localhost` to ports listening
+inside WSL. Check it before blaming the password:
+
+```
+# in WSL - is the port published?
+podman port blt-postgres            # expect 5432/tcp -> 127.0.0.1:5433
+# in PowerShell - can Windows reach it?
+Test-NetConnection localhost -Port 5433     # expect TcpTestSucceeded : True
+```
+
+If the second fails, in this order:
+
+1. `wsl --shutdown` from PowerShell, reopen WSL, `./deploy/up.sh`, try
+   again. Localhost forwarding sometimes stops until WSL restarts.
+2. Check `%UserProfile%\.wslconfig` does not set
+   `localhostForwarding=false`.
+3. Publish on all of WSL's addresses instead of only its loopback: set
+   `BLT_BIND_ADDRESS=0.0.0.0` in `config/blt.env`, then
+   `./deploy/down.sh && ./deploy/up.sh` (the data volume is kept), and
+   connect DataGrip to the address `hostname -I` prints inside WSL. That
+   address changes when WSL restarts.
+
+None of the WSL path has been run by me - this was written on a Linux
+host, where the first table works as is.
+
 ## Running the collector on Windows
 
 The collector is plain Python and runs on Windows; the database and API
@@ -238,11 +278,13 @@ pod do not (they need podman on Linux or WSL). Two ways to split it:
 
 - **Everything under WSL** - the simplest; nothing here changes.
 - **Collector on Windows, pod elsewhere** - set `BLT_API_URL` in
-  `config\blt.env` to wherever the API is. Note that `deploy/up.sh`
-  publishes the API on `127.0.0.1` only, so a collector on another
-  machine cannot reach it until that is changed to an address the
-  Windows host can route to (and then the API key is the only thing
-  protecting it, over plain HTTP - keep it on a trusted network).
+  `config\blt.env` to wherever the API is. By default the pod publishes
+  on `127.0.0.1` only; with the pod in WSL on the same machine,
+  `http://localhost:8088` from Windows should still reach it (see the
+  DataGrip section above for how to check). For a pod on a different
+  machine, set `BLT_BIND_ADDRESS=0.0.0.0` there - and then the API key
+  is the only thing protecting it, over plain HTTP, so keep it on a
+  trusted network.
 
 `collect.sh` works from Git Bash, or skip it and call what it calls:
 
