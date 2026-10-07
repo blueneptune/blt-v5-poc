@@ -84,8 +84,9 @@ empty. The backup product is the only witness to what exists, so this
 finds what it knows about and has not protected, not what it has never
 seen; see docs/blt-flow.md.
 
-A second `collect.sh` for the same CommCell while one is running exits
-immediately (status 75), so it is safe to schedule tightly, e.g. cron:
+A second collection for the same CommCell while one is running exits
+immediately (status 75; the lock is taken by `blt-collect` itself, so it
+works on Windows and without the shell script too), so it is safe to schedule tightly, e.g. cron:
 
 ```
 */15 * * * * /path/to/blt-v5-poc/collect.sh prod >> /var/log/blt-prod.log 2>&1

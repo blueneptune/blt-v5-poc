@@ -28,24 +28,7 @@ if [[ ! -f "config/${COMMCELL}.env" ]]; then
     exit 66
 fi
 
-# One run of each kind per CommCell at a time: a scheduled run that fires
-# while the previous one is still going exits instead of collecting on
-# top of it. A backfill takes its own lock, so a long one never holds up
-# the regular collection (they cover different ground and both upsert).
-KIND="collection"
-for arg in "$@"; do
-    case "$arg" in
-        --backfill) KIND="backfill" ;;
-        --inventory) KIND="inventory" ;;
-        --validate) KIND="validate" ;;
-        --report) KIND="report" ;;
-    esac
-done
-mkdir -p .locks
-exec 9>".locks/${COMMCELL}.${KIND}.lock"
-if ! flock -n 9; then
-    echo "a ${KIND} for ${COMMCELL} is already running, skipping." >&2
-    exit 75
-fi
-
+# Overlap protection (one run of each kind per CommCell at a time) is
+# done by blt-collect itself, so it works the same on every platform and
+# when blt-collect is run directly.
 exec uv run --extra collector blt-collect --commcell "$COMMCELL" --config-dir "$ROOT/config" "$@"

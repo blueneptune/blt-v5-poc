@@ -15,6 +15,7 @@ from blt.commvault.inventory import iter_inventory
 from blt.schemas import PROBLEM_VERDICTS, InstanceReportRow, ValidationReport
 
 from .collect import run_backfill, run_collection, run_inventory
+from .lock import run_lock
 from .settings import commcell_env_path, load_settings
 from .store import BltStore
 from .tokens import env_token_saver, warn_if_regeneration_due
@@ -138,6 +139,23 @@ def main() -> None:
     args = parser.parse_args()
 
     configure_logging(level=args.log_level.upper())
+
+    # Runs that write take a lock, so a scheduled run that overlaps the
+    # previous one of the same kind exits instead of piling on. Each kind
+    # has its own, so a long backfill never holds up regular collection.
+    # The read-only modes need none.
+    if args.check or args.validate or args.report:
+        _run(args)
+        return
+    kind = "backfill" if args.backfill else "inventory" if args.inventory else "collection"
+    with run_lock(args.config_dir.resolve().parent / ".locks", f"{args.commcell}.{kind}") as held:
+        if not held:
+            logger.warning("A {} for {} is already running, skipping.", kind, args.commcell)
+            sys.exit(75)
+        _run(args)
+
+
+def _run(args: argparse.Namespace) -> None:
     try:
         settings = load_settings(args.commcell, args.config_dir)
     except Exception as exc:  # missing file or missing/invalid setting

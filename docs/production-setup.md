@@ -156,8 +156,9 @@ added to `src/blt/schemas.py`.
 
 ## 6. Schedule it
 
-`collect.sh` takes a per-CommCell lock for each kind of run, so a run
-that overlaps the previous one exits quietly instead of piling up. Cron,
+The collector takes a per-CommCell lock for each kind of run, so a run
+that overlaps the previous one exits quietly (status 75) instead of
+piling up. Cron,
 for the collecting user (create `/var/log/blt` first and make it
 writable by that user, or log somewhere under their home):
 
@@ -229,6 +230,35 @@ could run for many minutes. If it is tolerable, schedule it:
 
 Run a job collection shortly before it, so the report can show each
 backup job's status.
+
+## Running the collector on Windows
+
+The collector is plain Python and runs on Windows; the database and API
+pod do not (they need podman on Linux or WSL). Two ways to split it:
+
+- **Everything under WSL** - the simplest; nothing here changes.
+- **Collector on Windows, pod elsewhere** - set `BLT_API_URL` in
+  `config\blt.env` to wherever the API is. Note that `deploy/up.sh`
+  publishes the API on `127.0.0.1` only, so a collector on another
+  machine cannot reach it until that is changed to an address the
+  Windows host can route to (and then the API key is the only thing
+  protecting it, over plain HTTP - keep it on a trusted network).
+
+`collect.sh` works from Git Bash, or skip it and call what it calls:
+
+```
+uv run --extra collector blt-collect --commcell prod-east --config-dir config
+uv run --extra collector blt-collect --commcell prod-east --config-dir config --backfill
+```
+
+Overlap protection is inside `blt-collect`, so it applies either way.
+Use Task Scheduler in place of cron.
+
+Not yet tried on Windows by me, so treat the first run as a test. Two
+things differ there: the `chmod 600` on the `.env` files does nothing,
+so protect the `config` folder with its own permissions (it holds the
+tokens); and the token file is rewritten on renewal, so nothing else
+should have it open.
 
 ## More than one CommCell
 
