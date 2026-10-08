@@ -134,6 +134,21 @@ class CommvaultClient:
             timeout=timeout,
             transport=httpx.HTTPTransport(verify=verify),
         )
+        # A second transport for calls that change something, which never
+        # retries. Reads are safe to repeat; "start a backup" is not. When
+        # such a request times out, the CommServe may well have acted on
+        # it already, and sending it again starts a second job (seen: an
+        # overloaded CommServe, three attempts, extra jobs). Commvault
+        # does not honour an idempotency key, so the only safe number of
+        # attempts is one.
+        self._api_once = APIClient(
+            base_url=base_url,
+            auth=auth,
+            default_headers=_JSON_HEADERS,
+            timeout=timeout,
+            max_attempts=1,
+            transport=httpx.HTTPTransport(verify=verify),
+        )
 
         self.commcell = CommCell(self)
         self.jobs = Jobs(self)
@@ -147,6 +162,7 @@ class CommvaultClient:
 
     def close(self) -> None:
         self._api.close()
+        self._api_once.close()
         self._login_client.close()
 
     def __enter__(self) -> CommvaultClient:
@@ -154,6 +170,11 @@ class CommvaultClient:
 
     def __exit__(self, *exc_info: object) -> None:
         self.close()
+
+    @property
+    def api_once(self) -> APIClient:
+        """The transport for changing calls: one attempt, no retry."""
+        return self._api_once
 
     @property
     def api(self) -> APIClient:

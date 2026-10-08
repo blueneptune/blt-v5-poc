@@ -146,3 +146,27 @@ def test_an_error_inside_a_200_is_raised_not_ignored() -> None:
         # A backup that returns no job id did not start.
         with pytest.raises(CommvaultError, match="did not start"):
             cv.subclients.backup(43, "Full")
+
+
+@respx.mock
+def test_a_change_is_never_retried_but_a_read_is() -> None:
+    import httpx
+
+    backup = respx.post(f"{BASE}/Subclient/43/action/backup").mock(
+        side_effect=httpx.ReadTimeout("slow CommServe")
+    )
+    read = respx.get(f"{BASE}/CommServ").mock(
+        side_effect=[httpx.ReadTimeout("slow"), httpx.Response(200, json={"hostName": "CS"})]
+    )
+
+    with CommvaultClient(BASE, access_token="tok", allow_changes=True) as cv:
+        # Asking again is harmless, so a read gets another go.
+        cv.api._sleep = lambda _seconds: None
+        assert cv.commcell.info() == {"hostName": "CS"}
+        # Starting a backup again is not: the first request may have
+        # worked, and a second would start a second job.
+        with pytest.raises(SDKError):
+            cv.subclients.backup(43, "Full")
+
+    assert read.call_count == 2
+    assert backup.call_count == 1

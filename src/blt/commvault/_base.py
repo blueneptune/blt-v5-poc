@@ -107,7 +107,8 @@ class Resource:
                 f"{method} {path} would change the CommServe; this client is read-only. "
                 "Build it with allow_changes=True if that is really intended."
             )
-        data = json_body(self._client.api.request(method, path, json=body))
+        # One attempt only - see CommvaultClient.api_once for why.
+        data = json_body(self._client.api_once.request(method, path, json=body))
         problem = error_in(data)
         if problem:
             raise CommvaultError(f"{method} {path}: {problem}")
