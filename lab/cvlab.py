@@ -30,7 +30,6 @@ CommServe.
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import secrets
 import socket
@@ -44,7 +43,7 @@ from typing import Any
 
 import httpx
 from loguru import logger
-from sdk_primer import APIClient, SDKError, configure_logging
+from sdk_primer import SDKError, configure_logging
 
 from blt.collector.settings import commcell_env_path, load_settings
 from blt.collector.tokens import env_token_saver
@@ -85,80 +84,42 @@ SQL_CREDENTIAL = PREFIX + "sql-sa"
 SQL_SYSTEM_DATABASES = {"master", "model", "msdb"}
 STATE_DIR = LAB_DIR / ".state"
 
+# Commands that never change the CommServe (the sql-add-db / -offline /
+# -online ones change only the lab's own SQL Server container).
+READ_ONLY_COMMANDS = {
+    "preflight", "sql-report", "sql-validate", "sql-add-db", "sql-offline", "sql-online",
+}  # fmt: skip
+
 ACTIVE = {"running", "waiting", "pending", "queued", "suspended", "suspend pending",
           "kill pending", "interrupt pending"}  # fmt: skip
 
 
 class Lab:
-    def __init__(self, api: APIClient, plan_name: str) -> None:
-        self.api = api
+    """Everything the lab does to the CommServe goes through blt's
+    Commvault SDK (`self.cv`, a CommvaultClient built with
+    allow_changes=True - the lab is the one place that is meant to change
+    things). Nothing here builds a URL."""
+
+    def __init__(self, cv: CommvaultClient, plan_name: str) -> None:
+        self.cv = cv
         self.plan_name = plan_name
-        info = self.get("/CommServ")
+        info = cv.commcell.info()
         self.cs_name: str = info["commcell"]["commCellName"]
         self.version: str = info.get("csVersionInfo", "?")
-        clients = self.get("/Client").get("clientProperties", [])
-        match = [
-            c["client"]["clientEntity"]
-            for c in clients
-            if c["client"]["clientEntity"]["clientName"].lower() == self.cs_name.lower()
-        ]
-        if not match:
+        own = cv.clients.find(self.cs_name)
+        if own is None:
             raise SystemExit(f"The CommServe has no client named {self.cs_name!r} for itself.")
-        self.client_id: int = match[0]["clientId"]
-
-    # -- plumbing ---------------------------------------------------------
-
-    def call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        response = self.api.request(method, path, json=body)
-        try:
-            data = response.json()
-        except ValueError:
-            raise SystemExit(
-                f"{method} {path} did not return JSON - is the CommServe in maintenance?"
-            ) from None
-        return data if isinstance(data, dict) else {"_": data}
-
-    def get(self, path: str) -> dict[str, Any]:
-        try:
-            return self.call("GET", path)
-        except SDKError as exc:
-            # Commvault answers some "there are none" listings with a 404
-            # (a client with no subclients yet, for one) rather than an
-            # empty list.
-            if "404" in str(exc):
-                return {}
-            raise
-
-    @staticmethod
-    def error_in(data: dict[str, Any]) -> str | None:
-        """Commvault reports most failures as a 200 with an error inside.
-        The places it puts one vary by endpoint; this checks the usual ones."""
-        candidates: list[dict[str, Any]] = [data]
-        for key in ("response", "errorList", "errList"):
-            value = data.get(key)
-            if isinstance(value, list):
-                candidates.extend(v for v in value if isinstance(v, dict))
-            elif isinstance(value, dict):
-                candidates.append(value)
-        for item in candidates:
-            code = item.get("errorCode", 0)
-            if code not in (0, "0", None):
-                text = (
-                    item.get("errorString") or item.get("errorMessage") or item.get("errLogMessage")
-                )
-                return f"error {code}: {text or item}"
-        return None
+        self.client_id: int = own["clientId"]
 
     # -- lookups ----------------------------------------------------------
 
     def lab_clients(self) -> dict[str, int]:
         """Container clients registered on the CommServe: name -> client id."""
-        found = {}
-        for item in self.get("/Client").get("clientProperties", []):
-            entity = item["client"]["clientEntity"]
-            if entity["clientName"].startswith(PREFIX):
-                found[entity["clientName"]] = entity["clientId"]
-        return found
+        return {
+            entity["clientName"]: entity["clientId"]
+            for entity in self.cv.clients.list()
+            if entity["clientName"].startswith(PREFIX)
+        }
 
     def lab_subclients(self) -> dict[str, dict[str, Any]]:
         """Existing blt-lab-* subclients, by label. On the CommServe's own
@@ -166,9 +127,7 @@ class Lab:
         container client it is "<client>/data"."""
         found = {}
         for client_name, client_id in {self.cs_name: self.client_id, **self.lab_clients()}.items():
-            data = self.get(f"/Subclient?clientId={client_id}")
-            for item in data.get("subClientProperties", []):
-                entity = item.get("subClientEntity", {})
+            for entity in self.cv.subclients.list(client_id):
                 name = entity.get("subclientName", "")
                 if entity.get("appName") != "File System" or not name.startswith(PREFIX):
                     continue
@@ -177,21 +136,11 @@ class Lab:
         return found
 
     def plans(self) -> dict[str, int]:
-        data = self.get("/V4/Plan/Summary")
-        return {p["plan"]["name"]: p["plan"]["id"] for p in data.get("plans", [])}
+        return self.cv.plans.ids()
 
-    def job(self, job_id: int) -> dict[str, Any] | None:
-        jobs = self.get(f"/Job/{job_id}").get("jobs") or []
-        return jobs[0].get("jobSummary") if jobs else None
-
-    def active_jobs(self) -> list[dict[str, Any]]:
-        body = {
-            "scope": 1,
-            "category": 1,
-            "pagingConfig": {"sortField": "jobId", "sortDirection": 1, "offset": 0, "limit": 200},
-            "jobFilter": {"completedJobLookupTime": 0, "showAgedJobs": False},
-        }
-        return [j["jobSummary"] for j in self.call("POST", "/Jobs", body).get("jobs") or []]
+    def job_status(self, job_id: int) -> str:
+        job = self.cv.jobs.get(job_id)
+        return job.status if job else "gone"
 
     # -- commands ---------------------------------------------------------
 
@@ -201,12 +150,7 @@ class Lab:
             "CommServe {} version {} (client id {})", self.cs_name, self.version, self.client_id
         )
 
-        agents = self.get(f"/Agent?clientId={self.client_id}").get("agentProperties", [])
-        has_fs = any(
-            a["idaEntity"].get("appName") == "File System"
-            and not a.get("AgentProperties", {}).get("isMarkedDeleted")
-            for a in agents
-        )
+        has_fs = "File System" in self.cv.clients.agents(self.client_id)
         logger.log("INFO" if has_fs else "ERROR", "File System agent on the CommServe: {}", has_fs)
         ok &= has_fs
 
@@ -221,8 +165,7 @@ class Lab:
         )
         ok &= has_plan
 
-        storage = self.get("/V4/Storage/Disk").get("diskStorage", [])
-        online = [s["name"] for s in storage if s.get("status") == "Online"]
+        online = [s["name"] for s in self.cv.storage.disk() if s.get("status") == "Online"]
         logger.log(
             "INFO" if online else "ERROR", "Online disk storage: {}", ", ".join(online) or "none"
         )
@@ -230,32 +173,23 @@ class Lab:
 
         existing = self.lab_subclients()
         logger.info("Lab subclients present: {}", ", ".join(existing) or "none")
-        active = self.active_jobs()
-        logger.info("Jobs active right now: {}", len(active))
+        logger.info("Jobs active right now: {}", len(self.cv.jobs.active()))
         logger.log("INFO" if ok else "ERROR", "Preflight {}", "passed" if ok else "FAILED")
         return ok
 
     def create_subclient(
         self, client_name: str, name: str, path: str, purpose: str, plan_id: int
     ) -> bool:
-        body = {
-            "subClientProperties": {
-                "contentOperationType": 2,
-                "subClientEntity": {
-                    "clientName": client_name,
-                    "appName": "File System",
-                    "instanceName": "DefaultInstanceName",
-                    "backupsetName": "defaultBackupSet",
-                    "subclientName": name,
-                },
-                "content": [{"path": path}],
-                "commonProperties": {"enableBackup": True, "description": f"blt lab: {purpose}"},
-                "planEntity": {"planName": self.plan_name, "planId": plan_id},
-            }
-        }
-        error = self.error_in(self.call("POST", "/Subclient", body))
-        if error:
-            logger.error("Creating {} on {} failed - {}", name, client_name, error)
+        try:
+            self.cv.subclients.create(
+                client_name,
+                name,
+                content=[{"path": path}],
+                plan={"planName": self.plan_name, "planId": plan_id},
+                description=f"blt lab: {purpose}",
+            )
+        except SDKError as exc:
+            logger.error("Creating {} on {} failed - {}", name, client_name, exc)
             return False
         logger.info("Created {} on {} -> {}", name, client_name, path)
         return True
@@ -278,9 +212,9 @@ class Lab:
         """Report every lab subclient as the CommServe now has it, rather
         than trust the replies to the calls that created them."""
         for name, entity in self.lab_subclients().items():
-            props = self.get(f"/Subclient/{entity['subclientId']}")["subClientProperties"][0]
-            plan = props.get("planEntity", {}).get("planName")
-            content = [c.get("path") for c in props.get("content", [])]
+            props = self.cv.subclients.get(entity["subclientId"])
+            plan = (props.get("planEntity") or {}).get("planName")
+            content = [c.get("path") for c in props.get("content") or []]
             logger.log(
                 "INFO" if plan else "WARNING",
                 "{} (id {}): plan={} content={}",
@@ -292,7 +226,7 @@ class Lab:
 
     def start_backup(self, name: str, subclient_id: int, level: str) -> int | None:
         try:
-            data = self.call("POST", f"/Subclient/{subclient_id}/action/backup?backupLevel={level}")
+            job_id = self.cv.subclients.backup(subclient_id, level)
         except SDKError as exc:
             # Commvault answers 409 when the subclient already has a
             # backup queued or running - e.g. two noise rounds overlapping.
@@ -300,21 +234,18 @@ class Lab:
             reason = "already has a backup in progress" if "409" in str(exc) else str(exc)
             logger.warning("{}: {} backup not started - {}", name, level, reason)
             return None
-        job_ids = data.get("jobIds") or []
-        if not job_ids:
-            logger.error(
-                "{}: {} backup did not start - {}", name, level, self.error_in(data) or data
-            )
-            return None
-        logger.info("{}: {} backup started as job {}", name, level, job_ids[0])
-        return int(job_ids[0])
+        logger.info("{}: {} backup started as job {}", name, level, job_id)
+        return job_id
 
     def job_action(self, job_id: int, action: str) -> None:
-        data = self.call("POST", f"/Job/{job_id}/action/{action}")
-        error = self.error_in(data)
-        logger.log(
-            "WARNING" if error else "INFO", "job {}: {} {}", job_id, action, error or "requested"
-        )
+        """suspend, resume or kill a job; a refusal is logged, not fatal
+        (the job may simply have finished first)."""
+        try:
+            getattr(self.cv.jobs, action)(job_id)
+        except SDKError as exc:
+            logger.warning("job {}: {} refused - {}", job_id, action, exc)
+        else:
+            logger.info("job {}: {} requested", job_id, action)
 
     def wait_for_status(self, job_id: int, wanted: set[str], timeout: float) -> str:
         """Poll until the job's status is one of `wanted` (lower-case),
@@ -322,8 +253,7 @@ class Lab:
         deadline = time.monotonic() + timeout
         status = "unknown"
         while time.monotonic() < deadline:
-            summary = self.job(job_id)
-            status = (summary or {}).get("status", "gone")
+            status = self.job_status(job_id)
             if status.lower() in wanted or status.lower() not in ACTIVE:
                 return status
             time.sleep(3)
@@ -353,7 +283,7 @@ class Lab:
                 started.append(job_id)
                 status = self.wait_for_status(job_id, {"running"}, timeout=120)
                 if status.lower() == "running":
-                    self.job_action(job_id, "pause")
+                    self.job_action(job_id, "suspend")
                     logger.info(
                         "job {}: now {}", job_id, self.wait_for_status(job_id, {"suspended"}, 60)
                     )
@@ -371,8 +301,7 @@ class Lab:
         last: dict[int, str] = {}
         while pending and time.monotonic() < deadline:
             for job_id in sorted(pending):
-                summary = self.job(job_id) or {}
-                last[job_id] = summary.get("status", "gone")
+                last[job_id] = self.job_status(job_id)
                 if last[job_id].lower() not in ACTIVE:
                     pending.discard(job_id)
             if pending:
@@ -388,11 +317,10 @@ class Lab:
         """A CommCell install authcode: what lets an installer register a
         client without a user name and password. Asking for one turns the
         feature on for the CommCell and returns a fresh code."""
-        data = self.call("POST", "/Organization/0/Authtoken")
-        code = data.get("organizationProperties", {}).get("authCode")
-        if not code:
-            raise SystemExit(f"Could not get an install authcode - {self.error_in(data) or data}")
-        return str(code)
+        try:
+            return self.cv.commcell.install_authcode()
+        except SDKError as exc:
+            raise SystemExit(f"Could not get an install authcode - {exc}") from None
 
     def ensure_media(self, package_name: str = MEDIA_PACKAGE, dest: Path = MEDIA_DIR) -> None:
         """A Commvault Unix install package, unpacked at `dest`/Unix.
@@ -401,7 +329,7 @@ class Lab:
         is unpacked."""
         if (dest / "Unix" / "silent_install").is_file():
             return
-        packages = self.get("/V4/commcell/available-packages").get("pkgList", [])
+        packages = self.cv.commcell.packages()
         package = next((p for p in packages if p.get("fileName") == package_name), None)
         if package is None:
             raise SystemExit(
@@ -555,7 +483,7 @@ class Lab:
         self.sql_report()
 
     def sql_known_databases(self, instance_id: int) -> list[dict[str, Any]]:
-        return self.get(f"/sql/databases?instance={instance_id}").get("SqlDatabase") or []
+        return self.cv.sql.databases(instance_id)
 
     def sql_validate(self, max_age_hours: float) -> bool:
         """The backup validation itself: every database SQL Server has,
@@ -632,12 +560,12 @@ class Lab:
         instance = self.sql_instance(client_id) if client_id else None
         if instance is None:
             raise SystemExit(f"No SQL Server instance on {SQL_CLIENT} - run lab/40-sql.sh first.")
-        subclients = self.get(f"/Subclient?clientId={client_id}").get("subClientProperties", [])
+        assert client_id is not None
         target = next(
             (
-                item["subClientEntity"]
-                for item in subclients
-                if item["subClientEntity"].get("appName") == "SQL Server"
+                entity
+                for entity in self.cv.subclients.list(client_id)
+                if entity.get("appName") == "SQL Server"
             ),
             None,
         )
@@ -662,10 +590,9 @@ class Lab:
         Discovery runs a minute or two after the agent's services start."""
         deadline = time.monotonic() + wait
         while True:
-            data = self.get(f"/Instance?clientId={client_id}")
-            for item in data.get("instanceProperties", []):
-                if item.get("instance", {}).get("appName") == "SQL Server":
-                    return item["instance"]
+            for instance in self.cv.instances.list(client_id):
+                if instance.get("appName") == "SQL Server":
+                    return instance
             if time.monotonic() >= deadline:
                 return None
             time.sleep(15)
@@ -692,59 +619,27 @@ class Lab:
             )
             return
         instance_id = instance["instanceId"]
-        props = self.get(f"/Instance/{instance_id}")["instanceProperties"][0]
-        mssql = props.get("mssqlInstance", {})
+        mssql = self.cv.instances.get(instance_id).get("mssqlInstance", {})
         if mssql.get("MSSQLCredentialinfo", {}).get("credentialName"):
             logger.info("Instance {} already has a credential", instance["instanceName"])
         else:
-            password = base64.b64encode(sql_sa_password().encode()).decode()
-            listing = self.get("/CommCell/Credentials?propertyLevel=10")
-            names = [
-                c.get("credentialRecord", {}).get("credentialName")
-                for c in listing.get("credentialRecordInfo", [])
-            ]
-            if SQL_CREDENTIAL not in names:
-                data = self.call(
-                    "POST",
-                    "/Commcell/Credentials",
-                    {
-                        "credentialRecordInfo": [
-                            {
-                                "recordType": 1,
-                                "description": "blt lab: sa on the lab SQL Server container",
-                                "credentialRecord": {"credentialName": SQL_CREDENTIAL},
-                                "record": {"userName": "sa", "password": password},
-                            }
-                        ]
-                    },
+            try:
+                if SQL_CREDENTIAL not in self.cv.credentials.names():
+                    self.cv.credentials.create(
+                        SQL_CREDENTIAL,
+                        "sa",
+                        sql_sa_password(),
+                        description="blt lab: sa on the lab SQL Server container",
+                    )
+                    logger.info("Credential {}: created", SQL_CREDENTIAL)
+                self.cv.sql.set_instance_credential(instance, SQL_CREDENTIAL)
+            except SDKError as exc:
+                logger.error(
+                    "Giving instance {} a login failed - {}", instance["instanceName"], exc
                 )
-                error = self.error_in(data) or self.error_in(data.get("error", {}))
-                logger.log(
-                    "ERROR" if error else "INFO",
-                    "Credential {}: {}",
-                    SQL_CREDENTIAL,
-                    error or "created",
-                )
-            update = {
-                "instanceProperties": {
-                    "instance": instance,
-                    "mssqlInstance": {
-                        "overrideHigherLevelSettings": {
-                            "overrideGlobalAuthentication": True,
-                            "useLocalSystemAccount": False,
-                        },
-                        "MSSQLCredentialinfo": {"credentialName": SQL_CREDENTIAL},
-                    },
-                    "contentOperationType": 1,
-                }
-            }
-            data = self.call("POST", f"/Instance/{instance_id}", update)
-            logger.log(
-                "ERROR" if self.error_in(data) else "INFO",
-                "Instance {} login set to credential {}: {}",
-                instance["instanceName"],
-                SQL_CREDENTIAL,
-                self.error_in(data) or data,
+                return
+            logger.info(
+                "Instance {} login set to credential {}", instance["instanceName"], SQL_CREDENTIAL
             )
             # The agent only re-checks an instance once a day by itself.
             # Restarting its services (inside our own container) makes it
@@ -756,27 +651,21 @@ class Lab:
                 time.sleep(15)
 
         plans = self.plans()
-        subclients = self.get(f"/Subclient?clientId={client_id}").get("subClientProperties", [])
-        for item in subclients:
-            entity = item.get("subClientEntity", {})
-            if entity.get("appName") != "SQL Server" or item.get("planEntity", {}).get("planName"):
+        for entity in self.cv.subclients.list(client_id):
+            if entity.get("appName") != "SQL Server":
                 continue
-            data = self.call(
-                "POST",
-                f"/Subclient/{entity['subclientId']}",
-                {
-                    "subClientProperties": {
-                        "planEntity": {"planName": self.plan_name, "planId": plans[self.plan_name]}
-                    }
-                },
-            )
-            logger.log(
-                "ERROR" if self.error_in(data) else "INFO",
-                "Subclient {} plan -> {}: {}",
-                entity.get("subclientName"),
-                self.plan_name,
-                self.error_in(data) or data,
-            )
+            current = self.cv.subclients.get(entity["subclientId"]).get("planEntity") or {}
+            if current.get("planName"):
+                continue
+            try:
+                self.cv.subclients.set_plan(
+                    entity["subclientId"],
+                    {"planName": self.plan_name, "planId": plans[self.plan_name]},
+                )
+            except SDKError as exc:
+                logger.error("Subclient {} plan not set - {}", entity.get("subclientName"), exc)
+            else:
+                logger.info("Subclient {} plan -> {}", entity.get("subclientName"), self.plan_name)
 
     def sql_report(self) -> None:
         """What SQL Server says exists, next to what Commvault knows."""
@@ -787,11 +676,8 @@ class Lab:
         if client_id is None:
             logger.error("{} is not a client on the CommServe", name)
             return
-        agents = self.get(f"/Agent?clientId={client_id}").get("agentProperties", [])
-        logger.info("Agents: {}", ", ".join(a["idaEntity"]["appName"] for a in agents) or "none")
-        instances = self.get(f"/Instance?clientId={client_id}").get("instanceProperties", [])
-        for item in instances:
-            instance = item.get("instance", {})
+        logger.info("Agents: {}", ", ".join(self.cv.clients.agents(client_id)) or "none")
+        for instance in self.cv.instances.list(client_id):
             logger.info(
                 "Instance: {} / {} (id {})",
                 instance.get("appName"),
@@ -800,22 +686,19 @@ class Lab:
             )
             if instance.get("appName") != "SQL Server":
                 continue
-            props = self.get(f"/Instance/{instance.get('instanceId')}").get("instanceProperties")
-            mssql = (props or [{}])[0].get("mssqlInstance", {})
+            mssql = self.cv.instances.get(instance["instanceId"]).get("mssqlInstance", {})
             logger.info(
                 "  not-ready reason: {!r} (Commvault does not report the login it was given)",
                 mssql.get("notReadyReason"),
             )
-            known = self.sql_known_databases(instance.get("instanceId"))
+            known = self.sql_known_databases(instance["instanceId"])
             logger.info(
                 "Commvault knows {} databases on it: {}",
                 len(known),
                 ", ".join(f"{d.get('dbName')}(bkpTime={d.get('bkpTime')})" for d in known)
                 or "none",
             )
-        subclients = self.get(f"/Subclient?clientId={client_id}").get("subClientProperties", [])
-        for item in subclients:
-            entity = item.get("subClientEntity", {})
+        for entity in self.cv.subclients.list(client_id):
             logger.info(
                 "Subclient: {} / {} / {} (id {})",
                 entity.get("appName"),
@@ -839,19 +722,25 @@ class Lab:
     def teardown(self) -> None:
         subclients = self.lab_subclients()
         mine = {s["subclientId"] for s in subclients.values()}
-        for summary in self.active_jobs():
-            if summary.get("subclient", {}).get("subclientId") in mine:
-                self.job_action(summary["jobId"], "kill")
+        for job in self.cv.jobs.active():
+            if job.raw.get("subclient", {}).get("subclientId") in mine:
+                self.job_action(job.job_id, "kill")
         for name, entity in subclients.items():
             if entity["clientId"] != self.client_id:
                 continue  # goes with its client, below
-            data = self.call("DELETE", f"/Subclient/{entity['subclientId']}")
-            error = self.error_in(data)
-            logger.log("ERROR" if error else "INFO", "Deleted subclient {} {}", name, error or "")
+            try:
+                self.cv.subclients.delete(entity["subclientId"])
+            except SDKError as exc:
+                logger.error("Deleting subclient {} failed - {}", name, exc)
+            else:
+                logger.info("Deleted subclient {}", name)
         for name, client_id in self.lab_clients().items():
-            data = self.call("DELETE", f"/Client/{client_id}?forceDelete=1")
-            error = self.error_in(data)
-            logger.log("ERROR" if error else "INFO", "Deleted client {} {}", name, error or "")
+            try:
+                self.cv.clients.delete(client_id)
+            except SDKError as exc:
+                logger.error("Deleting client {} failed - {}", name, exc)
+            else:
+                logger.info("Deleted client {}", name)
         for name in lab_containers(all_states=True):
             podman("rm", "-f", "-t", "0", name)
             logger.info("Removed container {}", name)
@@ -986,8 +875,11 @@ def main() -> None:
             on_token_renew=env_token_saver(commcell_env_path(args.commcell, args.config_dir)),
             verify_tls=settings.cv_verify_tls,
             ca_bundle=settings.cv_ca_bundle,
+            # The lab is the one place meant to change a CommServe - but
+            # only the commands that need to get a client that can.
+            allow_changes=args.command not in READ_ONLY_COMMANDS,
         ) as commvault:
-            lab = Lab(commvault.api, args.plan)
+            lab = Lab(commvault, args.plan)
             if args.command == "preflight":
                 sys.exit(0 if lab.preflight() else 1)
             elif args.command == "setup":

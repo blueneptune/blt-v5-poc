@@ -99,13 +99,13 @@ Authentication (`POST /Login`, `POST /V4/AccessToken/Renew`) is handled
 underneath, in `auth.py` and `client.py`.
 
 **How far "proven" goes.** Every *read* call above has been run through
-this SDK against the eval CommServe (2026-10-08), as has the collector on
-top of it: login check, a job collection, an inventory and the report.
-The *change* calls have not. Their requests were proven by the lab
-scripts, which still make those calls themselves; the SDK's versions
-send the same requests, checked by unit tests, and a default client was
-confirmed live to refuse them (`jobs.kill` raised `ChangesNotAllowed`
-without contacting the CommServe).
+this SDK against the eval CommServe (2026-10-08), by the collector and by
+the lab's read-only commands. The *change* calls have not yet been run
+through the SDK: their requests were proven by the lab scripts when
+those made the calls themselves, the SDK sends the same requests
+(checked by unit tests), and a default client was confirmed live to
+refuse them. Running the lab's changing commands is what will close
+that.
 
 ## What it returns
 
@@ -164,7 +164,11 @@ only a live CommServe reveals; `cvpysdk` already exists for breadth.
 Add groups as work calls for them - restores, schedules, alerts, storage
 policies, VM and file-system content are the likely next ones.
 
-`lab/cvlab.py` still makes its own raw calls through `cv.api`. Moving it
-onto the SDK is straightforward and would exercise the changing calls
-for real; it has been left until the lab scripts can be re-run to prove
-nothing broke.
+`lab/cvlab.py` uses the SDK for everything it does to a CommServe
+(since 2026-10-08) and builds no URLs of its own. It is the one caller
+that passes `allow_changes=True`, and only for the commands that need
+it: preflight, the SQL report and the SQL validation get a read-only
+client like the collector's. Its read-only commands have been run that
+way; its changing commands - setup, noise, clients, SQL setup and
+backup, teardown - are the first real exercise of the SDK's change
+calls and still need running.
