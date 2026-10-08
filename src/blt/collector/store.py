@@ -75,7 +75,9 @@ class BltStore:
         )
         return RunOut.model_validate(response.json())
 
-    def upsert_jobs(self, run_id: int, collected_at: datetime, jobs: list[JobIn]) -> UpsertResult:
+    def upsert_jobs(
+        self, run_id: int | None, collected_at: datetime, jobs: list[JobIn]
+    ) -> UpsertResult:
         batch = JobBatch(run_id=run_id, collected_at=collected_at, jobs=jobs)
         response = self._client.post(f"{self._base}/jobs", json=batch.model_dump(mode="json"))
         return UpsertResult.model_validate(response.json())

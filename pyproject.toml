@@ -27,6 +27,7 @@ collector = [
 [project.scripts]
 blt-collect = "blt.collector.cli:main"
 blt-migrate = "blt.api.migrate:main"
+blt-lookup = "blt.collector.lookup:main"
 
 [tool.uv.sources]
 sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag = "v0.1.0" }
