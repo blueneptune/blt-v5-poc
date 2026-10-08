@@ -311,11 +311,14 @@ collect.sh                     shell entrypoint, per-CommCell lock
 config/                        blt.env, <commcell>.env (gitignored), *.example
 src/blt/
   schemas.py                   payloads shared by collector and API; status -> state
-  commvault/
-    client.py                  Commvault REST calls (jobs, clients, instances, databases)
-    inventory.py               Commvault's clients/instances/databases -> ObjectIn
+  commvault/                   the Commvault SDK - see docs/commvault-sdk.md
+    client.py                  CommvaultClient: connection, auth, the groups below
+    _base.py                   shared call handling; the read-only rule
+    jobs.py clients.py subclients.py sql.py commcell.py
+                               one group of endpoints each
     auth.py                    access-token header + renewal
     models.py                  Commvault's jobSummary -> blt's JobIn
+    inventory.py               clients/instances/databases -> ObjectIn, via the SDK
   collector/
     cli.py                     blt-collect: wires settings, clients, the run
     collect.py                 collect + reconcile, backfill, inventory

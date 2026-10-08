@@ -189,7 +189,7 @@ def _run(args: argparse.Namespace) -> None:
     if args.check:
         try:
             with commvault:
-                info = commvault.commserve_info()
+                info = commvault.commcell.info()
         except SDKError as exc:
             logger.error("Could not authenticate to {}: {}", args.commcell, exc)
             sys.exit(1)
@@ -228,7 +228,7 @@ def _run(args: argparse.Namespace) -> None:
                     sys.exit(1)
             elif args.backfill:
                 run_backfill(
-                    commvault,
+                    commvault.jobs,
                     store,
                     chunk_hours=settings.cv_backfill_chunk_hours,
                     max_chunks=settings.cv_backfill_max_chunks,
@@ -237,7 +237,7 @@ def _run(args: argparse.Namespace) -> None:
                 )
             else:
                 run_collection(
-                    commvault,
+                    commvault.jobs,
                     store,
                     initial_lookback_hours=settings.cv_initial_lookback_hours,
                     history_limit_days=settings.cv_history_limit_days,

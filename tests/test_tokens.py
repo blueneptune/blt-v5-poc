@@ -48,8 +48,8 @@ def test_a_401_renews_saves_and_retries() -> None:
     with CommvaultClient(
         BASE, access_token=tokens, on_token_renew=lambda t, raw: saved.append(t)
     ) as client:
-        assert client.commserve_info() == {"hostName": "CS"}
-        client.commserve_info()
+        assert client.commcell.info() == {"hostName": "CS"}
+        client.commcell.info()
 
     # One renewal, carrying the old pair; later calls reuse the new token.
     assert renew.call_count == 1
@@ -77,7 +77,7 @@ def test_a_token_known_to_be_expiring_is_renewed_before_it_is_used() -> None:
         "old-access", "old-refresh", expires_at=datetime.now(UTC) + timedelta(minutes=1)
     )
     with CommvaultClient(BASE, access_token=tokens) as client:
-        client.commserve_info()
+        client.commcell.info()
 
     assert commserv.call_count == 1  # never sent the dying token
 
@@ -90,7 +90,7 @@ def test_renewal_falls_back_to_no_header_when_the_old_token_is_rejected() -> Non
     )
 
     with CommvaultClient(BASE, access_token=TokenSet("old-access", "old-refresh")) as client:
-        client.commserve_info()
+        client.commcell.info()
 
     assert "Authtoken" in renew.calls[0].request.headers
     assert "Authtoken" not in renew.calls[1].request.headers
@@ -108,7 +108,7 @@ def test_refused_renewal_says_to_create_a_new_token() -> None:
         CommvaultClient(BASE, access_token=tokens) as client,
         pytest.raises(AuthenticationError, match="Refresh token is invalid.*2020-01-01"),
     ):
-        client.commserve_info()
+        client.commcell.info()
 
 
 @respx.mock
@@ -120,7 +120,7 @@ def test_without_a_refresh_token_a_401_is_just_a_failure() -> None:
         CommvaultClient(BASE, access_token="old-access") as client,
         pytest.raises(AuthenticationError),
     ):
-        client.commserve_info()
+        client.commcell.info()
     assert renew.call_count == 0
 
 
@@ -133,7 +133,7 @@ def test_a_maintenance_page_is_an_error_not_an_empty_result() -> None:
         CommvaultClient(BASE, access_token="tok") as client,
         pytest.raises(ServerError, match="maintenance"),
     ):
-        list(client.iter_job_pages(lookup_seconds=60))
+        list(client.jobs.iter_pages(lookup_seconds=60))
 
 
 def test_renewed_tokens_are_written_back_to_the_env_file(tmp_path: Path) -> None:

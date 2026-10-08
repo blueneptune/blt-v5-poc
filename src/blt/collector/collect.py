@@ -47,19 +47,19 @@ from .store import BltStore
 
 
 class JobSource(Protocol):
-    """What collection needs from Commvault (blt.commvault.CommvaultClient
-    in production, a fake in tests)."""
+    """What collection needs from Commvault: the SDK's job group
+    (CommvaultClient.jobs) in production, a fake in tests."""
 
-    def iter_job_pages(
+    def iter_pages(
         self,
         lookup_seconds: int,
         *,
         ended_between: tuple[datetime, datetime] | None = None,
     ) -> Iterator[list[JobIn]]: ...
 
-    def get_job(self, job_id: int) -> JobIn | None: ...
+    def get(self, job_id: int) -> JobIn | None: ...
 
-    def oldest_job_start(self, lookup_seconds: int) -> datetime | None: ...
+    def oldest_start(self, lookup_seconds: int) -> datetime | None: ...
 
 
 def _now() -> datetime:
@@ -100,12 +100,12 @@ def run_collection(
 
     collected = reconciled = missing = 0
     try:
-        for page in source.iter_job_pages(lookup_seconds):
+        for page in source.iter_pages(lookup_seconds):
             store.upsert_jobs(run.id, now(), page)
             collected += len(page)
 
         for stale in store.iter_active_unseen(run.id):
-            current = source.get_job(stale.job_id)
+            current = source.get(stale.job_id)
             if current is None:
                 logger.warning("Job {} is no longer in the CommCell, marking missing", stale.job_id)
                 store.mark_job(
@@ -192,7 +192,7 @@ def run_backfill(
 
     started_at = now()
     limit = started_at - timedelta(days=history_limit_days)
-    oldest = source.oldest_job_start(history_limit_days * 86_400)
+    oldest = source.oldest_start(history_limit_days * 86_400)
     # One slice of margin below the oldest job: it is that job's *start*,
     # and slices are cut by end time.
     chunk = timedelta(hours=chunk_hours)
@@ -223,7 +223,7 @@ def run_backfill(
         while chunks < max_chunks:
             slice_start = max(cursor - chunk, floor)
             jobs_in_slice = 0
-            for page in source.iter_job_pages(
+            for page in source.iter_pages(
                 history_limit_days * 86_400, ended_between=(slice_start, cursor)
             ):
                 store.upsert_jobs(run.id, now(), page)

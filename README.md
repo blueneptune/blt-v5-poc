@@ -14,6 +14,7 @@ collect.sh <commcell>            host, by hand or on a timer
 
 Guides: **[setting it up against a production CommCell](docs/production-setup.md)** ·
 [how a run works, step by step](docs/blt-flow.md) ·
+[the Commvault SDK inside blt](docs/commvault-sdk.md) ·
 [lab noise rig for the eval CommServe (plan)](docs/lab-noise.md) ·
 [open items](TODO.md) ·
 [asset refinery (draft direction, not current work)](docs/asset-refinery.md)

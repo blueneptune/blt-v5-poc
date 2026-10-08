@@ -91,13 +91,13 @@ def store(http: TestClient, blt_api: APIClient) -> BltStore:
 
     # An ordinary collection first: it is what registers the CommCell.
     class NoJobs:
-        def iter_job_pages(self, lookup_seconds: int, *, ended_between=None):  # noqa: ANN001, ANN202
+        def iter_pages(self, lookup_seconds: int, *, ended_between=None):  # noqa: ANN001, ANN202
             return iter(())
 
-        def get_job(self, job_id: int) -> JobIn | None:
+        def get(self, job_id: int) -> JobIn | None:
             return None
 
-        def oldest_job_start(self, lookup_seconds: int) -> datetime | None:
+        def oldest_start(self, lookup_seconds: int) -> datetime | None:
             return None
 
     run_collection(NoJobs(), store)

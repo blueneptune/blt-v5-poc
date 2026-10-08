@@ -59,7 +59,7 @@ def test_login_then_pages_until_a_short_page() -> None:
     )
 
     with _client() as client:
-        pages = list(client.iter_job_pages(lookup_seconds=3600))
+        pages = list(client.jobs.iter_pages(lookup_seconds=3600))
 
     assert [[job.job_id for job in page] for page in pages] == [[1, 2], [3]]
 
@@ -101,7 +101,7 @@ def test_access_token_is_sent_as_bearer_with_no_login_call() -> None:
     info = respx.get(f"{BASE}/CommServ").respond(json={"hostName": "CS", "csVersionInfo": "11"})
 
     with CommvaultClient(BASE, access_token="tok123") as client:
-        assert client.commserve_info()["hostName"] == "CS"
+        assert client.commcell.info()["hostName"] == "CS"
 
     assert login.call_count == 0
     assert info.calls[0].request.headers["Authtoken"] == "Bearer tok123"
@@ -120,7 +120,7 @@ def test_rejected_login_raises_instead_of_sending_no_token() -> None:
     jobs = respx.post(f"{BASE}/Jobs").respond(json={"jobs": []})
 
     with _client() as client, pytest.raises(AuthenticationError, match="Invalid username"):
-        list(client.iter_job_pages(lookup_seconds=60))
+        list(client.jobs.iter_pages(lookup_seconds=60))
     assert jobs.call_count == 0
 
 
@@ -141,8 +141,8 @@ def test_expired_token_logs_in_again() -> None:
     )
 
     with _client() as client:
-        client.get_job(5)
-        client.get_job(5)
+        client.jobs.get(5)
+        client.jobs.get(5)
 
     assert login.call_count == 2
     assert job.calls[-1].request.headers["Authtoken"] == "QSDK new"
@@ -155,8 +155,8 @@ def test_get_job_returns_none_when_the_commcell_has_no_such_job() -> None:
     respx.get(f"{BASE}/Job/9").respond(404)
 
     with _client() as client:
-        assert client.get_job(8) is None
-        assert client.get_job(9) is None
+        assert client.jobs.get(8) is None
+        assert client.jobs.get(9) is None
 
 
 @respx.mock
@@ -169,8 +169,8 @@ def test_a_history_slice_asks_for_finished_jobs_in_an_end_time_range() -> None:
     high = datetime(2026, 9, 2, tzinfo=UTC)
 
     with _client() as client:
-        pages = list(client.iter_job_pages(86_400, ended_between=(low, high)))
-        oldest = client.oldest_job_start(86_400)
+        pages = list(client.jobs.iter_pages(86_400, ended_between=(low, high)))
+        oldest = client.jobs.oldest_start(86_400)
 
     assert [job.job_id for job in pages[0]] == [4]
     sliced = json.loads(jobs.calls[0].request.content)
@@ -191,7 +191,7 @@ def test_one_unreadable_job_does_not_stop_the_collection(log_messages: list[str]
     respx.post(f"{BASE}/Jobs").respond(json={"jobs": [_summary(1), bad, _summary(3)]})
 
     with _client(page_size=10) as client:
-        pages = list(client.iter_job_pages(lookup_seconds=60))
+        pages = list(client.jobs.iter_pages(lookup_seconds=60))
 
     assert [job.job_id for job in pages[0]] == [1, 3]
     assert any("Skipping job 2" in message for message in log_messages)

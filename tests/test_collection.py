@@ -30,7 +30,7 @@ class FakeCommvault:
         self.slices: list[tuple[datetime, datetime]] = []
         self.looked_up: list[int] = []
 
-    def iter_job_pages(
+    def iter_pages(
         self,
         lookup_seconds: int,
         *,
@@ -52,11 +52,11 @@ class FakeCommvault:
         for start in range(0, len(self.listed), 2):
             yield self.listed[start : start + 2]
 
-    def oldest_job_start(self, lookup_seconds: int) -> datetime | None:
+    def oldest_start(self, lookup_seconds: int) -> datetime | None:
         starts = [job.start_time for job in self.history if job.start_time is not None]
         return min(starts) if starts else None
 
-    def get_job(self, job_id: int) -> JobIn | None:
+    def get(self, job_id: int) -> JobIn | None:
         self.looked_up.append(job_id)
         return self.by_id.get(job_id)
 
@@ -149,7 +149,7 @@ def test_a_failed_run_does_not_move_the_watermark(http: TestClient, blt_api: API
     good = run_collection(commvault, store, now=clock)
 
     class Exploding(FakeCommvault):
-        def iter_job_pages(
+        def iter_pages(
             self,
             lookup_seconds: int,
             *,

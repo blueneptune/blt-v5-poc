@@ -1,52 +1,47 @@
-"""A small Commvault REST client for job collection, built on sdk-primer.
+"""The Commvault SDK's entry point: CommvaultClient.
 
-sdk-primer's APIClient supplies the transport (retry/backoff, typed
-exceptions, per-request log correlation) and TokenExchangeAuth supplies
-the username/password login flow. What is *not* used is BaseAPIModel/ResourceManager: those
-model a CRUD resource at a path, and Commvault's job listing is a POST
-with a filter document in the body and its paging inside that body - so
-the two calls collection needs are written directly against APIClient
-here. cvpysdk (JobController._get_jobs_request_json) is the reference for
-the request shape; it isn't a dependency.
+A facade in the sense of sdk-primer's example: one object per connection,
+with a named group of calls for each kind of thing the CommServe has -
+`cv.jobs`, `cv.clients`, `cv.instances`, `cv.subclients`, `cv.sql`,
+`cv.commcell`, `cv.plans`, `cv.storage`, `cv.credentials`. Each group is
+a small class in its own module.
+
+sdk-primer supplies what is underneath: APIClient for transport (retry
+and backoff, typed exceptions, per-request log correlation) and
+TokenExchangeAuth for the username/password login. What is *not* used
+from it is BaseAPIModel/ResourceManager. Those model a resource with
+save/load/find at a path; Commvault's API does not have that shape - its
+job listing is a POST with the filter and paging in the body, its
+answers nest the useful part under varying keys, and most failures come
+back as a 200 with an error inside. So the groups here are written
+directly against APIClient, sharing those conventions through
+_base.Resource.
+
+Only endpoints that have been run against a live CommServe (11 SP46) are
+here. cvpysdk was the reference for request shapes; it is not a
+dependency.
 """
 
 from __future__ import annotations
 
 import base64
 import ssl
-from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import httpx
-from loguru import logger
-from pydantic import ValidationError
-from sdk_primer import (
-    APIClient,
-    AuthenticationError,
-    NotFoundError,
-    ServerError,
-    TokenExchangeAuth,
-)
-
-from blt.schemas import JobIn
+from sdk_primer import APIClient, AuthenticationError, TokenExchangeAuth
 
 from .auth import AccessTokenAuth, TokenSet
-from .models import job_in_from_summary
+from .clients import Clients, Instances
+from .commcell import CommCell, Credentials, Plans, Storage
+from .jobs import Jobs
+from .sql import Sql
+from .subclients import Subclients
 
 # Commvault answers in XML unless asked otherwise.
 _JSON_HEADERS = {"Accept": "application/json"}
-
-# POST /Jobs "category": 0 = all, 1 = active only, 2 = finished only.
-_CATEGORY_ALL = 0
-_CATEGORY_FINISHED = 2
-
-# pagingConfig "sortDirection": 0 = oldest first, 1 = newest first
-# (checked against a live 11 SP46 CommServe). Oldest first is what makes
-# offset paging safe: a job that starts mid-run lands after the last
-# page instead of pushing every later job down by one.
-_ASCENDING = 0
 
 
 def _token_from_login(response: httpx.Response) -> str:
@@ -62,47 +57,21 @@ def _token_from_login(response: httpx.Response) -> str:
     raise AuthenticationError(f"Commvault login failed: {reason}")
 
 
-def _parse_job(entry: dict[str, Any]) -> JobIn | None:
-    """One entry of a job listing as a JobIn, or None if it can't be read.
-
-    A CommServe holds years of jobs from many agents and versions, and
-    one whose summary has a field in an unexpected shape should cost that
-    one job, loudly, not the whole collection run."""
-    summary = entry.get("jobSummary")
-    if summary is None:
-        return None
-    try:
-        return job_in_from_summary(summary)
-    except ValidationError as exc:
-        problems = "; ".join(
-            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
-            for error in exc.errors()
-        )
-        logger.error(
-            "Skipping job {}: could not read its summary - {}", summary.get("jobId"), problems
-        )
-        return None
-
-
-def _json(response: httpx.Response) -> dict[str, Any]:
-    """The response body as a JSON object. While its web tier is
-    restarting a CommServe answers every URL with a 200 and an HTML
-    "Scheduled Maintenance" page - a failure that looks like success
-    until something tries to parse it."""
-    try:
-        body = response.json()
-    except ValueError:
-        body = None
-    if not isinstance(body, dict):
-        raise ServerError(
-            f"{response.request.method} {response.request.url} returned "
-            f"{response.headers.get('content-type', 'no content type')} instead of JSON - "
-            "the CommServe may be in maintenance or still starting."
-        )
-    return body
-
-
 class CommvaultClient:
+    """One connection to one CommServe, and the way in to everything the
+    SDK can ask it:
+
+        with CommvaultClient(url, access_token=tokens) as cv:
+            cv.commcell.info()
+            for page in cv.jobs.iter_pages(lookup_seconds=3600): ...
+            for client in cv.clients.list():
+                cv.instances.list(client["clientId"])
+
+    It is read-only unless built with allow_changes=True; the calls that
+    alter a CommServe (starting or killing jobs, creating or deleting
+    subclients and clients, ...) refuse to run otherwise.
+    """
+
     def __init__(
         self,
         base_url: str,
@@ -115,12 +84,16 @@ class CommvaultClient:
         ca_bundle: Path | None = None,
         page_size: int = 500,
         timeout: float = 120.0,
+        allow_changes: bool = False,
     ) -> None:
         base_url = base_url.rstrip("/")
         verify: bool | ssl.SSLContext = verify_tls
         if verify_tls and ca_bundle is not None:
             verify = ssl.create_default_context(cafile=str(ca_bundle))
         self.page_size = page_size
+        # Off by default, and off for everything blt's collector does.
+        # See _base.Resource._change.
+        self.allow_changes = allow_changes
 
         auth: httpx.Auth
         # A second, plain client for the calls that *obtain* credentials
@@ -162,6 +135,16 @@ class CommvaultClient:
             transport=httpx.HTTPTransport(verify=verify),
         )
 
+        self.commcell = CommCell(self)
+        self.jobs = Jobs(self)
+        self.clients = Clients(self)
+        self.instances = Instances(self)
+        self.subclients = Subclients(self)
+        self.sql = Sql(self)
+        self.plans = Plans(self)
+        self.storage = Storage(self)
+        self.credentials = Credentials(self)
+
     def close(self) -> None:
         self._api.close()
         self._login_client.close()
@@ -174,177 +157,6 @@ class CommvaultClient:
 
     @property
     def api(self) -> APIClient:
-        """The authenticated transport itself, for callers that need a
-        Commvault endpoint this class doesn't wrap (the lab rig under
-        lab/ uses it). Collection goes through the methods below."""
+        """The authenticated transport itself, for an endpoint the SDK
+        does not wrap yet. Prefer adding it to the right group."""
         return self._api
-
-    def commserve_info(self) -> dict[str, Any]:
-        """GET /CommServ - the CommServe's own description of itself. It
-        needs a valid session and changes nothing, which makes it the
-        cheapest way to prove the configured credentials work."""
-        return _json(self._api.get("/CommServ"))
-
-    def iter_job_pages(
-        self,
-        lookup_seconds: int,
-        *,
-        ended_between: tuple[datetime, datetime] | None = None,
-    ) -> Iterator[list[JobIn]]:
-        """Jobs Commvault will report, one page at a time.
-
-        By default: all jobs currently active, plus every job that
-        finished within the last `lookup_seconds` (aged jobs included).
-
-        With `ended_between`, a slice of history instead: only finished
-        jobs whose end time falls in that range, both ends inclusive.
-        That is what lets old history be fetched a bounded piece at a
-        time rather than in one query for everything.
-
-        Paged oldest first. New jobs get higher ids, so ones started
-        while this is running land after the last page instead of
-        shifting earlier ones.
-        """
-        job_filter: dict[str, Any] = {
-            "completedJobLookupTime": lookup_seconds,
-            "showAgedJobs": True,
-            "hideAdminJobs": False,
-            "clientList": [],
-            "jobTypeList": [],
-        }
-        category = _CATEGORY_ALL
-        if ended_between is not None:
-            # Without "finished only", every slice would also come back
-            # with whatever happens to be active right now.
-            category = _CATEGORY_FINISHED
-            job_filter["endTimeRange"] = {
-                "fromTime": int(ended_between[0].timestamp()),
-                "toTime": int(ended_between[1].timestamp()),
-            }
-        offset = 0
-        while True:
-            payload: dict[str, Any] = {
-                "scope": 1,
-                "category": category,
-                "pagingConfig": {
-                    "sortField": "jobId",
-                    "sortDirection": _ASCENDING,
-                    "offset": offset,
-                    "limit": self.page_size,
-                },
-                "jobFilter": job_filter,
-            }
-            body = _json(self._api.post("/Jobs", json=payload))
-            entries = body.get("jobs") or []
-            jobs = [job for e in entries if (job := _parse_job(e)) is not None]
-            logger.info(
-                "Jobs page offset={} returned {} of {} total",
-                offset,
-                len(entries),
-                body.get("totalRecordsWithoutPaging"),
-            )
-            if jobs:
-                yield jobs
-            if len(entries) < self.page_size:
-                return
-            offset += self.page_size
-
-    def oldest_job_start(self, lookup_seconds: int) -> datetime | None:
-        """When the oldest finished job the CommServe still has a record
-        of started - the point a backfill has nothing left behind. One
-        row, oldest first; None if there are no finished jobs at all."""
-        payload: dict[str, Any] = {
-            "scope": 1,
-            "category": _CATEGORY_FINISHED,
-            "pagingConfig": {
-                "sortField": "jobId",
-                "sortDirection": _ASCENDING,
-                "offset": 0,
-                "limit": 1,
-            },
-            "jobFilter": {
-                "completedJobLookupTime": lookup_seconds,
-                "showAgedJobs": True,
-                "hideAdminJobs": False,
-                "clientList": [],
-                "jobTypeList": [],
-            },
-        }
-        entries = _json(self._api.post("/Jobs", json=payload)).get("jobs") or []
-        for entry in entries:
-            started = entry.get("jobSummary", {}).get("jobStartTime")
-            if started:
-                return datetime.fromtimestamp(int(started), tz=UTC)
-        return None
-
-    # -- inventory: what the CommServe says exists ------------------------
-
-    def _listing(self, path: str) -> dict[str, Any]:
-        """A listing endpoint's body. Commvault answers some "there are
-        none" listings with a 404 instead of an empty list."""
-        try:
-            return _json(self._api.get(path))
-        except NotFoundError:
-            return {}
-
-    def list_clients(self) -> list[dict[str, Any]]:
-        body = self._listing("/Client")
-        return [c["client"]["clientEntity"] for c in body.get("clientProperties") or []]
-
-    def list_agents(self, client_id: int) -> list[str]:
-        body = self._listing(f"/Agent?clientId={client_id}")
-        return [
-            a["idaEntity"]["appName"]
-            for a in body.get("agentProperties") or []
-            if not a.get("AgentProperties", {}).get("isMarkedDeleted")
-        ]
-
-    def list_instances(self, client_id: int) -> list[dict[str, Any]]:
-        body = self._listing(f"/Instance?clientId={client_id}")
-        return [i["instance"] for i in body.get("instanceProperties") or [] if "instance" in i]
-
-    def list_subclients(self, client_id: int) -> list[dict[str, Any]]:
-        body = self._listing(f"/Subclient?clientId={client_id}")
-        return [
-            s["subClientEntity"]
-            for s in body.get("subClientProperties") or []
-            if "subClientEntity" in s
-        ]
-
-    def subclient_properties(self, subclient_id: int) -> dict[str, Any]:
-        properties = self._listing(f"/Subclient/{subclient_id}").get("subClientProperties") or [{}]
-        first: dict[str, Any] = properties[0]
-        return first
-
-    def sql_databases(self, instance_id: int) -> list[dict[str, Any]]:
-        """The databases Commvault has backed up on a SQL Server instance,
-        each with its last backup time (bkpTime) and job (jobId)."""
-        databases: list[dict[str, Any]] = (
-            self._listing(f"/sql/databases?instance={instance_id}").get("SqlDatabase") or []
-        )
-        return databases
-
-    def job_counts(self, job_id: int) -> dict[str, Any]:
-        """The CommServe's own totals for a job: how many objects it
-        backed up and how many it skipped (POST /JobDetails). For a SQL
-        Server job an object is a database."""
-        body = _json(self._api.post("/JobDetails", json={"jobId": job_id}))
-        detail = body.get("job", {}).get("jobDetail", {}).get("detailInfo", {})
-        return {
-            "job_id": job_id,
-            "backed_up": detail.get("numOfObjects"),
-            "skipped": detail.get("skippedItems"),
-        }
-
-    def get_job(self, job_id: int) -> JobIn | None:
-        """One job's current summary, or None if the CommCell no longer
-        knows the job at all."""
-        try:
-            body = _json(self._api.get(f"/Job/{job_id}"))
-        except NotFoundError:
-            return None
-        for entry in body.get("jobs") or []:
-            job = _parse_job(entry)
-            if job is not None:
-                return job
-        return None

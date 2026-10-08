@@ -64,7 +64,7 @@ def iter_inventory(
     """
     if problems is None:
         problems = []
-    clients = commvault.list_clients()
+    clients = commvault.clients.list()
     total = len(clients)
     logger.info("Inventory: {} clients to read", total)
 
@@ -73,8 +73,8 @@ def iter_inventory(
     for count, entity in enumerate(clients, start=1):
         client_id = entity["clientId"]
         try:
-            agents[client_id] = commvault.list_agents(client_id)
-            instances.extend(commvault.list_instances(client_id))
+            agents[client_id] = commvault.clients.agents(client_id)
+            instances.extend(commvault.instances.list(client_id))
         except SDKError as exc:
             problems.append(f"client {entity.get('clientName')}: {exc}")
         if count % _PROGRESS_EVERY == 0 or count == total:
@@ -107,7 +107,7 @@ def iter_inventory(
             found = _sql_databases(commvault, instance)
             latest = max((d.last_full_job_id or 0 for d in found), default=0)
             if latest:
-                last_full[_instance_key(instance)] = commvault.job_counts(latest)
+                last_full[_instance_key(instance)] = commvault.jobs.counts(latest)
             databases.extend(found)
         except SDKError as exc:
             problems.append(f"SQL instance {instance.get('instanceName')}: {exc}")
@@ -137,10 +137,10 @@ def _sql_databases(commvault: CommvaultClient, instance: dict[str, Any]) -> list
     instance_id = instance["instanceId"]
     # Exists: named in the content of one of the instance's subclients.
     discovered: dict[str, dict[str, Any]] = {}
-    for subclient in commvault.list_subclients(instance["clientId"]):
+    for subclient in commvault.subclients.list(instance["clientId"]):
         if subclient.get("instanceId") != instance_id:
             continue
-        properties = commvault.subclient_properties(subclient["subclientId"])
+        properties = commvault.subclients.get(subclient["subclientId"])
         for item in properties.get("content") or []:
             content = item.get("mssqlDbContent") or {}
             if content.get("databaseName"):
@@ -151,7 +151,7 @@ def _sql_databases(commvault: CommvaultClient, instance: dict[str, Any]) -> list
                 }
     # Protected: listed with a backup time. Anything listed here exists
     # too, even if no subclient content names it.
-    backed_up = {d["dbName"]: d for d in commvault.sql_databases(instance_id) if d.get("dbName")}
+    backed_up = {d["dbName"]: d for d in commvault.sql.databases(instance_id) if d.get("dbName")}
 
     result = []
     for name in sorted(set(discovered) | set(backed_up)):
