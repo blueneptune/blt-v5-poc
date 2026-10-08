@@ -98,13 +98,14 @@ real CommServe (11 SP46).
 Authentication (`POST /Login`, `POST /V4/AccessToken/Renew`) is handled
 underneath, in `auth.py` and `client.py`.
 
-**How far "proven" goes.** Each request was proven by the code it was
-lifted from: the collector for jobs and inventory, the lab scripts for
-everything else. The collector now goes through the SDK. The lab scripts
-do not yet - they still make their own calls - so for the plans, storage,
-packages, credentials and every *change* call, the SDK's version sends
-the same request, checked by unit tests, but has not itself been run
-against a CommServe.
+**How far "proven" goes.** Every *read* call above has been run through
+this SDK against the eval CommServe (2026-10-08), as has the collector on
+top of it: login check, a job collection, an inventory and the report.
+The *change* calls have not. Their requests were proven by the lab
+scripts, which still make those calls themselves; the SDK's versions
+send the same requests, checked by unit tests, and a default client was
+confirmed live to refuse them (`jobs.kill` raised `ChangesNotAllowed`
+without contacting the CommServe).
 
 ## What it returns
 
