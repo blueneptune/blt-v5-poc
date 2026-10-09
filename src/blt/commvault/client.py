@@ -27,6 +27,7 @@ from __future__ import annotations
 import base64
 import ssl
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any, Literal
 
@@ -36,7 +37,7 @@ from sdk_primer import APIClient, AuthenticationError, TokenExchangeAuth
 from .auth import AccessTokenAuth, TokenSet
 from .budget import BudgetTransport, CallBudget
 from .clients import Clients, Instances
-from .commcell import CommCell, Credentials, Plans, Storage
+from .commcell import CommCell, Credentials, Partner, Plans, Storage
 from .jobs import Jobs
 from .sql import Sql
 from .subclients import Subclients
@@ -92,6 +93,9 @@ class CommvaultClient:
         allow_changes: bool = False,
         deployment: Deployment = "software",
         max_calls_per_hour: int | None = None,
+        extra_headers: dict[str, str] | None = None,
+        token_reload: Callable[[], TokenSet | None] | None = None,
+        token_renew_lock: Callable[[], AbstractContextManager[object]] = nullcontext,
     ) -> None:
         base_url = base_url.rstrip("/")
         verify: bool | ssl.SSLContext = verify_tls
@@ -136,6 +140,8 @@ class CommvaultClient:
                 client=self._login_client,
                 on_renew=on_token_renew,
                 header=auth_header,
+                reload=token_reload,
+                renew_lock=token_renew_lock,
             )
         elif username and password:
             # POST /Login with the password base64-encoded returns a token
@@ -157,10 +163,15 @@ class CommvaultClient:
             )
         else:
             raise ValueError("Pass either access_token= or username= and password=.")
+        # Headers every data call carries. `extra_headers` is how an MSP
+        # says which customer tenant a call is for (lhAccountId, ...);
+        # logging in and renewing a token are about the MSP's own user
+        # and do not carry them.
+        headers = {**_JSON_HEADERS, **(extra_headers or {})}
         self._api = APIClient(
             base_url=base_url,
             auth=auth,
-            default_headers=_JSON_HEADERS,
+            default_headers=headers,
             timeout=timeout,
             transport=transport(),
         )
@@ -174,7 +185,7 @@ class CommvaultClient:
         self._api_once = APIClient(
             base_url=base_url,
             auth=auth,
-            default_headers=_JSON_HEADERS,
+            default_headers=headers,
             timeout=timeout,
             max_attempts=1,
             transport=transport(),
@@ -189,6 +200,7 @@ class CommvaultClient:
         self.plans = Plans(self)
         self.storage = Storage(self)
         self.credentials = Credentials(self)
+        self.partner = Partner(self)
 
     def close(self) -> None:
         self._api.close()

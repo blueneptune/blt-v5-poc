@@ -102,6 +102,13 @@ real CommServe (11 SP46).
 | `discovered(subclient_properties)` | (reads `subclients.get()`) | proven |
 | `set_instance_credential(instance, name)` *change* | `POST /Instance/{id}` | proven |
 
+### `cv.partner` (Commvault Cloud MSPs)
+
+| Call | Endpoint | |
+|---|---|---|
+| `accounts()` | `GET /api/v1/partner/accounts` | written, **never run** |
+| `account(account_id)` | `GET /api/v1/partner/accounts/{id}` | written, **never run** |
+
 ### `cv.plans`, `cv.storage`, `cv.credentials`
 
 | Call | Endpoint | |

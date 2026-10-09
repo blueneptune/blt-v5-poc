@@ -6,7 +6,7 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from ._base import CommvaultError, Entities, Resource
+from ._base import CommvaultError, Entities, Entity, Resource
 
 
 class CommCell(Resource):
@@ -84,3 +84,32 @@ class Credentials(Resource):
                 ]
             },
         )
+
+
+class Partner(Resource):
+    """Commvault Cloud's partner (MSP) API: the partner's own account
+    list, as opposed to anything inside a customer's tenant. These calls
+    are about the MSP itself, so they are made without a tenant header
+    doing anything useful - it is how the value for that header is found.
+
+    **Unproven.** The path comes from working code written against the
+    earlier Metallic partner API and from Commvault's current reference,
+    which lists `GET /api/v1/partner/accounts/{accountId}` but not a
+    listing. Neither has been run from here.
+    """
+
+    def accounts(self) -> Entities:
+        """The partner's customer accounts (GET /api/v1/partner/accounts).
+        An account's id is what goes in the `lhAccountId` header."""
+        body = self._get("/api/v1/partner/accounts")
+        data = body.get("data", body.get("accounts", []))
+        if isinstance(data, dict):
+            data = data.get("accounts") or data.get("items") or [data]
+        accounts: Entities = [item for item in data if isinstance(item, dict)]
+        return accounts
+
+    def account(self, account_id: str) -> Entity:
+        """One customer account (GET /api/v1/partner/accounts/{id})."""
+        body = self._get(f"/api/v1/partner/accounts/{account_id}")
+        account: Entity = body.get("data", body)
+        return account

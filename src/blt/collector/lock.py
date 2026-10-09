@@ -41,3 +41,21 @@ def run_lock(directory: Path, name: str) -> Iterator[bool]:
                 yield False
                 return
         yield True
+
+
+@contextmanager
+def wait_lock(path: Path) -> Iterator[None]:
+    """Hold an exclusive lock on `path`, waiting for it if another
+    process has it. For short critical sections that must take turns."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a+") as handle:
+        if sys.platform == "win32":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        yield

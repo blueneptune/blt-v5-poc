@@ -135,6 +135,11 @@ def main() -> None:
         help="try each Commvault call blt uses, once, and report which work; stores nothing",
     )
     parser.add_argument(
+        "--partner-accounts",
+        action="store_true",
+        help="MSP on Commvault Cloud: list the customer accounts this login can reach",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="only verify the CommCell credentials work; collect nothing",
@@ -148,7 +153,7 @@ def main() -> None:
     # previous one of the same kind exits instead of piling on. Each kind
     # has its own, so a long backfill never holds up regular collection.
     # The read-only modes need none.
-    if args.check or args.probe or args.validate or args.report:
+    if args.check or args.probe or args.partner_accounts or args.validate or args.report:
         _run(args)
         return
     kind = "backfill" if args.backfill else "inventory" if args.inventory else "collection"
@@ -171,6 +176,25 @@ def _run(args: argparse.Namespace) -> None:
     if args.probe:
         with commvault:
             sys.exit(0 if run_probe(commvault) else 1)
+
+    if args.partner_accounts:
+        # For an MSP: the customer accounts this login can reach, to find
+        # the value for CV_ACCOUNT_ID.
+        try:
+            with commvault:
+                accounts = commvault.partner.accounts()
+        except SDKError as exc:
+            logger.error("Could not list partner accounts: {}", exc)
+            sys.exit(1)
+        for account in accounts:
+            shown = {
+                key: account[key]
+                for key in ("id", "accountId", "lhAccountId", "name", "tenantGuid", "status")
+                if key in account
+            }
+            logger.info("{}", shown or account)
+        logger.info("{} accounts. The id is what goes in CV_ACCOUNT_ID.", len(accounts))
+        return
 
     if args.check:
         try:

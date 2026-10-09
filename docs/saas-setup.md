@@ -67,6 +67,76 @@ blt supports both, so try them in this order:
    which an unattended collector cannot do. A dedicated service account
    is the usual answer.
 
+## Managed service providers: one login, many tenants
+
+If your account is an MSP (partner) account, your login is not inside
+any one customer's tenant, and the core API - jobs, clients, everything
+blt collects - needs to be told which customer each call is for.
+Commvault's API FAQ:
+
+> **lhAccountId** - "mandatory only when a partner invokes core APIs for
+> one of its customers. This is not relevant to standalone customers."
+>
+> **tenantGuid** - "used by MSPs to identify the tenant (customer), is an
+> alternative to lhAccountId and can be fetched from the company listing
+> page in Command Center."
+>
+> **ring-id** - "required when a customer is extended to multiple rings,
+> to specify the ring context (e.g., M301, M108)".
+
+So yes, it is still needed. In blt, each customer tenant is its own
+"CommCell" - its own `.env` file, its own data, its own watermark - and
+all of them borrow one credentials file:
+
+```
+# config/msp.env - the MSP's own login. Not collected from directly.
+CV_BASE_URL=https://api.metallic.io
+CV_DEPLOYMENT=saas
+CV_ACCESS_TOKEN=...
+CV_REFRESH_TOKEN=...
+```
+```
+# config/acme.env - one customer tenant
+CV_CREDENTIALS=msp
+CV_ACCOUNT_ID=1001          # sent as lhAccountId
+```
+```
+# config/globex.env - another, identified the other way
+CV_CREDENTIALS=msp
+CV_TENANT_GUID=...          # sent as tenantGuid
+# CV_RING_ID=M301           # only if the customer spans several rings
+```
+
+Then `./collect.sh acme`, `./collect.sh globex`, and so on.
+
+- `CV_CREDENTIALS=msp` means "take the URL, deployment and tokens from
+  `config/msp.env`". When the token is renewed, the new pair is written
+  back to `msp.env`, so every tenant's next run has it. Runs for
+  different tenants take turns renewing and pick up each other's
+  renewals, so they can be scheduled independently.
+- The tenant header goes on every data call. Logging in and renewing a
+  token are about the MSP's own user and do not carry it.
+- **The rate limit is per tenant** according to Commvault, so each
+  customer has its own 1000 reads an hour. blt's budget is per run,
+  which matches.
+
+**Finding the account id.** Your earlier code got it from
+`/api/v1/partner/accounts`. Commvault's current reference still has the
+partner API (`GET /api/v1/partner/accounts/{accountId}`, among others)
+but does not list a call that returns all accounts, so whether the
+listing still exists is not settled by the documentation. blt can try
+it:
+
+```
+./collect.sh msp --partner-accounts
+```
+
+If that is refused, the tenant GUID is the documented alternative and
+is shown on the company listing page in Command Center.
+
+All of this is built from the FAQ and from how your earlier code worked,
+and has unit tests; **none of it has been run against a tenant.**
+
 ## Setup
 
 One `.env` file for the tenant, as for any CommCell. The file name is
@@ -163,6 +233,12 @@ from overlapping, and remember each run counts only its own calls.
 
 To be filled in from the first probe and runs:
 
+- For an MSP: whether `lhAccountId` alone is enough on every core call,
+  whether `GET /api/v1/partner/accounts` still lists accounts and in
+  what shape, and whether an MSP access token can be used with a
+  customer's `lhAccountId` at all or needs the partner login
+  (`POST /api/v1/partner/authentication`), which blt does not use.
+
 - Whether a tenant administrator's access token works, or only
   username and password.
 - Which of blt's calls a tenant user is allowed to make. `GET /CommServ`
@@ -182,5 +258,6 @@ To be filled in from the first probe and runs:
 
 - [Commvault Cloud REST API](https://documentation.commvault.com/saas/rest_api.html) - base URL, credentials, rate limits
 - [Commvault REST API reference](https://api.commvault.com/docs/latest/commvault-rest-api-public/) - the SaaS `Authorization` header
+- [Commvault API FAQ](https://api.commvault.com/FAQ/) - the MSP headers `lhAccountId`, `tenantGuid`, `ring-id`
 - [Access tokens for REST APIs](https://documentation.commvault.com/11.44/software/access_tokens_for_rest_apis_01.html) - token lifetimes
 - [Community: using an access token generated in the web portal](https://community.commvault.com/developer-tools-integration-and-automation-50/how-to-use-access-token-generated-in-the-web-portal-in-api-calls-10159) - `/Login` with MFA

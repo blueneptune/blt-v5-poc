@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from dotenv import dotenv_values
 from loguru import logger
 
 from blt.commvault.auth import TokenSet
@@ -57,6 +58,25 @@ def update_env_file(path: Path, updates: dict[str, str]) -> None:
 
 def _iso(moment: datetime) -> str:
     return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def read_tokens(env_path: Path) -> TokenSet | None:
+    """The token pair currently in an env file, or None if it has none."""
+    values = dotenv_values(env_path)
+    access = (values.get("CV_ACCESS_TOKEN") or "").strip()
+    if not access:
+        return None
+
+    def moment(key: str) -> datetime | None:
+        text = (values.get(key) or "").strip()
+        return datetime.fromisoformat(text.replace("Z", "+00:00")) if text else None
+
+    return TokenSet(
+        access_token=access,
+        refresh_token=(values.get("CV_REFRESH_TOKEN") or "").strip() or None,
+        expires_at=moment("CV_TOKEN_EXPIRES_AT"),
+        renewable_until=moment("CV_TOKEN_RENEWABLE_UNTIL"),
+    )
 
 
 def env_token_saver(env_path: Path) -> Callable[[TokenSet, dict[str, Any]], None]:

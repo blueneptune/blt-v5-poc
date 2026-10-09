@@ -122,6 +122,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
 ]
 
 [package.optional-dependencies]
@@ -152,6 +153,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "sdk-primer", marker = "extra == 'collector'", git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.1.0" },
     { name = "sqlmodel", marker = "extra == 'api'", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.34" },

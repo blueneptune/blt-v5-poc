@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+from dotenv import dotenv_values
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -26,6 +27,19 @@ class CollectorSettings(BaseSettings):
     # means none for software and SAAS_CALLS_PER_HOUR for SaaS, whose
     # tenants are limited to 1000 reads an hour across all API users.
     cv_max_calls_per_hour: int | None = None
+
+    # For a managed service provider on Commvault Cloud, whose one login
+    # reaches many customer tenants: which tenant this file is for. Sent
+    # as the `lhAccountId` header (or `tenantGuid`, its documented
+    # alternative; and `ring-id` for a customer spread over several
+    # rings). Not used by a standalone customer.
+    cv_account_id: str | None = None
+    cv_tenant_guid: str | None = None
+    cv_ring_id: str | None = None
+    # Take the credentials from config/<name>.env instead of this file,
+    # and write renewed tokens back there. For an MSP: one credentials
+    # file, and a small file per tenant that names it.
+    cv_credentials: str | None = None
     # Either an access token, or a username and password. If both are
     # set the access token is used.
     cv_access_token: SecretStr | None = None
@@ -72,12 +86,25 @@ class CollectorSettings(BaseSettings):
         "cv_username",
         "cv_password",
         "cv_max_calls_per_hour",
+        "cv_account_id",
+        "cv_tenant_guid",
+        "cv_ring_id",
+        "cv_credentials",
         mode="before",
     )
     @classmethod
     def _blank_is_unset(cls, value: object) -> object:
         # "CV_USERNAME=" left empty in the file means "not using this".
         return None if isinstance(value, str) and not value.strip() else value
+
+    @property
+    def tenant_headers(self) -> dict[str, str]:
+        headers = {
+            "lhAccountId": self.cv_account_id,
+            "tenantGuid": self.cv_tenant_guid,
+            "ring-id": self.cv_ring_id,
+        }
+        return {name: value for name, value in headers.items() if value}
 
     @property
     def calls_per_hour(self) -> int | None:
@@ -107,4 +134,20 @@ def load_settings(commcell: str, config_dir: Path) -> CollectorSettings:
         raise FileNotFoundError(
             f"{commcell_env} not found - copy config/commcell.env.example to it."
         )
-    return CollectorSettings(_env_file=(config_dir / "blt.env", commcell_env))  # type: ignore[call-arg]
+    files = [config_dir / "blt.env"]
+    shared = (dotenv_values(commcell_env).get("CV_CREDENTIALS") or "").strip()
+    if shared:
+        credentials_env = commcell_env_path(shared, config_dir)
+        if not credentials_env.is_file():
+            raise FileNotFoundError(
+                f"{commcell_env.name} says CV_CREDENTIALS={shared}, but {credentials_env} "
+                "does not exist."
+            )
+        files.append(credentials_env)
+    files.append(commcell_env)
+    return CollectorSettings(_env_file=tuple(files))  # type: ignore[call-arg]
+
+
+def credentials_env_path(settings: CollectorSettings, commcell: str, config_dir: Path) -> Path:
+    """The file this CommCell's tokens live in, and are renewed into."""
+    return commcell_env_path(settings.cv_credentials or commcell, config_dir)

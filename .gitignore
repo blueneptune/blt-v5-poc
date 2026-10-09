@@ -11,6 +11,7 @@ __pycache__/
 config/*.env
 config/.*.renewed.json
 config/.*.tmp
+config/.*.token.lock
 
 # Lab rig: generated passwords and run state.
 lab/.state/

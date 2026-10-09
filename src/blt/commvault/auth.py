@@ -15,6 +15,7 @@ the CommCell's .env file (see blt.collector.tokens).
 from __future__ import annotations
 
 from collections.abc import Callable, Generator
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -65,6 +66,8 @@ class AccessTokenAuth(httpx.Auth):
         client: httpx.Client,
         on_renew: Callable[[TokenSet, dict[str, Any]], None] | None = None,
         header: str = "Authtoken",
+        reload: Callable[[], TokenSet | None] | None = None,
+        renew_lock: Callable[[], AbstractContextManager[object]] = nullcontext,
         renew_margin: timedelta = timedelta(minutes=5),
         now: Callable[[], datetime] = _now,
     ) -> None:
@@ -73,6 +76,13 @@ class AccessTokenAuth(httpx.Auth):
         self._client = client
         self._on_renew = on_renew
         self._header = header
+        # For a token shared by several runs (an MSP's one token used for
+        # each of its tenants): `reload` reads the pair currently on
+        # disk, and `renew_lock` makes renewals take turns. Without them
+        # two runs would each trade in the same old pair, and the second
+        # would be refused - its pair having just been replaced.
+        self._reload = reload
+        self._renew_lock = renew_lock
         self._renew_margin = renew_margin
         self._now = now
 
@@ -81,6 +91,17 @@ class AccessTokenAuth(httpx.Auth):
         return expires_at is not None and self._now() >= expires_at - self._renew_margin
 
     def renew(self) -> TokenSet:
+        with self._renew_lock():
+            if self._reload is not None:
+                latest = self._reload()
+                if latest is not None and latest.access_token != self.tokens.access_token:
+                    # Another run renewed it while this one was working.
+                    logger.info("Picked up a Commvault token renewed by another run")
+                    self.tokens = latest
+                    return latest
+            return self._renew()
+
+    def _renew(self) -> TokenSet:
         old = self.tokens
         if not old.refresh_token:
             raise AuthenticationError(
