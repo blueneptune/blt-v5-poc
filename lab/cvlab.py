@@ -45,9 +45,8 @@ import httpx
 from loguru import logger
 from sdk_primer import SDKError, configure_logging
 
-from blt.collector.settings import commcell_env_path, load_settings
-from blt.collector.tokens import env_token_saver
-from blt.commvault.auth import TokenSet
+from blt.collector.connect import commvault_client
+from blt.collector.settings import load_settings
 from blt.commvault.client import CommvaultClient
 
 PREFIX = "blt-lab-"
@@ -862,21 +861,13 @@ def main() -> None:
     settings = load_settings(args.commcell, args.config_dir)
     if not settings.cv_access_token:
         raise SystemExit("The lab scripts need CV_ACCESS_TOKEN in the CommCell's .env file.")
-    tokens = TokenSet(
-        settings.cv_access_token.get_secret_value(),
-        settings.cv_refresh_token.get_secret_value() if settings.cv_refresh_token else None,
-        settings.cv_token_expires_at,
-        settings.cv_token_renewable_until,
-    )
     try:
-        with CommvaultClient(
-            settings.cv_base_url,
-            access_token=tokens,
-            on_token_renew=env_token_saver(commcell_env_path(args.commcell, args.config_dir)),
-            verify_tls=settings.cv_verify_tls,
-            ca_bundle=settings.cv_ca_bundle,
-            # The lab is the one place meant to change a CommServe - but
-            # only the commands that need to get a client that can.
+        # The lab is the one place meant to change a CommServe - but only
+        # the commands that need to get a client that can.
+        with commvault_client(
+            settings,
+            args.commcell,
+            args.config_dir,
             allow_changes=args.command not in READ_ONLY_COMMANDS,
         ) as commvault:
             lab = Lab(commvault, args.plan)

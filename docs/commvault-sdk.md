@@ -16,6 +16,21 @@ with CommvaultClient(url, access_token=TokenSet(access, refresh)) as cv:
             ...
 ```
 
+## Software and SaaS
+
+The same SDK talks to a CommServe you run and to Commvault Cloud:
+
+```python
+CommvaultClient("https://api.metallic.io", access_token=tokens,
+                deployment="saas", max_calls_per_hour=800)
+```
+
+`deployment="saas"` sends the token as `Authorization: Bearer ...`
+instead of `Authtoken: Bearer ...`. `max_calls_per_hour` puts every
+request the client sends through a budget and waits when it is spent,
+for SaaS's per-tenant rate limit. Neither has been run against a real
+SaaS tenant yet; see [saas-setup.md](saas-setup.md).
+
 ## Read-only unless you say otherwise
 
 Every call is one of three kinds, and the SDK treats them differently:
@@ -50,6 +65,7 @@ real CommServe (11 SP46).
 | Call | Endpoint | |
 |---|---|---|
 | `iter_pages(lookup_seconds, ended_between=)` | `POST /Jobs` | proven, at 60,000+ jobs |
+| `sample(lookup_seconds, limit, ended_between=)` | `POST /Jobs` | proven |
 | `active()` | `POST /Jobs` (category 1) | proven |
 | `oldest_start(lookup_seconds)` | `POST /Jobs` (limit 1) | proven |
 | `get(job_id)` | `GET /Job/{id}` | proven |
@@ -128,6 +144,7 @@ is clear which fields matter.
 
 ```
 client.py      CommvaultClient: connection, auth, and the groups
+budget.py      the hourly call budget
 _base.py       Resource (get / list / query / change), error handling
 auth.py        access-token header and renewal
 jobs.py  clients.py  subclients.py  sql.py  commcell.py   the groups

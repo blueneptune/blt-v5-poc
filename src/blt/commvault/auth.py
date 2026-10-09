@@ -46,7 +46,9 @@ def _now() -> datetime:
 
 
 class AccessTokenAuth(httpx.Auth):
-    """Sends `Authtoken: Bearer <access token>` on every request, renewing
+    """Sends `<header>: Bearer <access token>` on every request - the
+    header is `Authtoken` on a customer-managed CommServe and
+    `Authorization` on Commvault Cloud (SaaS) - renewing
     first when the token is known to be about to expire, and renewing-
     then-retrying once when a request comes back 401 anyway (expiry not
     known, or the two machines' clocks disagree).
@@ -62,6 +64,7 @@ class AccessTokenAuth(httpx.Auth):
         *,
         client: httpx.Client,
         on_renew: Callable[[TokenSet, dict[str, Any]], None] | None = None,
+        header: str = "Authtoken",
         renew_margin: timedelta = timedelta(minutes=5),
         now: Callable[[], datetime] = _now,
     ) -> None:
@@ -69,6 +72,7 @@ class AccessTokenAuth(httpx.Auth):
         self.tokens = tokens
         self._client = client
         self._on_renew = on_renew
+        self._header = header
         self._renew_margin = renew_margin
         self._now = now
 
@@ -86,7 +90,7 @@ class AccessTokenAuth(httpx.Auth):
         logger.info("Renewing the Commvault access token")
         payload = {"accessToken": old.access_token, "refreshToken": old.refresh_token}
         response = self._client.post(
-            self._renew_url, json=payload, headers={"Authtoken": f"Bearer {old.access_token}"}
+            self._renew_url, json=payload, headers={self._header: f"Bearer {old.access_token}"}
         )
         if response.status_code == 401:
             # The access token being presented is the thing that expired;
@@ -122,11 +126,11 @@ class AccessTokenAuth(httpx.Auth):
         if self.tokens.refresh_token and self._expiring():
             self.renew()
             renewed = True
-        request.headers["Authtoken"] = f"Bearer {self.tokens.access_token}"
+        request.headers[self._header] = f"Bearer {self.tokens.access_token}"
         response = yield request
 
         if response.status_code == 401 and self.tokens.refresh_token and not renewed:
             logger.warning("Commvault answered 401, renewing the access token and retrying once")
             self.renew()
-            request.headers["Authtoken"] = f"Bearer {self.tokens.access_token}"
+            request.headers[self._header] = f"Bearer {self.tokens.access_token}"
             yield request

@@ -127,6 +127,28 @@ class Jobs(Resource):
                 return
             offset += page_size
 
+    def sample(
+        self,
+        lookup_seconds: int,
+        limit: int = 5,
+        *,
+        ended_between: tuple[datetime, datetime] | None = None,
+    ) -> tuple[int | None, list[JobIn]]:
+        """A few jobs and the CommServe's count of how many there are, in
+        one request - for checking that the listing works at all without
+        paging through it."""
+        category = CATEGORY_ALL
+        extra: dict[str, Any] = {}
+        if ended_between is not None:
+            category = CATEGORY_FINISHED
+            extra["endTimeRange"] = {
+                "fromTime": int(ended_between[0].timestamp()),
+                "toTime": int(ended_between[1].timestamp()),
+            }
+        body = self._query("/Jobs", self._listing_body(lookup_seconds, category, 0, limit, extra))
+        jobs = [job for e in body.get("jobs") or [] if (job := parse_job(e)) is not None]
+        return body.get("totalRecordsWithoutPaging"), jobs
+
     def active(self, limit: int = 500) -> list[JobIn]:
         """Jobs that are active right now (one page)."""
         body = self._query("/Jobs", self._listing_body(0, CATEGORY_ACTIVE, 0, limit))

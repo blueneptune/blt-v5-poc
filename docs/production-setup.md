@@ -125,6 +125,16 @@ Proves the URL, certificate and token. Collects nothing. Fix anything it
 reports before going on.
 
 ```
+./collect.sh prod-east --probe
+```
+
+Optional but worth a minute: tries each Commvault call blt depends on,
+once, and says which work and what each is needed for. This is the
+quick way to find out whether the blt user's role is wide enough -
+anything `FAILED` with a 403 is a permission it lacks - before a
+collection or an inventory runs into it. It stores nothing.
+
+```
 ./collect.sh prod-east
 ```
 

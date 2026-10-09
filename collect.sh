@@ -2,6 +2,7 @@
 # Collect job history from one CommCell and load it into the blt API.
 #
 #   ./collect.sh <commcell> [--backfill] [--full] [--check] [--log-level DEBUG]
+#   ./collect.sh <commcell> --probe                which of blt's Commvault calls work here?
 #   ./collect.sh <commcell> --inventory            what exists: clients, instances, databases
 #   ./collect.sh <commcell> --validate [--max-age-hours N]    is all of it backed up?
 #   ./collect.sh <commcell> --report [--history]   per SQL instance: discovered vs backed up

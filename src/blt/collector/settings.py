@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,14 @@ class CollectorSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     cv_base_url: str
+    # "software": a CommServe you run. "saas": Commvault Cloud (Metallic),
+    # where CV_BASE_URL is https://api.metallic.io and the token travels
+    # in a different header.
+    cv_deployment: Literal["software", "saas"] = "software"
+    # A ceiling on requests per hour to Commvault from one run. Unset
+    # means none for software and SAAS_CALLS_PER_HOUR for SaaS, whose
+    # tenants are limited to 1000 reads an hour across all API users.
+    cv_max_calls_per_hour: int | None = None
     # Either an access token, or a username and password. If both are
     # set the access token is used.
     cv_access_token: SecretStr | None = None
@@ -62,6 +71,7 @@ class CollectorSettings(BaseSettings):
         "cv_token_renewable_until",
         "cv_username",
         "cv_password",
+        "cv_max_calls_per_hour",
         mode="before",
     )
     @classmethod
@@ -69,11 +79,22 @@ class CollectorSettings(BaseSettings):
         # "CV_USERNAME=" left empty in the file means "not using this".
         return None if isinstance(value, str) and not value.strip() else value
 
+    @property
+    def calls_per_hour(self) -> int | None:
+        if self.cv_max_calls_per_hour is not None:
+            return self.cv_max_calls_per_hour or None
+        return SAAS_CALLS_PER_HOUR if self.cv_deployment == "saas" else None
+
     @model_validator(mode="after")
     def _has_credentials(self) -> CollectorSettings:
         if not self.cv_access_token and not (self.cv_username and self.cv_password):
             raise ValueError("set CV_ACCESS_TOKEN, or both CV_USERNAME and CV_PASSWORD")
         return self
+
+
+# Under Commvault Cloud's 1000 reads an hour, with room left for other
+# users of the same tenant's API.
+SAAS_CALLS_PER_HOUR = 800
 
 
 def commcell_env_path(commcell: str, config_dir: Path) -> Path:

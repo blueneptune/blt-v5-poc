@@ -22,12 +22,11 @@ from typing import Any
 from loguru import logger
 from sdk_primer import APIClient, NotFoundError, SDKError, configure_logging
 
-from blt.commvault import CommvaultClient, TokenSet
 from blt.schemas import JobIn, JobOut, classify_status
 
-from .settings import commcell_env_path, load_settings
+from .connect import commvault_client
+from .settings import load_settings
 from .store import BltStore
-from .tokens import env_token_saver
 
 # (label, field on JobIn/JobOut). Compared in this order.
 FIELDS: list[tuple[str, str]] = [
@@ -141,26 +140,9 @@ def main() -> None:
         print(f"Configuration problem for {args.commcell}: {exc}", file=sys.stderr)
         sys.exit(78)
 
-    tokens = None
-    if settings.cv_access_token:
-        tokens = TokenSet(
-            settings.cv_access_token.get_secret_value(),
-            settings.cv_refresh_token.get_secret_value() if settings.cv_refresh_token else None,
-            settings.cv_token_expires_at,
-            settings.cv_token_renewable_until,
-        )
     try:
         with (
-            CommvaultClient(
-                settings.cv_base_url,
-                settings.cv_username,
-                settings.cv_password.get_secret_value() if settings.cv_password else None,
-                access_token=tokens,
-                on_token_renew=env_token_saver(commcell_env_path(args.commcell, args.config_dir)),
-                verify_tls=settings.cv_verify_tls,
-                ca_bundle=settings.cv_ca_bundle,
-                timeout=settings.cv_timeout_seconds,
-            ) as commvault,
+            commvault_client(settings, args.commcell, args.config_dir) as commvault,
             APIClient(
                 base_url=settings.blt_api_url,
                 default_headers={"X-API-Key": settings.blt_api_key.get_secret_value()},

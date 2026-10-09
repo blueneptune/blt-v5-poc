@@ -7,18 +7,17 @@ import sys
 from pathlib import Path
 
 from loguru import logger
-from sdk_primer import APIClient, SDKError, configure_logging
+from sdk_primer import APIClient, ClientError, NotFoundError, SDKError, configure_logging
 
-from blt.commvault.auth import TokenSet
-from blt.commvault.client import CommvaultClient
 from blt.commvault.inventory import iter_inventory
 from blt.schemas import PROBLEM_VERDICTS, InstanceReportRow, ValidationReport
 
 from .collect import run_backfill, run_collection, run_inventory
+from .connect import commvault_client
 from .lock import run_lock
-from .settings import commcell_env_path, load_settings
+from .probe import run_probe
+from .settings import load_settings
 from .store import BltStore
-from .tokens import env_token_saver, warn_if_regeneration_due
 
 
 def print_instance_report(rows: list[InstanceReportRow]) -> int:
@@ -131,6 +130,11 @@ def main() -> None:
         help="--validate: a backup older than this counts as stale",
     )
     parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="try each Commvault call blt uses, once, and report which work; stores nothing",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="only verify the CommCell credentials work; collect nothing",
@@ -144,7 +148,7 @@ def main() -> None:
     # previous one of the same kind exits instead of piling on. Each kind
     # has its own, so a long backfill never holds up regular collection.
     # The read-only modes need none.
-    if args.check or args.validate or args.report:
+    if args.check or args.probe or args.validate or args.report:
         _run(args)
         return
     kind = "backfill" if args.backfill else "inventory" if args.inventory else "collection"
@@ -162,43 +166,30 @@ def _run(args: argparse.Namespace) -> None:
         logger.error("Configuration problem for {}: {}", args.commcell, exc)
         sys.exit(78)
 
-    tokens = None
-    if settings.cv_access_token:
-        tokens = TokenSet(
-            access_token=settings.cv_access_token.get_secret_value(),
-            refresh_token=(
-                settings.cv_refresh_token.get_secret_value() if settings.cv_refresh_token else None
-            ),
-            expires_at=settings.cv_token_expires_at,
-            renewable_until=settings.cv_token_renewable_until,
-        )
-        warn_if_regeneration_due(args.commcell, settings.cv_token_renewable_until)
+    commvault = commvault_client(settings, args.commcell, args.config_dir)
 
-    commvault = CommvaultClient(
-        base_url=settings.cv_base_url,
-        username=settings.cv_username,
-        password=settings.cv_password.get_secret_value() if settings.cv_password else None,
-        access_token=tokens,
-        on_token_renew=env_token_saver(commcell_env_path(args.commcell, args.config_dir)),
-        verify_tls=settings.cv_verify_tls,
-        ca_bundle=settings.cv_ca_bundle,
-        page_size=settings.cv_page_size,
-        timeout=settings.cv_timeout_seconds,
-    )
+    if args.probe:
+        with commvault:
+            sys.exit(0 if run_probe(commvault) else 1)
 
     if args.check:
         try:
             with commvault:
-                info = commvault.commcell.info()
+                try:
+                    info = commvault.commcell.info()
+                    described = (
+                        f"CommServe {info.get('hostName')} version {info.get('csVersionInfo')}"
+                    )
+                except (ClientError, NotFoundError):
+                    # Not every user may read the CommServe's own details
+                    # (a tenant on Commvault Cloud, for one). Being able to
+                    # list jobs proves the credentials just as well.
+                    total, _ = commvault.jobs.sample(86_400, limit=1)
+                    described = f"{total} jobs visible in the last 24 hours"
         except SDKError as exc:
             logger.error("Could not authenticate to {}: {}", args.commcell, exc)
             sys.exit(1)
-        logger.info(
-            "Authenticated to {}: CommServe {} version {}",
-            args.commcell,
-            info.get("hostName"),
-            info.get("csVersionInfo"),
-        )
+        logger.info("Authenticated to {}: {}", args.commcell, described)
         return
 
     try:

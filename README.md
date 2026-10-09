@@ -13,6 +13,7 @@ collect.sh <commcell>            host, by hand or on a timer
 ```
 
 Guides: **[setting it up against a production CommCell](docs/production-setup.md)** ·
+[Commvault Cloud / SaaS](docs/saas-setup.md) ·
 [how a run works, step by step](docs/blt-flow.md) ·
 [the Commvault SDK inside blt](docs/commvault-sdk.md) ·
 [lab noise rig for the eval CommServe (plan)](docs/lab-noise.md) ·
@@ -62,6 +63,7 @@ partway keeps what it loaded but doesn't move the watermark.
 ./collect.sh prod --validate         # is everything in the inventory backed up?
 ./collect.sh prod --report           # per SQL instance: discovered vs backed up
 ./collect.sh prod --check            # only prove the credentials work
+./collect.sh prod --probe            # which of blt's Commvault calls work here?
 ./collect.sh prod --full             # the whole history in one query
 ./collect.sh prod --log-level DEBUG  # every HTTP request
 ```

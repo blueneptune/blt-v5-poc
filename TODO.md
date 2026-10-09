@@ -197,3 +197,14 @@ current work.
     that still sees every job and client; how long `--inventory` takes
     with thousands of clients; and whether the token lifetime and
     60-day renewal window are the same there.
+
+18. **Commvault Cloud (SaaS / Metallic)** - support added 2026-10-09
+    from the documentation (`CV_DEPLOYMENT=saas`: the `Authorization`
+    header, an hourly call budget, `--probe`, a `--check` that does not
+    need CommServe details). **Not yet run against a tenant.** First
+    steps and everything still unknown are in docs/saas-setup.md; the
+    output of `./collect.sh <tenant> --probe` is what will settle most
+    of it. Likely follow-ons once it has: SaaS workload types in the
+    inventory (Microsoft 365, cloud databases, VMs) alongside SQL
+    Server; honouring the `X-RateLimit-*` headers on a 429; a budget
+    shared across runs rather than per process.

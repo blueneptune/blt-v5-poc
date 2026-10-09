@@ -28,17 +28,22 @@ import base64
 import ssl
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from sdk_primer import APIClient, AuthenticationError, TokenExchangeAuth
 
 from .auth import AccessTokenAuth, TokenSet
+from .budget import BudgetTransport, CallBudget
 from .clients import Clients, Instances
 from .commcell import CommCell, Credentials, Plans, Storage
 from .jobs import Jobs
 from .sql import Sql
 from .subclients import Subclients
+
+# "software": a CommServe you run yourself. "saas": Commvault Cloud
+# (formerly Metallic), reached at https://api.metallic.io.
+Deployment = Literal["software", "saas"]
 
 # Commvault answers in XML unless asked otherwise.
 _JSON_HEADERS = {"Accept": "application/json"}
@@ -85,6 +90,8 @@ class CommvaultClient:
         page_size: int = 500,
         timeout: float = 120.0,
         allow_changes: bool = False,
+        deployment: Deployment = "software",
+        max_calls_per_hour: int | None = None,
     ) -> None:
         base_url = base_url.rstrip("/")
         verify: bool | ssl.SSLContext = verify_tls
@@ -99,7 +106,24 @@ class CommvaultClient:
         # A second, plain client for the calls that *obtain* credentials
         # (login, token renewal) - they can't go through the client whose
         # auth they are in the middle of supplying.
-        self._login_client = httpx.Client(verify=verify, headers=_JSON_HEADERS, timeout=timeout)
+        # Where the token goes. A customer-managed CommServe takes it in
+        # its own `Authtoken` header; Commvault Cloud takes a standard
+        # `Authorization: Bearer ...` (which 11 SP46 software also accepts).
+        self.deployment = deployment
+        auth_header = "Authorization" if deployment == "saas" else "Authtoken"
+
+        # Every request this client sends - reads, changes, logins and
+        # token renewals - goes through one transport, so that an hourly
+        # call budget, if there is one, counts them all.
+        self.budget = CallBudget(max_calls_per_hour) if max_calls_per_hour else None
+
+        def transport() -> httpx.BaseTransport:
+            inner = httpx.HTTPTransport(verify=verify)
+            return BudgetTransport(inner, self.budget) if self.budget else inner
+
+        self._login_client = httpx.Client(
+            headers=_JSON_HEADERS, timeout=timeout, transport=transport()
+        )
         if access_token:
             # An access token (Command Center > user > Access tokens) is
             # issued ahead of time, so there is no login call: it rides in
@@ -107,7 +131,11 @@ class CommvaultClient:
             # when it runs out (see auth.py).
             tokens = TokenSet(access_token) if isinstance(access_token, str) else access_token
             auth = AccessTokenAuth(
-                base_url, tokens, client=self._login_client, on_renew=on_token_renew
+                base_url,
+                tokens,
+                client=self._login_client,
+                on_renew=on_token_renew,
+                header=auth_header,
             )
         elif username and password:
             # POST /Login with the password base64-encoded returns a token
@@ -121,8 +149,10 @@ class CommvaultClient:
                     "password": base64.b64encode(password.encode()).decode(),
                 },
                 token_from_response=_token_from_login,
-                auth_scheme=None,
-                auth_header="Authtoken",
+                # The login token already reads "QSDK ...". Software takes
+                # it bare in Authtoken; SaaS wants "Bearer QSDK ...".
+                auth_scheme="Bearer" if deployment == "saas" else None,
+                auth_header=auth_header,
                 client=self._login_client,
             )
         else:
@@ -132,7 +162,7 @@ class CommvaultClient:
             auth=auth,
             default_headers=_JSON_HEADERS,
             timeout=timeout,
-            transport=httpx.HTTPTransport(verify=verify),
+            transport=transport(),
         )
         # A second transport for calls that change something, which never
         # retries. Reads are safe to repeat; "start a backup" is not. When
@@ -147,7 +177,7 @@ class CommvaultClient:
             default_headers=_JSON_HEADERS,
             timeout=timeout,
             max_attempts=1,
-            transport=httpx.HTTPTransport(verify=verify),
+            transport=transport(),
         )
 
         self.commcell = CommCell(self)
