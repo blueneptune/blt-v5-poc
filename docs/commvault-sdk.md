@@ -1,198 +1,48 @@
-# The Commvault SDK inside blt
+# The Commvault SDK
 
-`src/blt/commvault/` is a small SDK for Commvault's REST API, written as
-a facade: one object per CommServe connection, with a named group of
-calls for each kind of thing.
+The code that talks to Commvault is not part of blt. It is its own
+package, **commvault-sdk**, in its own repository, and blt depends on it
+the way it depends on `sdk-primer-core`.
 
-```python
-from blt.commvault import CommvaultClient, TokenSet
+- What it does, every call with its endpoint, and how far each has been
+  proven against a real CommServe: that repository's README.
+- Adding or changing a Commvault call: do it there, release a tag, and
+  bump the tag here.
 
-with CommvaultClient(url, access_token=TokenSet(access, refresh)) as cv:
-    cv.commcell.info()["csVersionInfo"]
-    for page in cv.jobs.iter_pages(lookup_seconds=3600):
-        ...
-    for client in cv.clients.list():
-        for instance in cv.instances.list(client["clientId"]):
-            ...
-```
-
-## Software and SaaS
-
-The same SDK talks to a CommServe you run and to Commvault Cloud:
-
-```python
-CommvaultClient("https://api.metallic.io", access_token=tokens,
-                deployment="saas", max_calls_per_hour=800)
-```
-
-`deployment="saas"` sends the token as `Authorization: Bearer ...`
-instead of `Authtoken: Bearer ...`. `max_calls_per_hour` puts every
-request the client sends through a budget and waits when it is spent,
-for SaaS's per-tenant rate limit. Neither has been run against a real
-SaaS tenant yet; see [saas-setup.md](saas-setup.md).
-
-## Read-only unless you say otherwise
-
-Every call is one of three kinds, and the SDK treats them differently:
-
-| Kind | Examples | Allowed by default |
-|---|---|---|
-| A GET | `clients.list()`, `sql.databases()` | yes |
-| A query sent as a POST (Commvault puts some filters in the body) | `jobs.iter_pages()`, `jobs.details()` | yes |
-| A change to the CommServe | `subclients.backup()`, `jobs.kill()`, `clients.delete()` | **no** |
-
-A change raises `ChangesNotAllowed` before any request is sent, unless
-the client was built with `allow_changes=True`. blt's collector never
-passes that, so nothing it does - and no bug in it - can alter a
-production CommServe.
-
-## What is in it
-
-The endpoint is given so each call can be matched against Commvault's
-API documentation. "Proven" means that request has been run against a
-real CommServe (11 SP46).
-
-### `cv.commcell`
-
-| Call | Endpoint | |
-|---|---|---|
-| `info()` | `GET /CommServ` | proven |
-| `packages()` | `GET /V4/commcell/available-packages` | proven |
-| `install_authcode()` *change* | `POST /Organization/0/Authtoken` | proven |
-
-### `cv.jobs`
-
-| Call | Endpoint | |
-|---|---|---|
-| `iter_pages(lookup_seconds, ended_between=)` | `POST /Jobs` | proven, at 60,000+ jobs |
-| `sample(lookup_seconds, limit, ended_between=)` | `POST /Jobs` | proven |
-| `active()` | `POST /Jobs` (category 1) | proven |
-| `oldest_start(lookup_seconds)` | `POST /Jobs` (limit 1) | proven |
-| `get(job_id)` | `GET /Job/{id}` | proven |
-| `details(job_id)`, `counts(job_id)` | `POST /JobDetails` | proven |
-| `suspend`, `resume`, `kill` *change* | `POST /Job/{id}/action/pause\|resume\|kill` | proven |
-
-### `cv.clients`, `cv.instances`
-
-| Call | Endpoint | |
-|---|---|---|
-| `clients.list()`, `clients.find(name)` | `GET /Client` | proven |
-| `clients.agents(client_id)` | `GET /Agent?clientId=` | proven |
-| `clients.delete(client_id)` *change* | `DELETE /Client/{id}?forceDelete=1` | written, **never run** |
-| `instances.list(client_id)` | `GET /Instance?clientId=` | proven |
-| `instances.get(instance_id)` | `GET /Instance/{id}` | proven |
-| `instances.update(instance, properties)` *change* | `POST /Instance/{id}` | proven |
-
-### `cv.subclients`
-
-| Call | Endpoint | |
-|---|---|---|
-| `list(client_id)` | `GET /Subclient?clientId=` | proven |
-| `get(subclient_id)` | `GET /Subclient/{id}` | proven |
-| `create(...)` *change* | `POST /Subclient` | proven |
-| `set_plan(subclient_id, plan)` *change* | `POST /Subclient/{id}` | proven |
-| `backup(subclient_id, level)` *change* | `POST /Subclient/{id}/action/backup` | proven |
-| `delete(subclient_id)` *change* | `DELETE /Subclient/{id}` | written, **never run** |
-
-### `cv.sql`
-
-| Call | Endpoint | |
-|---|---|---|
-| `databases(instance_id)` | `GET /sql/databases?instance=` | proven |
-| `discovered(subclient_properties)` | (reads `subclients.get()`) | proven |
-| `set_instance_credential(instance, name)` *change* | `POST /Instance/{id}` | proven |
-
-### `cv.partner` (Commvault Cloud MSPs)
-
-| Call | Endpoint | |
-|---|---|---|
-| `accounts()` | `GET /api/v1/partner/accounts` | written, **never run** |
-| `account(account_id)` | `GET /api/v1/partner/accounts/{id}` | written, **never run** |
-
-### `cv.plans`, `cv.storage`, `cv.credentials`
-
-| Call | Endpoint | |
-|---|---|---|
-| `plans.list()`, `plans.ids()` | `GET /V4/Plan/Summary` | proven |
-| `storage.disk()` | `GET /V4/Storage/Disk` | proven |
-| `credentials.names()` | `GET /CommCell/Credentials` | proven |
-| `credentials.create(...)` *change* | `POST /Commcell/Credentials` | proven |
-
-Authentication (`POST /Login`, `POST /V4/AccessToken/Renew`) is handled
-underneath, in `auth.py` and `client.py`.
-
-**How far "proven" goes.** Every *read* call above has been run through
-this SDK against the eval CommServe (2026-10-08), by the collector and by
-the lab's read-only commands. The *change* calls have not yet been run
-through the SDK: their requests were proven by the lab scripts when
-those made the calls themselves, the SDK sends the same requests
-(checked by unit tests), and a default client was confirmed live to
-refuse them. Running the lab's changing commands is what will close
-that.
-
-## What it returns
-
-Commvault's own JSON for each thing, as dictionaries, with the envelope
-removed (`clients.list()` gives the list of client entities, not the
-`clientProperties` wrapper). Jobs are the exception: they come back as
-blt's typed `JobIn`. Typed models for the rest are worth adding once it
-is clear which fields matter.
-
-## Errors
-
-- HTTP failures raise sdk-primer's typed errors (`AuthenticationError`,
-  `NotFoundError`, `ServerError`, ...), all `SDKError`.
-- Commvault reports many failures as a 200 with an error in the body. A
-  changing call checks for that and raises `CommvaultError`.
-- An HTML "Scheduled Maintenance" page with a 200 raises `ServerError`.
-- A listing that answers 404 for "there are none" returns an empty list.
-
-## How it is built
+## How blt uses it
 
 ```
-client.py      CommvaultClient: connection, auth, and the groups
-budget.py      the hourly call budget
-_base.py       Resource (get / list / query / change), error handling
-auth.py        access-token header and renewal
-jobs.py  clients.py  subclients.py  sql.py  commcell.py   the groups
-models.py      Commvault's jobSummary -> JobIn
-inventory.py   uses the SDK to build blt's inventory (not part of it)
+commvault-sdk            CommvaultClient: cv.jobs, cv.clients, cv.sql, ...
+   ^                     returns its own typed Job, and Commvault's JSON
+   |
+src/blt/collector/
+   connect.py            builds a CommvaultClient from a CommCell's settings
+   source.py             the one place an SDK Job becomes blt's JobIn
+   inventory.py          clients / instances / databases -> blt's ObjectIn
+   tokens.py             writes renewed tokens back to the .env file
+   probe.py, lookup.py   --probe and blt-lookup
+lab/cvlab.py             the only caller that asks for allow_changes=True
 ```
 
-It sits on `sdk-primer-core` for transport - retries, typed exceptions,
-request logging - but does not use its `BaseAPIModel` / `ResourceManager`.
-Those model a resource you save, load and find at a path; Commvault's
-API is not shaped that way, so each group is written against the
-transport directly and shares Commvault's conventions through
-`_base.Resource`.
+Only the collector and the lab need the SDK. The API container does not
+install it: `blt.schemas` holds blt's own wire models precisely so that
+the API never has to.
 
-## Adding an endpoint
+## Where it comes from
 
-1. Find the request in Commvault's API documentation, and in cvpysdk if
-   the documentation is thin.
-2. Add a method to the group it belongs to, using `_get`, `_list`,
-   `_query` or `_change` - `_change` for anything that alters the
-   CommServe, however harmless it looks.
-3. Run it against a real CommServe before relying on it. Nearly every
-   endpoint here differed from first expectations in some way: a sort
-   flag that meant the opposite, an id that was not unique, a listing
-   that left out system databases, a 404 for an empty list.
-4. Add it to the tables above, with whether it has been run.
+`pyproject.toml`, under `[tool.uv.sources]`:
 
-## What is not here, deliberately
+```
+commvault-sdk = { path = "../commvault-sdk", editable = true }
+```
 
-Commvault's API has hundreds of endpoints. This covers the ones blt and
-its lab have needed and tested, not the catalogue. Wrapping the rest
-untested would produce an SDK that looks complete and is wrong in ways
-only a live CommServe reveals; `cvpysdk` already exists for breadth.
-Add groups as work calls for them - restores, schedules, alerts, storage
-policies, VM and file-system content are the likely next ones.
+That is a sibling checkout - the two repositories side by side - which
+is how it stands while the SDK repository is not yet on GitHub. Once it
+is, this becomes a pinned tag, the same form `sdk-primer` already uses:
 
-`lab/cvlab.py` uses the SDK for everything it does to a CommServe
-(since 2026-10-08) and builds no URLs of its own. It is the one caller
-that passes `allow_changes=True`, and only for the commands that need
-it: preflight, the SQL report and the SQL validation get a read-only
-client like the collector's. Its read-only commands have been run that
-way; its changing commands - setup, noise, clients, SQL setup and
-backup, teardown - are the first real exercise of the SDK's change
-calls and still need running.
+```
+commvault-sdk = { git = "https://github.com/blueneptune/commvault-sdk.git", tag = "v0.1.0" }
+```
+
+Until that change is made, a machine running blt needs both checkouts
+next to each other.

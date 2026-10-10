@@ -9,14 +9,15 @@ from pathlib import Path
 from loguru import logger
 from sdk_primer import APIClient, ClientError, NotFoundError, SDKError, configure_logging
 
-from blt.commvault.inventory import iter_inventory
 from blt.schemas import PROBLEM_VERDICTS, InstanceReportRow, ValidationReport
 
 from .collect import run_backfill, run_collection, run_inventory
 from .connect import commvault_client
+from .inventory import iter_inventory
 from .lock import run_lock
 from .probe import run_probe
 from .settings import load_settings
+from .source import CommvaultJobs
 from .store import BltStore
 
 
@@ -243,7 +244,7 @@ def _run(args: argparse.Namespace) -> None:
                     sys.exit(1)
             elif args.backfill:
                 run_backfill(
-                    commvault.jobs,
+                    CommvaultJobs(commvault),
                     store,
                     chunk_hours=settings.cv_backfill_chunk_hours,
                     max_chunks=settings.cv_backfill_max_chunks,
@@ -252,7 +253,7 @@ def _run(args: argparse.Namespace) -> None:
                 )
             else:
                 run_collection(
-                    commvault.jobs,
+                    CommvaultJobs(commvault),
                     store,
                     initial_lookback_hours=settings.cv_initial_lookback_hours,
                     history_limit_days=settings.cv_history_limit_days,

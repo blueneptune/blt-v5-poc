@@ -23,10 +23,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from commvault_sdk import TokenSet
 from dotenv import dotenv_values
 from loguru import logger
-
-from blt.commvault.auth import TokenSet
 
 # How long before the renewable-until date runs start warning about it.
 REGENERATE_WARNING = timedelta(days=7)

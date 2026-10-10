@@ -208,3 +208,11 @@ current work.
     inventory (Microsoft 365, cloud databases, VMs) alongside SQL
     Server; honouring the `X-RateLimit-*` headers on a 429; a budget
     shared across runs rather than per process.
+
+19. **Finish separating the Commvault SDK** (started 2026-10-09). It is
+    now its own repository, `commvault-sdk`, tagged v0.1.0, and blt
+    uses it - on the branch `use-commvault-sdk`, through a sibling-path
+    dependency. To finish: put the SDK repository on GitHub; change
+    blt's source for it from the path to that repository's tag; re-lock;
+    run a live check; merge the branch. Until then `main` still carries
+    its own copy and is what other machines should run.
