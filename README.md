@@ -141,13 +141,10 @@ BLT_DATABASE_URL=postgresql+psycopg://blt:<pw>@127.0.0.1:5433/blt BLT_API_KEY=x 
 
 ## Development
 
-The Commvault SDK is a separate repository, `commvault-sdk`, expected as
-a sibling directory of this one for now (see
-[docs/commvault-sdk.md](docs/commvault-sdk.md)):
-
-```
-git clone <commvault-sdk repo> ../commvault-sdk
-```
+The Commvault SDK is a separate repository, `yoki-py-commvault-sdk`,
+which `uv` fetches at a pinned tag; see
+[docs/commvault-sdk.md](docs/commvault-sdk.md) for working on both at
+once.
 
 ```
 uv sync --all-extras

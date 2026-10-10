@@ -1,7 +1,8 @@
 # The Commvault SDK
 
 The code that talks to Commvault is not part of blt. It is its own
-package, **commvault-sdk**, in its own repository, and blt depends on it
+package, **commvault-sdk**, in its own repository
+(`yoki-py-commvault-sdk`), and blt depends on it
 the way it depends on `sdk-primer-core`.
 
 - What it does, every call with its endpoint, and how far each has been
@@ -30,19 +31,21 @@ the API never has to.
 
 ## Where it comes from
 
-`pyproject.toml`, under `[tool.uv.sources]`:
+The repository is
+[`yoki-py-commvault-sdk`](https://github.com/blueneptune/yoki-py-commvault-sdk);
+the package it provides is `commvault-sdk`, imported as `commvault_sdk`.
+blt pins a tag of it in `pyproject.toml`, under `[tool.uv.sources]`:
 
 ```
-commvault-sdk = { path = "../commvault-sdk", editable = true }
+commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.1.0" }
 ```
 
-That is a sibling checkout - the two repositories side by side - which
-is how it stands while the SDK repository is not yet on GitHub. Once it
-is, this becomes a pinned tag, the same form `sdk-primer` already uses:
+`uv` fetches it; nothing needs cloning by hand. To take a newer SDK,
+change the tag and run `uv lock`.
+
+To change the SDK and blt together, clone it next to this repository and
+point the source at that checkout for the duration:
 
 ```
-commvault-sdk = { git = "https://github.com/blueneptune/commvault-sdk.git", tag = "v0.1.0" }
+commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
 ```
-
-Until that change is made, a machine running blt needs both checkouts
-next to each other.
