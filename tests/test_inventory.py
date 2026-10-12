@@ -9,13 +9,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import respx
+from commvault_sdk import CommvaultClient
 from fastapi.testclient import TestClient
 from sdk_primer import APIClient
 
 from blt.collector.collect import run_collection, run_inventory
+from blt.collector.inventory import iter_inventory
 from blt.collector.store import BltStore
-from blt.commvault.client import CommvaultClient
-from blt.commvault.inventory import iter_inventory
 from blt.schemas import JobIn, ObjectIn
 
 BASE = "https://cs.test/commandcenter/api"

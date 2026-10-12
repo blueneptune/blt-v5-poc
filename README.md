@@ -15,7 +15,7 @@ collect.sh <commcell>            host, by hand or on a timer
 Guides: **[setting it up against a production CommCell](docs/production-setup.md)** ·
 [Commvault Cloud / SaaS](docs/saas-setup.md) ·
 [how a run works, step by step](docs/blt-flow.md) ·
-[the Commvault SDK inside blt](docs/commvault-sdk.md) ·
+[the Commvault SDK blt depends on](docs/commvault-sdk.md) ·
 [lab noise rig for the eval CommServe (plan)](docs/lab-noise.md) ·
 [scripts for checking what was collected](scripts/README.md) ·
 [open items](TODO.md) ·
@@ -140,6 +140,11 @@ BLT_DATABASE_URL=postgresql+psycopg://blt:<pw>@127.0.0.1:5433/blt BLT_API_KEY=x 
 ```
 
 ## Development
+
+The Commvault SDK is a separate repository, `yoki-py-commvault-sdk`,
+which `uv` fetches at a pinned tag; see
+[docs/commvault-sdk.md](docs/commvault-sdk.md) for working on both at
+once.
 
 ```
 uv sync --all-extras

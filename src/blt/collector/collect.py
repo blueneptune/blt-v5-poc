@@ -278,7 +278,7 @@ def run_inventory(
 ) -> RunOut:
     """Collect what the source says exists - clients, instances,
     databases - rather than what it did. `batches` yields objects parents
-    first (blt.commvault.inventory.iter_inventory in production).
+    first (blt.collector.inventory.iter_inventory in production).
 
     Recorded as an `inventory` run, which never touches the job
     watermark. When it succeeds the API marks everything it did not see

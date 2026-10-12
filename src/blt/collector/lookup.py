@@ -26,6 +26,7 @@ from blt.schemas import JobIn, JobOut, classify_status
 
 from .connect import commvault_client
 from .settings import load_settings
+from .source import CommvaultJobs
 from .store import BltStore
 
 # (label, field on JobIn/JobOut). Compared in this order.
@@ -149,7 +150,7 @@ def main() -> None:
             ) as api,
         ):
             now = datetime.now(UTC)
-            live = commvault.jobs.get(args.job)
+            live = CommvaultJobs(commvault).get(args.job)
             try:
                 stored: JobOut | None = JobOut.model_validate(
                     api.get(f"/commcells/{args.commcell}/jobs/{args.job}").json()

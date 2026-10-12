@@ -55,7 +55,7 @@ Two files are read, the second overriding the first:
 Pydantic validates them. A missing URL or no usable credential stops the
 run here (exit 78) before anything is contacted.
 
-### 3. Authenticating to Commvault - `blt/commvault/client.py`, `auth.py`
+### 3. Authenticating to Commvault - the `commvault-sdk` package
 
 Two supported ways, chosen by what the `.env` file contains:
 
@@ -105,7 +105,7 @@ returns:
 - every job that **finished** within the lookup window.
 
 Each job's `jobSummary` is translated into blt's own shape
-(`blt/commvault/models.py`) - epoch seconds become timestamps, `0`
+(in the SDK, then `blt/collector/source.py`) - epoch seconds become timestamps, `0`
 becomes "not set" - with the original JSON kept alongside. Each page is
 posted to the blt API as it arrives (`POST /commcells/<name>/jobs`).
 
@@ -307,24 +307,22 @@ Columns worth knowing on `job`:
 ## Where each part lives
 
 ```
-collect.sh                     shell entrypoint, per-CommCell lock
+collect.sh                     shell entrypoint
+(commvault-sdk)                the Commvault SDK - a separate repository; see docs/commvault-sdk.md
 config/                        blt.env, <commcell>.env (gitignored), *.example
 src/blt/
   schemas.py                   payloads shared by collector and API; status -> state
-  commvault/                   the Commvault SDK - see docs/commvault-sdk.md
-    client.py                  CommvaultClient: connection, auth, the groups below
-    _base.py                   shared call handling; the read-only rule
-    jobs.py clients.py subclients.py sql.py commcell.py
-                               one group of endpoints each
-    auth.py                    access-token header + renewal
-    models.py                  Commvault's jobSummary -> blt's JobIn
-    inventory.py               clients/instances/databases -> ObjectIn, via the SDK
   collector/
     cli.py                     blt-collect: wires settings, clients, the run
     collect.py                 collect + reconcile, backfill, inventory
+    connect.py                 builds the Commvault client from settings
+    source.py                  SDK jobs -> blt's JobIn
+    inventory.py               clients/instances/databases -> ObjectIn
     store.py                   the collector's client for the blt API
     settings.py                config loading and validation
     tokens.py                  writing renewed tokens back to the .env file
+    lock.py                    one run of each kind per CommCell
+    probe.py, lookup.py        --probe, and blt-lookup
   api/
     app.py                     FastAPI routes
     models.py                  SQLModel tables

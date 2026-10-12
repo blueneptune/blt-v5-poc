@@ -42,12 +42,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from commvault_sdk import CommvaultClient
 from loguru import logger
 from sdk_primer import SDKError, configure_logging
 
 from blt.collector.connect import commvault_client
 from blt.collector.settings import load_settings
-from blt.commvault.client import CommvaultClient
 
 PREFIX = "blt-lab-"
 

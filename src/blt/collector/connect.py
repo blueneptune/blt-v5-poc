@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from blt.commvault import CommvaultClient, TokenSet
+from commvault_sdk import CommvaultClient, TokenSet
 
 from .lock import wait_lock
 from .settings import CollectorSettings, credentials_env_path
