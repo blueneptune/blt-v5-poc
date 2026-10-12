@@ -25,12 +25,11 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
+from commvault_sdk import CommvaultClient
 from loguru import logger
 from sdk_primer import SDKError
 
 from blt.schemas import ObjectIn
-
-from .client import CommvaultClient
 
 SQL_SERVER = "SQL Server"
 _PROGRESS_EVERY = 100

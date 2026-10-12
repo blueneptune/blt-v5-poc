@@ -14,10 +14,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from commvault_sdk import CommvaultClient
 from loguru import logger
 from sdk_primer import SDKError
-
-from blt.commvault import CommvaultClient
 
 # How many clients to look through for instances, and for a SQL Server
 # instance to try the database calls on. Kept small: this is a probe.

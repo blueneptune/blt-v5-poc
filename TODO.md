@@ -208,3 +208,8 @@ current work.
     inventory (Microsoft 365, cloud databases, VMs) alongside SQL
     Server; honouring the `X-RateLimit-*` headers on a 429; a budget
     shared across runs rather than per process.
+
+19. ~~**Separate the Commvault SDK**~~ **Done 2026-10-10.** It is its
+    own repository, `yoki-py-commvault-sdk` (package `commvault-sdk`),
+    and blt pins its tag v0.1.0. Changes to Commvault calls are made
+    there and released as a new tag.

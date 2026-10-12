@@ -2,7 +2,7 @@
 
 Both halves import these, so a payload the collector builds is validated
 by the same model the API parses it with. Nothing here knows about
-Commvault's own JSON shape (see blt.commvault.models) or about Postgres
+Commvault's own JSON shape (the commvault-sdk package) or about Postgres
 (see blt.api.models) - it is only what travels between the two.
 """
 
