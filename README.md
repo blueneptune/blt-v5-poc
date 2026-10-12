@@ -154,3 +154,95 @@ uv run ruff check . && uv run mypy
 ```
 
 Without `BLT_TEST_DATABASE_URL` the database-backed tests are skipped.
+
+## Releases
+
+blt is released once a week. `main` holds only released code and is what
+production runs; nothing is committed to it directly.
+
+### The week
+
+| Day | What happens |
+|---|---|
+| Monday | The previous week's release is merged to `main` and tagged. Production pulls it. The new week's release branch opens from `main`. |
+| Monday - Thursday | Work happens on short branches and is merged into the week's release branch as each piece is finished. |
+| Thursday, end of day | Cut-off. What is not merged waits for next week. |
+| Friday | The release branch is tested as a whole (see below). No new work goes in - only fixes for what the testing finds. |
+| Monday | If Friday's tests passed, release. If not, the release is held until they do, or skipped; a week without a release is fine. |
+
+### Names
+
+A release is named for the week its work was done in:
+`YYYY.MM.Wnn`, where `nn` counts the Mondays of that month. The week of
+Monday 12 October 2026 is `2026.10.W02`; it is released on Monday 19
+October.
+
+| Thing | Name | Example |
+|---|---|---|
+| Release branch | `release/<release>` | `release/2026.10.W02` |
+| Feature branch | `<release>/F/<What_it_does>` | `2026.10.W02/F/Add_policy_management` |
+| Bug-fix branch | `<release>/B/<What_it_fixes>` | `2026.10.W02/B/Backfill_skips_last_slice` |
+| Hotfix branch | `<release>/H/<What_it_fixes>` | `2026.10.W02/H/Token_renewal_loop` |
+| Release tag, on `main` | `<release>` | `2026.10.W02` |
+| Hotfix tag, on `main` | `<release>.<n>` | `2026.10.W02.1` |
+| Version in `pyproject.toml` | the same, as numbers | `2026.10.2`, `2026.10.2.1` |
+
+Two details behind that table:
+
+- The release *branch* carries a `release/` prefix because git cannot
+  hold a branch called `2026.10.W02` and branches called
+  `2026.10.W02/F/...` at the same time. The *tag* has no such limit, so
+  it is the plain name.
+- Python does not accept `W02` in a package version, so `pyproject.toml`
+  says `2026.10.2`. The tag is the name people use.
+
+### The loop for one piece of work
+
+```
+git checkout release/2026.10.W02 && git pull
+git checkout -b 2026.10.W02/F/Add_policy_management
+# work in small commits; run the checks often (see Development)
+git push -u origin 2026.10.W02/F/Add_policy_management
+git checkout release/2026.10.W02
+git merge --no-ff 2026.10.W02/F/Add_policy_management
+git push
+```
+
+- **Feature and bug-fix branches** start from the week's release branch
+  and merge back into it.
+- **Hotfix branches** are for something production cannot wait until
+  Monday for. They start from `main`, merge to `main` with a hotfix tag,
+  and are then merged into the open release branch as well so the fix
+  is not lost the following Monday.
+
+### Friday's test
+
+On the release branch, all of:
+
+1. `ruff check`, `ruff format --check`, `mypy`, and the unit tests.
+2. Against a real CommServe: `--check`, `--probe`, a collection, a
+   second collection (a delta), `--inventory` and `--report`.
+
+If no CommServe is reachable, step 2 has not happened, and the release
+either waits or is tagged with that stated in the tag message - it does
+not go to `main` described as tested.
+
+### Releasing, on Monday
+
+```
+git checkout main && git pull
+git merge --no-ff release/2026.10.W02
+git tag -a 2026.10.W02 -m "..."
+git push origin main 2026.10.W02
+git checkout -b release/2026.10.W03 && git push -u origin release/2026.10.W03
+```
+
+Production then runs `git pull` (or `git checkout 2026.10.W02` to pin a
+release; checking out the previous tag is the rollback).
+
+### The SDKs
+
+`yoki-py-commvault-sdk` and `yoki-py-veeam-sdk` use the same branch loop
+but are not on the weekly clock: each is tagged whenever it has a
+change, and blt takes a new SDK by changing the tag it pins in
+`pyproject.toml` as part of that week's release.
