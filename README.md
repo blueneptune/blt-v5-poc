@@ -240,6 +240,20 @@ git checkout -b release/2026.10.W03 && git push -u origin release/2026.10.W03
 Production then runs `git pull` (or `git checkout 2026.10.W02` to pin a
 release; checking out the previous tag is the rollback).
 
+### Tidying up
+
+A branch is deleted once it has been merged, locally and on GitHub:
+
+```
+git branch -d 2026.10.W02/F/Add_policy_management
+git push origin --delete 2026.10.W02/F/Add_policy_management
+```
+
+`git branch -d` refuses to delete a branch that has not been merged
+into the branch you are on, which is the check that nothing is lost. A
+release branch is deleted the same way after its Monday release; the
+tag keeps that release reachable.
+
 ### The SDKs
 
 `yoki-py-commvault-sdk` and `yoki-py-veeam-sdk` use the same branch loop
