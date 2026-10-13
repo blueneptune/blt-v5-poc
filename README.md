@@ -172,10 +172,13 @@ production runs; nothing is committed to it directly.
 
 ### Names
 
-A release is named for the week its work was done in:
-`YYYY.MM.Wnn`, where `nn` counts the Mondays of that month. The week of
-Monday 12 October 2026 is `2026.10.W02`; it is released on Monday 19
-October.
+A release is named for the Monday it is released on: `YYYY.MM.Wnn`,
+where `nn` counts the Mondays of that month. `2026.10.W02` was released
+on Monday 12 October 2026, the second Monday of October. The work done
+in the week that follows goes into `release/2026.10.W03` and is released
+on Monday 19 October.
+
+So the branch to be on is always the one named for **next** Monday.
 
 | Thing | Name | Example |
 |---|---|---|
