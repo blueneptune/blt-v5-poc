@@ -7,7 +7,9 @@ from pathlib import Path
 
 import httpx
 import respx
+from commvault_sdk import CommvaultClient
 
+from blt.collector.cli import describe_login
 from blt.collector.settings import SAAS_CALLS_PER_HOUR, load_settings
 
 SAAS = "https://api.metallic.io"
@@ -111,3 +113,28 @@ def test_a_second_tenant_run_adopts_a_renewal_instead_of_repeating_it(tmp_path: 
         globex.jobs.sample(3600)  # ...and globex must not trade in the dead pair.
 
     assert renew.call_count == 1
+
+
+JOBS = {"totalRecordsWithoutPaging": 334, "jobs": []}
+
+
+@respx.mock
+def test_a_saas_check_lists_jobs_and_never_asks_for_commserve_details() -> None:
+    # Commvault Cloud answers GET /CommServ with 403 for tenant and MSP
+    # users. It is not mocked here: asking for it would fail the test.
+    jobs = respx.post("https://api.metallic.io/Jobs").respond(json=JOBS)
+    with CommvaultClient("https://api.metallic.io", access_token="t", deployment="saas") as cv:
+        assert describe_login(cv, saas=True) == "334 jobs visible in the last 24 hours"
+    assert jobs.call_count == 1
+
+
+@respx.mock
+def test_a_software_check_falls_back_to_jobs_when_details_are_refused() -> None:
+    base = "https://cs.test/commandcenter/api"
+    info = respx.get(f"{base}/CommServ")
+    info.respond(json={"hostName": "cs01", "csVersionInfo": "11 SP46"})
+    respx.post(f"{base}/Jobs").respond(json=JOBS)
+    with CommvaultClient(base, access_token="t") as cv:
+        assert describe_login(cv, saas=False) == "CommServe cs01 version 11 SP46"
+        info.respond(403)
+        assert describe_login(cv, saas=False) == "334 jobs visible in the last 24 hours"

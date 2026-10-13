@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from commvault_sdk import CommvaultClient
 from loguru import logger
 from sdk_primer import APIClient, ClientError, NotFoundError, SDKError, configure_logging
 
@@ -19,6 +20,25 @@ from .probe import run_probe
 from .settings import load_settings
 from .source import CommvaultJobs
 from .store import BltStore
+
+
+def describe_login(commvault: CommvaultClient, *, saas: bool) -> str:
+    """Prove the credentials work, and say what they reached.
+
+    On a CommServe the cheapest proof is its own description. Commvault
+    Cloud refuses that call to tenant and MSP users (403, seen on a real
+    tenant), so there the proof is being able to list jobs - asked for
+    directly, rather than after a refusal that looks like a failure.
+    """
+    if not saas:
+        try:
+            info = commvault.commcell.info()
+            return f"CommServe {info.get('hostName')} version {info.get('csVersionInfo')}"
+        except (ClientError, NotFoundError):
+            # Not every user may read the CommServe's own details.
+            pass
+    total, _ = commvault.jobs.sample(86_400, limit=1)
+    return f"{total} jobs visible in the last 24 hours"
 
 
 def print_instance_report(rows: list[InstanceReportRow]) -> int:
@@ -198,21 +218,20 @@ def _run(args: argparse.Namespace) -> None:
         return
 
     if args.check:
+        saas = settings.cv_deployment == "saas"
         try:
             with commvault:
-                try:
-                    info = commvault.commcell.info()
-                    described = (
-                        f"CommServe {info.get('hostName')} version {info.get('csVersionInfo')}"
-                    )
-                except (ClientError, NotFoundError):
-                    # Not every user may read the CommServe's own details
-                    # (a tenant on Commvault Cloud, for one). Being able to
-                    # list jobs proves the credentials just as well.
-                    total, _ = commvault.jobs.sample(86_400, limit=1)
-                    described = f"{total} jobs visible in the last 24 hours"
+                described = describe_login(commvault, saas=saas)
         except SDKError as exc:
             logger.error("Could not authenticate to {}: {}", args.commcell, exc)
+            if saas and isinstance(exc, ClientError) and not settings.tenant_headers:
+                logger.error(
+                    "{}.env names no customer (CV_ACCOUNT_ID or CV_TENANT_GUID). If this is "
+                    "an MSP login, that is expected: check a customer's file instead, one "
+                    "with CV_CREDENTIALS={} and that customer's CV_ACCOUNT_ID.",
+                    args.commcell,
+                    args.commcell,
+                )
             sys.exit(1)
         logger.info("Authenticated to {}: {}", args.commcell, described)
         return
