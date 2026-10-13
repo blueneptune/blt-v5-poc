@@ -115,7 +115,11 @@ def run_probe(cv: CommvaultClient) -> bool:
             f"{len(backed_up)} with a backup on record"
         )
 
-    attempt("--check", "CommServe info", info)
+    # Commvault Cloud refuses this to tenant and MSP users, and nothing
+    # blt does on SaaS needs it; trying it there only reports a failure
+    # that is not one.
+    if cv.deployment != "saas":
+        attempt("--check", "CommServe info", info)
     jobs_ok = attempt("job collection", "job listing", listing)
     attempt("job collection", "one job by id", one_job)
     attempt("--backfill", "job listing by end-time range", time_slice)

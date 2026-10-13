@@ -19,7 +19,15 @@ First contact was on 2026-10-13, with an MSP access token:
 - `GET /CommServ` is refused with 403. `--check` therefore no longer
   asks for it on SaaS and proves the login by listing jobs.
 
-Everything else below is still expectation until `--probe` has been run.
+- `--probe`: the other eight calls all worked - job listing, one job by
+  id, listing by end-time range, oldest job, job details, client
+  listing, agents and instances, SQL Server databases. So collection,
+  backfill and inventory are all expected to run. (The ninth, CommServe
+  info, is the refused call above; the probe no longer tries it on
+  SaaS.)
+
+Still unproven: a full collection, a backfill and an inventory at tenant
+scale, and how the rate limit behaves in practice.
 
 ## What is different about SaaS
 
