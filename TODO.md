@@ -126,7 +126,8 @@ current work.
     want generalising at the same time.
 
 14. **MSSQL backup validation** (prototype working in the lab since
-    2026-10-06: `lab/50-sql-validate.sh`, see docs/lab-noise.md stage 3.
+    2026-10-06: `lab/50-sql-validate.sh` in yoki-commvault-lab, see its
+    docs/lab-noise.md stage 3.
     What remains is turning it into part of blt proper.)
 
     Original note: MSSQL backup validation: for each SQL Server host, compare the
