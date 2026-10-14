@@ -13,6 +13,7 @@ config/.*.renewed.json
 config/.*.tmp
 config/.*.token.lock
 
-# Lab rig: generated passwords and run state.
+# The lab rig moved to yoki-commvault-lab; these stay ignored until the
+# copies left on disk here (media is several GB) are deleted by hand.
 lab/.state/
 lab/media/

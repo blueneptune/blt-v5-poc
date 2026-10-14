@@ -259,7 +259,8 @@ the check honest about one thing and blind to another:
   created since the last backup is not in the inventory at all; nor is a
   server with no agent. In the lab, a database added and not yet backed
   up is `UNPROTECTED` to a check that asks SQL Server directly
-  (`lab/50-sql-validate.sh`) and simply absent here.
+  (`lab/50-sql-validate.sh` in yoki-commvault-lab) and simply absent
+  here.
 
 The design leaves room for that second kind of witness without
 reshaping anything: `source_object` rows belong to a source, the report

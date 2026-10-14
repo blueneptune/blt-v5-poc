@@ -22,10 +22,11 @@ src/blt/collector/
    inventory.py          clients / instances / databases -> blt's ObjectIn
    tokens.py             writes renewed tokens back to the .env file
    probe.py, lookup.py   --probe and blt-lookup
-lab/cvlab.py             the only caller that asks for allow_changes=True
 ```
 
-Only the collector and the lab need the SDK. The API container does not
+Only the collector needs the SDK (the lab rig, which also uses it and is
+the one caller that asks for allow_changes=True, is now in
+yoki-commvault-lab). The API container does not
 install it: `blt.schemas` holds blt's own wire models precisely so that
 the API never has to.
 
