@@ -126,3 +126,12 @@ def test_with_prefect_off_the_pod_has_only_postgres_and_the_api(tmp_path: Path) 
 def test_bad_prefect_settings_are_refused(tmp_path: Path, bad: str) -> None:
     with pytest.raises(AssertionError):
         render(tmp_path, bad)
+
+
+def test_git_bash_is_told_not_to_rewrite_podman_arguments() -> None:
+    # Otherwise PREFECT_SERVER_UI_API_URL=/api reached the container as
+    # C:/Program Files/Git/api and the UI could never log in (seen on
+    # Windows with podman in WSL).
+    script = (ROOT / "deploy/env.sh").read_text()
+    assert "export MSYS_NO_PATHCONV=1" in script
+    assert script.index("MSYS_NO_PATHCONV") < script.index("build_images()")

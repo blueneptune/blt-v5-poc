@@ -7,6 +7,13 @@
 # is on, PREFECT_BIND PREFECT_PORT PREFECT_LISTEN_HOST PREFECT_LISTEN_PORT
 # PREFECT_LOCAL.
 
+# Git Bash on Windows rewrites any argument that looks like a Unix path
+# into a Windows one before running a command - so podman was being told
+# the Prefect UI's API lives at "C:/Program Files/Git/api" instead of
+# "/api". Every argument these scripts pass is for podman, which runs on
+# Linux, so none should be rewritten. (Elsewhere this does nothing.)
+export MSYS_NO_PATHCONV=1
+
 # BLT_ENV_FILE is for the tests; normally it is config/blt.env.
 BLT_ENV_FILE="${BLT_ENV_FILE:-config/blt.env}"
 if [[ ! -f "$BLT_ENV_FILE" ]]; then
