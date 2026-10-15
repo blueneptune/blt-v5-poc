@@ -7,8 +7,10 @@
 # is on, PREFECT_BIND PREFECT_PORT PREFECT_LISTEN_HOST PREFECT_LISTEN_PORT
 # PREFECT_LOCAL.
 
-if [[ ! -f config/blt.env ]]; then
-    echo "config/blt.env not found - copy config/blt.env.example and fill it in." >&2
+# BLT_ENV_FILE is for the tests; normally it is config/blt.env.
+BLT_ENV_FILE="${BLT_ENV_FILE:-config/blt.env}"
+if [[ ! -f "$BLT_ENV_FILE" ]]; then
+    echo "${BLT_ENV_FILE} not found - copy config/blt.env.example and fill it in." >&2
     exit 1
 fi
 # Read with any carriage returns removed: a blt.env saved by a Windows
@@ -16,7 +18,7 @@ fi
 # database password, and the API could then never log in to Postgres.
 set -a
 # shellcheck disable=SC1090
-source <(tr -d '\r' < config/blt.env)
+source <(tr -d '\r' < "$BLT_ENV_FILE")
 set +a
 : "${BLT_API_KEY:?set BLT_API_KEY in config/blt.env}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in config/blt.env}"

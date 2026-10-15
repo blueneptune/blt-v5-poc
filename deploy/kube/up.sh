@@ -36,6 +36,11 @@ render() {
         [PREFECT_DB_PASSWORD]="${PREFECT_DB_PASSWORD:-unused}"
         [PREFECT_AUTH]="${PREFECT_AUTH:-unused:unused}"
     )
+    # On the host's network there is nothing to publish - each service
+    # listens on its port itself - and podman refuses port mappings there.
+    if [[ "$HOST_NETWORK" == true ]]; then
+        text="$(grep -v -e '^ *ports:$' -e 'hostPort:' <<<"$text")"
+    fi
     for name in "${!values[@]}"; do
         text="${text//"\${${name}}"/${values[$name]}}"
     done
@@ -52,10 +57,11 @@ render() {
     printf '%s\n' "$text"
 }
 
-if [[ "${1:-}" == "--render" ]]; then
-    render true
-    exit 0
-fi
+case "${1:-}" in
+    --render) render true; exit 0 ;;
+    # Exactly what podman receives, passwords included - for the tests.
+    --render-with-secrets) render false; exit 0 ;;
+esac
 
 build_images
 # From stdin: the rendered manifest, secrets and all, never touches disk.

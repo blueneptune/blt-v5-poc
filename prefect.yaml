@@ -14,7 +14,7 @@ pull:
 deployments:
   - name: hourly
     description: Jobs from every CommCell block - what `collect.sh <commcell>` does.
-    entrypoint: src/blt/flows/flows.py:collect_jobs
+    entrypoint: blt.flows.flows:collect_jobs
     work_pool:
       name: blt
     schedules:
@@ -23,7 +23,7 @@ deployments:
 
   - name: twice-daily
     description: Inventory from every CommCell block - what `collect.sh <commcell> --inventory` does.
-    entrypoint: src/blt/flows/flows.py:collect_inventory
+    entrypoint: blt.flows.flows:collect_inventory
     work_pool:
       name: blt
     schedules:
@@ -32,6 +32,6 @@ deployments:
 
   - name: by-hand
     description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
-    entrypoint: src/blt/flows/flows.py:backfill
+    entrypoint: blt.flows.flows:backfill
     work_pool:
       name: blt
