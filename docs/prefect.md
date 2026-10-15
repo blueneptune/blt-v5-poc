@@ -80,6 +80,11 @@ Then recreate the pod (data is kept):
 The first start builds two more images and takes a few minutes. It ends
 with `Prefect UI on http://<address>:4200`.
 
+**Logging in to the UI:** its login page has one box, and it wants the
+whole of `PREFECT_AUTH` - `admin:<password>`, not just the password. The
+server reads `PREFECT_AUTH` when its container starts, so after changing
+it run the start script again (no `down.sh` needed).
+
 ### Who can reach the UI
 
 `BLT_PREFECT_BIND_ADDRESS` sets this for the UI alone; the API and the
