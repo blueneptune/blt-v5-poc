@@ -174,3 +174,8 @@ def test_tokens_from_env_restores_credentials_and_leaves_the_rest(config: Path) 
     assert block.access_token.get_secret_value() == "cs-access-secret"
     assert block.base_url == "https://cs01.corp.example.com/commandcenter/api"
     assert "secret" not in summary("cs01", block)
+
+
+def test_an_msp_login_imported_on_its_own_is_still_not_collected(config: Path) -> None:
+    assert blocks_from_env(config, ["msp"])["msp"].collect is False
+    assert blocks_from_env(config, ["cs01"])["cs01"].collect is True

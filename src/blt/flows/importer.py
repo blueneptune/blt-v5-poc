@@ -40,7 +40,12 @@ def blocks_from_env(config_dir: Path, names: list[str]) -> dict[str, CommvaultCo
     CV_CREDENTIALS (an MSP login) is imported with collect=False: it
     lends credentials and is not collected from itself."""
     values = {name: dotenv_values(config_dir / f"{name}.env") for name in names}
-    lenders = {(v.get("CV_CREDENTIALS") or "").strip() for v in values.values()} - {""}
+    # Every file in the directory, not just the ones being imported: an MSP
+    # login imported on its own is still lent to the customers' files.
+    lenders = {
+        (dotenv_values(config_dir / f"{other}.env").get("CV_CREDENTIALS") or "").strip()
+        for other in env_names(config_dir)
+    } - {""}
     blocks = {}
     for name, env in values.items():
         block = CommvaultCommCell.from_env(dict(env))
