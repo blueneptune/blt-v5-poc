@@ -1,0 +1,9 @@
+# The Prefect server (API + UI), with the step that gives it its own
+# database on blt's Postgres. Keep the version equal to the prefect
+# version in uv.lock - the worker is built from that, and Prefect's
+# client and server are meant to match (tests/test_deploy.py checks it).
+FROM docker.io/prefecthq/prefect:3.8.8-python3.12
+
+COPY deploy/prefect/server/start.py /opt/blt/start.py
+EXPOSE 4200
+CMD ["python", "/opt/blt/start.py"]

@@ -1,0 +1,23 @@
+# The Prefect worker: blt's collector and flows, and a process worker
+# that runs flow runs as subprocesses of itself. Built from uv.lock, like
+# the API image, with the "prefect" extra (which includes the collector).
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+# git: uv fetches sdk-primer and the Commvault SDK from GitHub tags.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --extra prefect --no-install-project
+
+COPY src ./src
+COPY prefect.yaml ./
+COPY deploy/prefect/worker/start.sh /usr/local/bin/blt-worker-start
+RUN uv sync --frozen --no-dev --extra prefect && chmod +x /usr/local/bin/blt-worker-start
+
+ENV PATH="/app/.venv/bin:$PATH"
+CMD ["blt-worker-start"]

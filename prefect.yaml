@@ -1,0 +1,37 @@
+# blt's deployments: which flows run, when, and on which work pool. The
+# worker container registers these each time it starts
+# (deploy/prefect/worker/start.sh), so changing a schedule here takes
+# effect with the next image. Schedules are in UTC.
+name: blt
+prefect-version: 3.8.8
+
+# The code is already in the worker image; a flow run only has to start
+# in the right directory.
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /app
+
+deployments:
+  - name: hourly
+    description: Jobs from every CommCell block - what `collect.sh <commcell>` does.
+    entrypoint: src/blt/flows/flows.py:collect_jobs
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "7 * * * *"
+        timezone: UTC
+
+  - name: twice-daily
+    description: Inventory from every CommCell block - what `collect.sh <commcell> --inventory` does.
+    entrypoint: src/blt/flows/flows.py:collect_inventory
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "37 5,17 * * *"
+        timezone: UTC
+
+  - name: by-hand
+    description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
+    entrypoint: src/blt/flows/flows.py:backfill
+    work_pool:
+      name: blt
