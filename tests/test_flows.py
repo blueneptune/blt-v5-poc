@@ -10,11 +10,12 @@ from pathlib import Path
 import pytest
 from commvault_sdk import TokenSet
 from prefect.testing.utilities import prefect_test_harness
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from blt.flows import flows
 from blt.flows.blocks import BlockTokenStore, CommvaultCommCell, settings_from_blocks
 from blt.flows.importer import blocks_from_env, describe, env_names
+from blt.flows.manage import apply_settings, credentials_from_env, summary
 
 MSP_ENV = """\
 CV_BASE_URL=https://api.metallic.io
@@ -144,3 +145,32 @@ def test_one_commcell_failing_does_not_stop_the_others(
     assert "bad" in message and "good" in message
     good_runs = flows.collect_jobs(["good", "also-good"])
     assert good_runs == {"good": "collection done", "also-good": "collection done"}
+
+
+def test_set_changes_only_what_is_named_and_refuses_secrets() -> None:
+    block = CommvaultCommCell(
+        base_url="https://short/commandcenter/api", access_token=SecretStr("keep-me")
+    )
+    changed = apply_settings(
+        block, ["base_url=https://short.corp.example.com/commandcenter/api", "CV_PAGE_SIZE=1000"]
+    )
+    assert changed == ["base_url", "CV_PAGE_SIZE"]
+    assert block.base_url == "https://short.corp.example.com/commandcenter/api"
+    assert block.options == {"CV_PAGE_SIZE": "1000"}
+    assert block.access_token is not None
+    assert block.access_token.get_secret_value() == "keep-me"
+    with pytest.raises(ValueError, match="tokens-from-env"):
+        apply_settings(block, ["access_token=typed-on-a-command-line"])
+    with pytest.raises(ValidationError):
+        apply_settings(block, ["deployment=sass"])
+
+
+def test_tokens_from_env_restores_credentials_and_leaves_the_rest(config: Path) -> None:
+    # As after a UI save that wiped the tokens but kept an edited URL.
+    block = CommvaultCommCell(base_url="https://cs01.corp.example.com/commandcenter/api")
+    copied = credentials_from_env(block, config / "cs01.env")
+    assert copied == ["access_token"]
+    assert block.access_token is not None
+    assert block.access_token.get_secret_value() == "cs-access-secret"
+    assert block.base_url == "https://cs01.corp.example.com/commandcenter/api"
+    assert "secret" not in summary("cs01", block)

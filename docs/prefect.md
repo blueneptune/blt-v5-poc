@@ -135,6 +135,31 @@ in the UI under *Blocks*, secrets masked, and can be edited there.
   `CV_BACKFILL_CHUNK_HOURS`, ...) are kept in the block's *options*.
 - Without `--overwrite`, an existing block is not replaced.
 
+### Changing a block: use blt-prefect-block, not the UI's edit page
+
+The UI's *Edit* page has been seen to come up empty for a block - all
+fields blank, like a new one - and saving it then wipes the block's
+tokens. Until that is understood, change blocks from the command line
+(same two `export` lines as above):
+
+```
+uv run --extra prefect blt-prefect-block show                  # every block; secrets as set/EMPTY
+uv run --extra prefect blt-prefect-block set <name> base_url=https://<full name>/commandcenter/api
+uv run --extra prefect blt-prefect-block set <name> collect=false CV_PAGE_SIZE=1000
+uv run --extra prefect blt-prefect-block tokens-from-env <name>   # credentials from config/<name>.env
+```
+
+Each loads the block, changes only what was named, and saves it back.
+`set` takes the non-secret fields and any `CV_*` option; credentials only
+ever come from a `.env` file, so they never pass through a command line.
+
+**If a block lost its tokens:** `tokens-from-env` puts back what the
+`.env` file has, leaving the URL and everything else as they are. That
+works if Prefect had not yet renewed that token (`podman logs
+blt-prefect-worker 2>&1 | grep "Saved the renewed"` shows renewals). If it
+had, the `.env` copy is no longer valid: create a new token in Command
+Center, put it in the `.env` file, then run `tokens-from-env`.
+
 ### One home for each token
 
 A Commvault token pair can be used from one place only: renewing it
