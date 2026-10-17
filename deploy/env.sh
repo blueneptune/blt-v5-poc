@@ -5,7 +5,7 @@
 # Sets: BIND API_PORT PG_PORT HOST_NETWORK API_LISTEN_HOST API_LISTEN_PORT
 # PG_LISTEN_PORT PG_LISTEN_ADDRESSES LOCAL API_IN_POD PREFECT_ENABLED and, when it
 # is on, PREFECT_BIND PREFECT_PORT PREFECT_LISTEN_HOST PREFECT_LISTEN_PORT
-# PREFECT_LOCAL.
+# PREFECT_LOCAL MAX_PARALLEL.
 
 # Git Bash on Windows rewrites any argument that looks like a Unix path
 # into a Windows one before running a command - so podman was being told
@@ -95,6 +95,12 @@ if [[ "${BLT_PREFECT:-false}" == "true" ]]; then
         exit 1
     fi
     PREFECT_PORT="${BLT_PREFECT_PORT:-4200}"
+    # How many CommCells may collect at the same time.
+    MAX_PARALLEL="${BLT_MAX_PARALLEL:-4}"
+    if [[ ! "$MAX_PARALLEL" =~ ^[1-9][0-9]*$ ]]; then
+        echo "BLT_MAX_PARALLEL in config/blt.env must be a whole number, 1 or more." >&2
+        exit 1
+    fi
     if [[ "$HOST_NETWORK" == true ]]; then
         PREFECT_LISTEN_HOST="$PREFECT_BIND" PREFECT_LISTEN_PORT="$PREFECT_PORT"
         PREFECT_LOCAL="$(local_address "$PREFECT_BIND")"

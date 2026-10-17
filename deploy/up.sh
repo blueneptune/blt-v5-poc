@@ -60,6 +60,7 @@ if [[ "$PREFECT_ENABLED" == true ]]; then
         -e "PREFECT_API_URL=http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}/api" \
         -e "PREFECT_API_AUTH_STRING=${PREFECT_AUTH}" \
         -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
+        -e "BLT_MAX_PARALLEL=${MAX_PARALLEL}" \
         -e BLT_API_KEY \
         localhost/blt-prefect-worker
 else
