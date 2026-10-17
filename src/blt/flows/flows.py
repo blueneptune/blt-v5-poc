@@ -12,24 +12,31 @@ log. Settings and credentials come from blocks (blocks.py) instead of
 - backfill         - one CommCell's older history (--backfill). By hand;
                      once a CommCell's history is in, it is not needed.
 
-The "every CommCell" flows run one child flow per CommCell, so one
-CommCell failing - or retrying - does not hold up the others, and the
-parent fails at the end if any did.
+The "every CommCell" flows start one flow run per CommCell, all at once,
+through the per-commcell deployments: each runs in its own process (a
+pod, on a Kubernetes work pool), retries on its own, and one slow or
+failing CommCell holds up no other. A global concurrency limit,
+blt-commcell-runs, caps how many do work at the same time. The parent
+waits for them, up to wait_minutes, and fails if any did.
 """
 
 from __future__ import annotations
 
 import tempfile
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
+from uuid import UUID
 
 from commvault_sdk import CommvaultClient
 from loguru import logger
 from prefect import flow, get_run_logger
 from prefect.client.orchestration import get_client
-from prefect.client.schemas.objects import State
+from prefect.client.schemas.objects import FlowRun, State
+from prefect.concurrency.sync import concurrency
+from prefect.deployments import run_deployment
 from sdk_primer import APIClient
 
 from blt.collector.collect import run_backfill, run_collection, run_inventory
@@ -43,6 +50,11 @@ from blt.collector.store import BltStore
 from .blocks import BLOCK_TYPE_SLUG, BlockTokenStore, settings_from_blocks
 
 LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
+# How many CommCells may collect at once, across every flow: a global
+# concurrency limit the worker creates on start (BLT_MAX_PARALLEL).
+SLOTS = "blt-commcell-runs"
+COLLECT_ONE = "blt-collect-commcell/per-commcell"
+INVENTORY_ONE = "blt-inventory-commcell/per-commcell"
 Kind = Literal["collection", "inventory", "backfill"]
 
 
@@ -86,7 +98,9 @@ def _with_commcell(
 ) -> str:
     """Load the CommCell's blocks, take the same per-CommCell lock
     collect.sh takes, connect, and run `work`."""
-    with logs_to_prefect():
+    # A slot first (waiting for one if every slot is taken), then the
+    # per-CommCell lock. Without the limit defined, nothing is capped.
+    with logs_to_prefect(), concurrency(SLOTS, occupy=1, strict=False):
         with run_lock(LOCKS, f"{commcell}.{kind}") as held:
             if not held:
                 logger.warning("A {} for {} is already running, skipping.", kind, commcell)
@@ -134,35 +148,113 @@ def inventory_commcell(commcell: str) -> str:
     return _with_commcell(commcell, "inventory", work)
 
 
-def _every(commcells: list[str] | None, child: Callable[..., State], what: str) -> dict[str, str]:
+StartRun = Callable[[str, str], str]
+ReadState = Callable[[str], State]
+
+
+def _start_run(deployment: str, commcell: str) -> str:
+    """Start one CommCell's flow run and return its id, without waiting."""
+    label = "collect" if deployment == COLLECT_ONE else "inventory"
+    # run_deployment is typed as possibly a coroutine; called from sync
+    # code it is not.
+    run = cast(
+        FlowRun,
+        run_deployment(
+            deployment,
+            parameters={"commcell": commcell},
+            flow_run_name=f"{label}-{commcell}",
+            timeout=0,
+        ),
+    )
+    return str(run.id)
+
+
+def _read_state(run_id: str) -> State:
+    with get_client(sync_client=True) as client:
+        state = client.read_flow_run(UUID(run_id)).state
+    if state is None:
+        raise RuntimeError(f"flow run {run_id} has no state")
+    return state
+
+
+def fan_out(
+    commcells: list[str] | None,
+    deployment: str,
+    what: str,
+    *,
+    wait_minutes: float,
+    start: StartRun = _start_run,
+    read_state: ReadState = _read_state,
+    poll_seconds: float = 10,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, str]:
+    """Start a flow run per CommCell at once, then wait for them all.
+
+    Returns each CommCell's final state. Raises if any failed, or did
+    not start; a run still going at the deadline is reported, not failed
+    - it carries on, and its own result shows in the UI.
+    """
     names = commcells or collectable_commcells()
+    log = get_run_logger()
     if not names:
-        get_run_logger().warning("No CommCell blocks to %s - see docs/prefect.md", what)
+        log.warning("No CommCell blocks to %s - see docs/prefect.md", what)
         return {}
+
+    runs: dict[str, str] = {}
     outcome: dict[str, str] = {}
-    failed: list[str] = []
     for name in names:
-        state = child(name, return_state=True)
-        if state.is_completed():
-            outcome[name] = str(state.result())
-        else:
-            outcome[name] = f"{state.name}: {state.message}"
-            failed.append(name)
+        try:
+            runs[name] = start(deployment, name)
+        except Exception as exc:  # noqa: BLE001 - one bad start must not stop the rest
+            outcome[name] = f"not started: {exc}"
+    log.info("Started %d flow runs to %s: %s", len(runs), what, ", ".join(runs))
+
+    deadline = clock() + wait_minutes * 60
+    waiting = dict(runs)
+    while waiting:
+        for name, run_id in list(waiting.items()):
+            state = read_state(run_id)
+            if state.is_final():
+                label = state.name or state.type.value
+                outcome[name] = (
+                    label
+                    if state.is_completed()
+                    else f"{label}: {state.message}"
+                    if state.message
+                    else label
+                )
+                del waiting[name]
+        if not waiting or clock() >= deadline:
+            break
+        sleep(poll_seconds)
+    for name in waiting:
+        outcome[name] = f"still running after {wait_minutes:g} minutes"
+
+    failed = [
+        n
+        for n, result in outcome.items()
+        if result.startswith(("not started", "Failed", "Crashed", "Cancelled"))
+    ]
     if failed:
         raise RuntimeError(f"Could not {what} for {', '.join(failed)}: {outcome}")
     return outcome
 
 
 @flow(name="blt-collect-jobs")
-def collect_jobs(commcells: list[str] | None = None) -> dict[str, str]:
-    """Collect jobs from every CommCell block (or the ones named)."""
-    return _every(commcells, collect_commcell, "collect jobs")
+def collect_jobs(commcells: list[str] | None = None, wait_minutes: float = 50) -> dict[str, str]:
+    """Collect jobs from every CommCell block (or the ones named), all at
+    once, each in its own flow run."""
+    return fan_out(commcells, COLLECT_ONE, "collect jobs", wait_minutes=wait_minutes)
 
 
 @flow(name="blt-collect-inventory")
-def collect_inventory(commcells: list[str] | None = None) -> dict[str, str]:
-    """Collect inventory from every CommCell block (or the ones named)."""
-    return _every(commcells, inventory_commcell, "collect inventory")
+def collect_inventory(
+    commcells: list[str] | None = None, wait_minutes: float = 300
+) -> dict[str, str]:
+    """Collect inventory from every CommCell block (or the ones named),
+    all at once, each in its own flow run."""
+    return fan_out(commcells, INVENTORY_ONE, "collect inventory", wait_minutes=wait_minutes)
 
 
 @flow(name="blt-backfill", flow_run_name="backfill-{commcell}")

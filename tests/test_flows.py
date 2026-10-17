@@ -9,6 +9,9 @@ from pathlib import Path
 
 import pytest
 from commvault_sdk import TokenSet
+from prefect import flow
+from prefect.client.schemas.objects import State
+from prefect.states import Completed, Failed, Running
 from prefect.testing.utilities import prefect_test_harness
 from pydantic import SecretStr, ValidationError
 
@@ -127,24 +130,54 @@ def test_only_blocks_marked_for_collection_are_collected(prefect_server: None) -
     assert "lister-acme" in found and "lister-msp" not in found
 
 
-def test_one_commcell_failing_does_not_stop_the_others(
-    prefect_server: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def fake(commcell: str, kind: str, work: object) -> str:
-        if commcell == "bad":
-            raise RuntimeError("CommServe unreachable")
-        return f"{kind} done"
+def test_every_commcell_is_started_before_any_is_waited_for(prefect_server: None) -> None:
+    started: list[str] = []
+    # Each run finishes on the second look: if starting waited for the
+    # previous run, "good" would be done before "bad" was started.
+    looks: dict[str, int] = {}
 
-    monkeypatch.setattr(flows, "_with_commcell", fake)
-    # The real child retries after five minutes; not here.
-    monkeypatch.setattr(flows, "collect_commcell", flows.collect_commcell.with_options(retries=0))
-    state = flows.collect_jobs(["good", "bad", "also-good"], return_state=True)
+    def start(deployment: str, commcell: str) -> str:
+        assert deployment == flows.COLLECT_ONE
+        if commcell == "unreachable-api":
+            raise RuntimeError("Prefect refused the run")
+        started.append(commcell)
+        return f"run-{commcell}"
 
+    def read_state(run_id: str) -> State:
+        looks[run_id] = looks.get(run_id, 0) + 1
+        if looks[run_id] == 1:
+            assert started == ["good", "bad", "slow"], "all started before the first look"
+            return Running()
+        if run_id == "run-bad":
+            return Failed(message="CommServe unreachable")
+        if run_id == "run-slow":
+            return Running()
+        return Completed()
+
+    clock = iter(range(0, 10_000, 30))
+
+    @flow
+    def parent() -> dict[str, str]:
+        return flows.fan_out(
+            ["good", "bad", "slow", "unreachable-api"],
+            flows.COLLECT_ONE,
+            "collect jobs",
+            wait_minutes=1,
+            start=start,
+            read_state=read_state,
+            clock=lambda: next(clock),
+            sleep=lambda _: None,
+        )
+
+    state = parent(return_state=True)
     assert state.is_failed()
-    message = str(state.message) + str(state.result(raise_on_failure=False))
-    assert "bad" in message and "good" in message
-    good_runs = flows.collect_jobs(["good", "also-good"])
-    assert good_runs == {"good": "collection done", "also-good": "collection done"}
+    message = str(state.result(raise_on_failure=False))
+    assert "bad" in message and "unreachable-api" in message
+    assert "Failed: CommServe unreachable" in message
+    assert "not started: Prefect refused the run" in message
+    # Still running at the deadline is reported, not counted as failed.
+    assert "'slow': 'still running after 1 minutes'" in message
+    assert "'good': 'Completed'" in message
 
 
 def test_set_changes_only_what_is_named_and_refuses_secrets() -> None:

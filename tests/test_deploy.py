@@ -42,7 +42,13 @@ def test_server_worker_and_deployments_use_one_prefect_version() -> None:
 
 def test_every_deployment_points_at_a_flow_that_exists() -> None:
     deployments = yaml.safe_load((ROOT / "prefect.yaml").read_text())["deployments"]
-    assert {d["name"] for d in deployments} == {"hourly", "twice-daily", "by-hand"}
+    assert sorted(d["entrypoint"].split(":")[1] + "/" + d["name"] for d in deployments) == [
+        "backfill/by-hand",
+        "collect_commcell/per-commcell",
+        "collect_inventory/twice-daily",
+        "collect_jobs/hourly",
+        "inventory_commcell/per-commcell",
+    ]
     for deployment in deployments:
         module, name = deployment["entrypoint"].split(":")
         target = getattr(importlib.import_module(module), name)
@@ -135,3 +141,18 @@ def test_git_bash_is_told_not_to_rewrite_podman_arguments() -> None:
     script = (ROOT / "deploy/env.sh").read_text()
     assert "export MSYS_NO_PATHCONV=1" in script
     assert script.index("MSYS_NO_PATHCONV") < script.index("build_images()")
+
+
+def test_the_parents_start_deployments_that_exist() -> None:
+    from blt.flows import flows
+
+    deployments = yaml.safe_load((ROOT / "prefect.yaml").read_text())["deployments"]
+    by_flow = {
+        getattr(
+            importlib.import_module(d["entrypoint"].split(":")[0]), d["entrypoint"].split(":")[1]
+        ).name
+        + "/"
+        + d["name"]
+        for d in deployments
+    }
+    assert {flows.COLLECT_ONE, flows.INVENTORY_ONE} <= by_flow

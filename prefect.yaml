@@ -30,6 +30,20 @@ deployments:
       - cron: "37 5,17 * * *"
         timezone: UTC
 
+  # One CommCell each, no schedule: the parents above start one of these
+  # per CommCell block, all at once. Can also be run by hand.
+  - name: per-commcell
+    description: Jobs from one CommCell. Started by blt-collect-jobs/hourly.
+    entrypoint: blt.flows.flows:collect_commcell
+    work_pool:
+      name: blt
+
+  - name: per-commcell
+    description: Inventory from one CommCell. Started by blt-collect-inventory/twice-daily.
+    entrypoint: blt.flows.flows:inventory_commcell
+    work_pool:
+      name: blt
+
   - name: by-hand
     description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
     entrypoint: blt.flows.flows:backfill
