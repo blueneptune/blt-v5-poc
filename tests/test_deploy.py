@@ -42,7 +42,13 @@ def test_server_worker_and_deployments_use_one_prefect_version() -> None:
 
 def test_every_deployment_points_at_a_flow_that_exists() -> None:
     deployments = yaml.safe_load((ROOT / "prefect.yaml").read_text())["deployments"]
-    assert {d["name"] for d in deployments} == {"hourly", "twice-daily", "by-hand"}
+    assert sorted(d["entrypoint"].split(":")[1] + "/" + d["name"] for d in deployments) == [
+        "backfill/by-hand",
+        "collect_commcell/per-commcell",
+        "collect_inventory/twice-daily",
+        "collect_jobs/hourly",
+        "inventory_commcell/per-commcell",
+    ]
     for deployment in deployments:
         module, name = deployment["entrypoint"].split(":")
         target = getattr(importlib.import_module(module), name)
@@ -90,6 +96,7 @@ def test_the_manifest_publishes_each_service_on_its_own_address(tmp_path: Path) 
     worker_env = {e["name"]: e.get("value") for e in found["prefect-worker"]["env"]}
     assert worker_env["PREFECT_API_URL"] == "http://127.0.0.1:4200/api"
     assert worker_env["BLT_API_URL"] == "http://127.0.0.1:8000"
+    assert worker_env["BLT_MAX_PARALLEL"] == "4"
 
 
 def test_secrets_are_only_in_the_secret(tmp_path: Path) -> None:
@@ -122,7 +129,10 @@ def test_with_prefect_off_the_pod_has_only_postgres_and_the_api(tmp_path: Path) 
     assert list(found) == ["postgres", "api"]
 
 
-@pytest.mark.parametrize("bad", ["PREFECT_AUTH=no-colon\n", "BLT_PREFECT_BIND_ADDRESS=lan\n"])
+@pytest.mark.parametrize(
+    "bad",
+    ["PREFECT_AUTH=no-colon\n", "BLT_PREFECT_BIND_ADDRESS=lan\n", "BLT_MAX_PARALLEL=lots\n"],
+)
 def test_bad_prefect_settings_are_refused(tmp_path: Path, bad: str) -> None:
     with pytest.raises(AssertionError):
         render(tmp_path, bad)
@@ -135,3 +145,18 @@ def test_git_bash_is_told_not_to_rewrite_podman_arguments() -> None:
     script = (ROOT / "deploy/env.sh").read_text()
     assert "export MSYS_NO_PATHCONV=1" in script
     assert script.index("MSYS_NO_PATHCONV") < script.index("build_images()")
+
+
+def test_the_parents_start_deployments_that_exist() -> None:
+    from blt.flows import flows
+
+    deployments = yaml.safe_load((ROOT / "prefect.yaml").read_text())["deployments"]
+    by_flow = {
+        getattr(
+            importlib.import_module(d["entrypoint"].split(":")[0]), d["entrypoint"].split(":")[1]
+        ).name
+        + "/"
+        + d["name"]
+        for d in deployments
+    }
+    assert {flows.COLLECT_ONE, flows.INVENTORY_ONE} <= by_flow

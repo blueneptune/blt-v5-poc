@@ -23,6 +23,7 @@
       env:
         - {name: PREFECT_API_URL, value: "http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}/api"}
         - {name: BLT_API_URL, value: "http://${API_IN_POD}:${API_LISTEN_PORT}"}
+        - {name: BLT_MAX_PARALLEL, value: "${MAX_PARALLEL}"}
         - name: PREFECT_API_AUTH_STRING
           valueFrom: {secretKeyRef: {name: blt-secrets, key: PREFECT_AUTH}}
         - name: BLT_API_KEY

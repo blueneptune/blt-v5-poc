@@ -38,12 +38,23 @@ blt pod
 | `blt-collect-jobs/hourly` | `collect_jobs` | every hour at :07 | `collect.sh <commcell>` for every CommCell block |
 | `blt-collect-inventory/twice-daily` | `collect_inventory` | 05:37 and 17:37 | `collect.sh <commcell> --inventory` for every CommCell block |
 | `blt-backfill/by-hand` | `backfill` | none | `--backfill` for one CommCell, batch after batch until complete |
+| `blt-collect-commcell/per-commcell` | `collect_commcell` | none - started by `hourly` | jobs from one CommCell |
+| `blt-inventory-commcell/per-commcell` | `inventory_commcell` | none - started by `twice-daily` | inventory from one CommCell |
 
 - "Every CommCell block" means every block of type *blt Commvault
-  CommCell* with **collect** on. Each CommCell runs as its own child
-  flow run (`collect-cv-toaster`, ...): one failing does not hold up the
-  others, it is retried once after five minutes, and the parent run is
-  marked failed if any CommCell still failed.
+  CommCell* with **collect** on. The parent starts one flow run per
+  CommCell (`collect-cv-toaster`, ...) **all at once**, through the
+  `per-commcell` deployments, then waits for them together. Each runs in
+  its own process, so one slow or failing CommCell holds up no other;
+  each is retried once after five minutes on its own; and the parent is
+  marked failed if any CommCell still failed. A CommCell still running
+  when the parent stops waiting (50 minutes for jobs, 5 hours for
+  inventory) is reported, not failed - it carries on.
+- **How many at once:** `BLT_MAX_PARALLEL` in `config/blt.env` (default
+  4) - a Prefect global concurrency limit, `blt-commcell-runs`, that the
+  worker sets each time it starts. Beyond it, runs wait their turn.
+  Raise it for many CommCells; mind that Metallic tenants under one MSP
+  login share that login's token renewals, which take turns.
 - A run for a CommCell that is still going when the next one starts is
   skipped, not doubled up (the same per-CommCell lock as collect.sh).
 - blt's own log lines appear in each flow run's log in the UI.
