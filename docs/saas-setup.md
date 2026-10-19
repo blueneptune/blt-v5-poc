@@ -7,6 +7,28 @@ tests, and the same code paths exercised against the eval CommServe.
 The first run against a real tenant is the test, and this page is
 written to make that run tell us as much as possible.
 
+## Confirmed on a real tenant
+
+First contact was on 2026-10-13, with an MSP access token:
+
+- The MSP access token is accepted, with the `Authorization` header.
+- `--partner-accounts` works: `GET /api/v1/partner/accounts` still lists
+  accounts, though Commvault's reference does not document it.
+- With a customer's `CV_ACCOUNT_ID`, the job listing works (334 jobs in
+  24 hours on the first tenant tried).
+- `GET /CommServ` is refused with 403. `--check` therefore no longer
+  asks for it on SaaS and proves the login by listing jobs.
+
+- `--probe`: the other eight calls all worked - job listing, one job by
+  id, listing by end-time range, oldest job, job details, client
+  listing, agents and instances, SQL Server databases. So collection,
+  backfill and inventory are all expected to run. (The ninth, CommServe
+  info, is the refused call above; the probe no longer tries it on
+  SaaS.)
+
+Still unproven: a full collection, a backfill and an inventory at tenant
+scale, and how the rate limit behaves in practice.
+
 ## What is different about SaaS
 
 From Commvault's documentation (links at the end):
@@ -37,8 +59,10 @@ show.
   - The count is per run. Two runs close together each have their own.
   - Other tools using the same tenant's API share Commvault's limit and
     are invisible to blt. Lower the number if there are any.
-- **`--check` no longer depends on CommServe details.** If the user may
-  not read them, it proves the credentials by listing jobs instead.
+- **`--check` does not ask for CommServe details on SaaS** - they are
+  refused - and proves the credentials by listing jobs instead. Run
+  against an MSP login file, which names no customer, it fails and says
+  to check a customer's file.
 - **`--probe`** - see below.
 
 ## Credentials: the open question

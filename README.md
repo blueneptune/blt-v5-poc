@@ -16,7 +16,7 @@ Guides: **[setting it up against a production CommCell](docs/production-setup.md
 [Commvault Cloud / SaaS](docs/saas-setup.md) ·
 [how a run works, step by step](docs/blt-flow.md) ·
 [the Commvault SDK blt depends on](docs/commvault-sdk.md) ·
-[lab noise rig for the eval CommServe (plan)](docs/lab-noise.md) ·
+[the lab rig for the eval CommServe, in its own repository](https://github.com/blueneptune/yoki-commvault-lab) ·
 [scripts for checking what was collected](scripts/README.md) ·
 [open items](TODO.md) ·
 [asset refinery (draft direction, not current work)](docs/asset-refinery.md)
@@ -36,8 +36,11 @@ cp config/commcell.env.example config/prod.env    # one file per CommCell
 That is the short version. For a real CommCell - the Commvault user and
 token to create, what to run in what order, scheduling, and what to
 watch - follow [docs/production-setup.md](docs/production-setup.md).
-Nothing under `lab/` is for production: those scripts create clients and
-run backups on an eval CommServe.
+The lab rig that makes the eval CommServe produce jobs for blt to
+collect lives in its own repository,
+[yoki-commvault-lab](https://github.com/blueneptune/yoki-commvault-lab),
+since 2026-10-14 (it was `lab/` here). Nothing in it is for production:
+it creates clients and runs backups.
 
 ## What a run does
 
@@ -172,10 +175,13 @@ production runs; nothing is committed to it directly.
 
 ### Names
 
-A release is named for the week its work was done in:
-`YYYY.MM.Wnn`, where `nn` counts the Mondays of that month. The week of
-Monday 12 October 2026 is `2026.10.W02`; it is released on Monday 19
-October.
+A release is named for the Monday it is released on: `YYYY.MM.Wnn`,
+where `nn` counts the Mondays of that month. `2026.10.W02` was released
+on Monday 12 October 2026, the second Monday of October. The work done
+in the week that follows goes into `release/2026.10.W03` and is released
+on Monday 19 October.
+
+So the branch to be on is always the one named for **next** Monday.
 
 | Thing | Name | Example |
 |---|---|---|

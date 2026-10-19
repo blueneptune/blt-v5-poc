@@ -5,10 +5,10 @@ first trial on one or two production CommCells.
 
 **What blt does to a CommServe:** it reads. Job listings, client and
 instance listings, job details - all queries. The one thing it changes is
-its own access token, when it renews it. Nothing under `lab/` is part of
-this: those scripts create clients, subclients and backups and are for
-the eval CommServe only. **Do not run anything in `lab/` against
-production.**
+its own access token, when it renews it. The lab rig
+(yoki-commvault-lab, which was `lab/` here) is not part of this: it
+creates clients, subclients and backups and is for the eval CommServe
+only. **Do not run it against production.**
 
 **What has and has not been proven.** Everything here has been run
 against a small eval CommServe (11 SP46, 15 clients, about 120 jobs).
