@@ -45,7 +45,7 @@ sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag =
 # pinned to a tag like sdk-primer. To work on both at once, point this at
 # a sibling checkout instead:
 #   commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
-commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.1.0" }
+commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.2.0" }
 
 [build-system]
 requires = ["hatchling"]

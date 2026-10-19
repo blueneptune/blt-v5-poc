@@ -285,7 +285,7 @@ dev = [
 requires-dist = [
     { name = "alembic", marker = "extra == 'api'", specifier = ">=1.14" },
     { name = "blt", extras = ["collector"], marker = "extra == 'prefect'" },
-    { name = "commvault-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.1.0" },
+    { name = "commvault-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.2.0" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.4" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.2" },
@@ -586,8 +586,8 @@ wheels = [
 
 [[package]]
 name = "commvault-sdk"
-version = "0.1.0"
-source = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.1.0#a1832bfc8fa1d4a63a2e5755e699952364d5e566" }
+version = "0.2.0"
+source = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.2.0#ff0a47cf28150062513bec2bf09a1dac1677cb47" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
