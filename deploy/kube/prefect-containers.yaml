@@ -1,0 +1,30 @@
+
+    - name: prefect-server
+      image: localhost/blt-prefect-server:latest
+      imagePullPolicy: Never
+      env:
+        - {name: PG_HOST, value: 127.0.0.1}
+        - {name: PG_PORT, value: "${PG_LISTEN_PORT}"}
+        - {name: PREFECT_LISTEN_HOST, value: "${PREFECT_LISTEN_HOST}"}
+        - {name: PREFECT_LISTEN_PORT, value: "${PREFECT_LISTEN_PORT}"}
+        - {name: PREFECT_SERVER_UI_API_URL, value: /api}
+        - name: POSTGRES_PASSWORD
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: POSTGRES_PASSWORD}}
+        - name: PREFECT_DB_PASSWORD
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: PREFECT_DB_PASSWORD}}
+        - name: PREFECT_SERVER_API_AUTH_STRING
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: PREFECT_AUTH}}
+      ports:
+        - {containerPort: ${PREFECT_LISTEN_PORT}, hostPort: ${PREFECT_PORT}, hostIP: "${PREFECT_BIND}"}
+
+    - name: prefect-worker
+      image: localhost/blt-prefect-worker:latest
+      imagePullPolicy: Never
+      env:
+        - {name: PREFECT_API_URL, value: "http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}/api"}
+        - {name: BLT_API_URL, value: "http://${API_IN_POD}:${API_LISTEN_PORT}"}
+        - {name: BLT_MAX_PARALLEL, value: "${MAX_PARALLEL}"}
+        - name: PREFECT_API_AUTH_STRING
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: PREFECT_AUTH}}
+        - name: BLT_API_KEY
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_API_KEY}}

@@ -158,6 +158,13 @@ uv run ruff check . && uv run mypy
 
 Without `BLT_TEST_DATABASE_URL` the database-backed tests are skipped.
 
+## Prefect
+
+Scheduling, retries and run history, with CommCell credentials kept in
+Prefect blocks instead of `.env` files: turned on with `BLT_PREFECT=true`
+in `config/blt.env`, and described in [docs/prefect.md](docs/prefect.md).
+`deploy/kube/up.sh` starts the same pod from a Kubernetes manifest.
+
 ## Releases
 
 blt is released once a week. `main` holds only released code and is what

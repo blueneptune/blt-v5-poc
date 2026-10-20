@@ -1,0 +1,76 @@
+# blt as a Kubernetes manifest: one Pod with Postgres, the API and - when
+# Prefect is on - the Prefect server and worker, as deploy/up.sh builds it.
+#
+# This is a template. deploy/kube/up.sh fills in the placeholders from
+# config/blt.env and hands the result to `podman kube play`; nothing with
+# a password in it is written to disk. The containers share the Pod's
+# localhost, which is how they reach each other.
+#
+# For a real cluster the next step is one Deployment per service with a
+# Service in front of each; one Pod keeps the local setup identical to
+# deploy/up.sh for now.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: blt-secrets
+type: Opaque
+data:
+  BLT_API_KEY: ${B64_BLT_API_KEY}
+  POSTGRES_PASSWORD: ${B64_POSTGRES_PASSWORD}
+  BLT_DATABASE_URL: ${B64_BLT_DATABASE_URL}
+  PREFECT_DB_PASSWORD: ${B64_PREFECT_DB_PASSWORD}
+  PREFECT_AUTH: ${B64_PREFECT_AUTH}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # The same volume deploy/up.sh uses: switching between the two keeps
+  # the data.
+  name: blt-pgdata
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: blt
+  labels:
+    app: blt
+spec:
+  hostNetwork: ${HOST_NETWORK}
+  restartPolicy: Always
+  volumes:
+    - name: pgdata
+      persistentVolumeClaim:
+        claimName: blt-pgdata
+  containers:
+    - name: postgres
+      image: docker.io/library/postgres:17
+      args: ["postgres", "-c", "listen_addresses=${PG_LISTEN_ADDRESSES}"]
+      env:
+        - {name: POSTGRES_USER, value: blt}
+        - {name: POSTGRES_DB, value: blt}
+        - {name: PGPORT, value: "${PG_LISTEN_PORT}"}
+        - name: POSTGRES_PASSWORD
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: POSTGRES_PASSWORD}}
+      ports:
+        - {containerPort: ${PG_LISTEN_PORT}, hostPort: ${PG_PORT}, hostIP: "${BIND}"}
+      volumeMounts:
+        - {name: pgdata, mountPath: /var/lib/postgresql/data}
+
+    - name: api
+      image: localhost/blt-api:latest
+      imagePullPolicy: Never
+      env:
+        - {name: BLT_LISTEN_HOST, value: "${API_LISTEN_HOST}"}
+        - {name: BLT_LISTEN_PORT, value: "${API_LISTEN_PORT}"}
+        - name: BLT_API_KEY
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_API_KEY}}
+        - name: BLT_DATABASE_URL
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_DATABASE_URL}}
+      ports:
+        - {containerPort: ${API_LISTEN_PORT}, hostPort: ${API_PORT}, hostIP: "${BIND}"}
+# @PREFECT_CONTAINERS@

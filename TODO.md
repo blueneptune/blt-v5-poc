@@ -214,3 +214,9 @@ current work.
     own repository, `yoki-py-commvault-sdk` (package `commvault-sdk`),
     and blt pins its tag v0.1.0. Changes to Commvault calls are made
     there and released as a new tag.
+
+20. **Prefect** (started 2026-10-15, branch 2026.10.W04/F/Prefect_framework).
+    Server + worker + blocks + flows + Kubernetes manifest, working on
+    Linux. Next: run it on the WSL desktop; move CommCells over with
+    blt-prefect-import; failure notifications; phase out deploy/up.sh
+    once deploy/kube/up.sh has proven itself. See docs/prefect.md.
