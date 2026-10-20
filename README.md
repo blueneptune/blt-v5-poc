@@ -158,6 +158,12 @@ uv run ruff check . && uv run mypy
 
 Without `BLT_TEST_DATABASE_URL` the database-backed tests are skipped.
 
+## Words
+
+[docs/glossary.md](docs/glossary.md) defines the words blt uses - source,
+job, collection run, asset, sighting, ... - and maps each product's own
+terms onto them.
+
 ## Prefect
 
 Scheduling, retries and run history, with CommCell credentials kept in
