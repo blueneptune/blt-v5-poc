@@ -75,7 +75,7 @@ One Kubernetes cluster: **3 Rocky Linux servers, RKE2.**
 | Entry point | reverse proxy / ingress | the one way in for users and workers |
 | UI | SvelteKit | monitoring, management and administration |
 | API | FastAPI | backend for the UI; ingress for collected data |
-| Identity | **Zitadel**, pending a licence check - Keycloak if AGPL is not allowed (7.1) | local users, SSO (Okta, Google), roles, service accounts - managed from blt's UI through its API |
+| Identity | **Zitadel**, used unmodified (licence note in 7.1) | local users, SSO (Okta, Google), roles, service accounts - managed from blt's UI through its API |
 | Orchestration | Prefect server | schedules, retries, run history, events |
 | Core worker | Prefect worker | tasks that run in core |
 | Database | Postgres - one cluster | see 3.5 |
@@ -113,7 +113,7 @@ service**, each with its own login:
 |---|---|
 | `blt` | blt's API, collectors and flows |
 | `prefect` | Prefect server |
-| `zitadel` (or `keycloak`) | identity |
+| `zitadel` | identity |
 | `grafana`, `superset` | dashboards and reports, when added |
 
 Inside `blt`, **one schema per data source type** for that product's own
@@ -282,18 +282,15 @@ Each phase is usable on its own and builds on the one before.
 | 2026-10-22 | Credentials for every source in Prefect blocks in core; a worker in one zone may read another zone's blocks (revisit later) |
 | 2026-10-22 | ServiceNow read-only to start; writing events and changes later |
 | 2026-10-22 | One Postgres cluster, a database per service, a schema per product inside `blt` |
+| 2026-10-22 | Identity: **Zitadel**, consumed unmodified - users, roles and SSO managed from blt's UI through its API |
 
 ## 7. Open questions
 
-1. **Identity provider: Zitadel or Keycloak.** Zitadel is preferred -
-   lighter, multi-tenant by design (organizations), and already started
-   for bartman - but it is **AGPL 3.0** since v3. Running it unmodified
-   internally costs nothing and obliges nothing, and blt, which only
-   calls its API, is unaffected; but many companies ban AGPL outright.
-   *To ask legal / the open-source office:* "Can we run AGPL-3.0
-   software internally, unmodified?" Yes: Zitadel. No, or unclear:
-   **Keycloak** (Apache 2.0). Both speak OpenID Connect, so blt does not
-   depend on the choice.
+1. **Company policy on AGPL** - confirm before production. Zitadel is
+   AGPL 3.0; used unmodified, as planned, the licence asks nothing of
+   blt. The only blocker would be a company rule against AGPL software
+   altogether - if there is one, Keycloak (Apache 2.0) takes its place;
+   both speak OpenID Connect, so blt does not depend on the choice.
 2. **Access-zone size.** Three small servers (2 vCPU / 8 GB) for full
    high availability, or one server plus one or two agents to save
    cost. Two servers protect no better than one.
