@@ -158,6 +158,12 @@ uv run ruff check . && uv run mypy
 
 Without `BLT_TEST_DATABASE_URL` the database-backed tests are skipped.
 
+## Where it is going
+
+[docs/vision.md](docs/vision.md) records the goal - one UI over several
+backup products, an asset refinery, three network zones - with open
+questions and suggestions.
+
 ## Prefect
 
 Scheduling, retries and run history, with CommCell credentials kept in
