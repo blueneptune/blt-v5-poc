@@ -124,6 +124,8 @@ word, the entry says so under **Today**.
   - **collection** jobs - blt's own Prefect flow runs collecting a
     source;
   - **VMware tasks** of chosen types (snapshot, migration, clone).
+  - **event** jobs - blt's own work caused by another job, such as
+    submitting or closing a ServiceNow event.
 
   blt keeps one row per job holding its **latest state**, not every
   state it passed through.
@@ -133,7 +135,12 @@ word, the entry says so under **Today**.
     its **blt job id**, in the `blt` schema; what the jobs page and
     reports use.
   - **job kind** *(planned)* - `backup`, `restore`, `collection`,
-    `vmware_task`, ...
+    `vmware_task`, `event`, ...
+  - **job link** *(planned)* - a relation from one job to another:
+    **triggered** (a failed backup triggered an event job), **resolves**
+    (a later success resolved a failure), **child of** (NetBackup's
+    per-client jobs under a policy run), **retry of** (a retried
+    collection).
 
 **job status** *(planned for the common shape)*
 : One of `running`, `succeeded`, `partial`, `failed`, `cancelled`,
