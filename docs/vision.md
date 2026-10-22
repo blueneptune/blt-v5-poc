@@ -1,283 +1,308 @@
 # blt: platform vision
 
-**Recorded 2026-10-22** from the owner's description of where blt is
-going. Parts 1-4 are that description, organised but not changed in
-substance. Part 5 holds open questions, part 6 suggestions - those are
-proposals, not decisions. Update this file as decisions are made.
+> Where blt is going, recorded from the owner's description and the
+> decisions made since. Keep it current: when something is decided, move
+> it from *Open questions* to *Decisions*.
+>
+> First recorded 2026-10-22.
 
-## 1. Goal
+**Contents:**
+[1. Purpose](#1-purpose) ·
+[2. Principles](#2-principles) ·
+[3. Platform](#3-platform) ·
+[4. Capabilities](#4-capabilities) ·
+[5. Roadmap](#5-roadmap) ·
+[6. Decisions](#6-decisions) ·
+[7. Open questions](#7-open-questions) ·
+[8. Where it stands](#8-where-it-stands)
 
-A monitoring and management tool for several backup products -
-**Commvault, Veeam, NetBackup, Rubrik** - with one UI as the single pane
-of glass, so the experience is consistent and seamless instead of a
-different UI per product.
+---
 
-**Asset refinery.** blt's asset and inventory matching. It takes data
-from the backup products and matches assets using other data sources
-such as **ServiceNow** and **VMware**. Every data source is a potential
-marker for matching. Data sources can be prioritised as source of truth;
-ServiceNow is treated as the source of truth that all collected data is
-matched against. *Further investigation is required.*
+## 1. Purpose
 
-## 2. Platform: three zones
+blt is a monitoring and management tool for the backup products in use -
+**Commvault, Veeam, NetBackup and Rubrik** - with one UI as the single
+pane of glass. Each product has its own UI; blt replaces moving between
+them with one consistent experience.
 
-| Zone | Can talk to | Cannot talk to |
+Around that sits the **asset refinery**: blt matches every object it
+discovers - in backups, in VMware, in ServiceNow - to the real asset it
+belongs to, using every data source as a possible marker, with
+ServiceNow as the source of truth everything is matched against.
+
+## 2. Principles
+
+| | |
+|---|---|
+| **One pane of glass** | Every capability lives in blt's UI, behind one login, with one look. |
+| **Connections start in the access zone** | Core never calls out. Workers fetch their work from core and post results to it. |
+| **Read first, change later** | Collect and show before anything is changed on a product; changes come with approvals and a ticket. |
+| **Everything has history** | Assets, configuration and manual decisions keep every version, with who and why. (Jobs keep their latest state.) |
+| **Rules are data** | Matching, audits and SLA checks are rules evaluated against collected data, producing findings. |
+| **Free and open** | Every component is open source and usable in an enterprise without a licence. |
+
+---
+
+## 3. Platform
+
+### 3.1 Zones
+
+```
+customer zones               access zones                     core zone
+(where the data lives)       (where work runs)                (where blt lives)
+
+backup servers,     <──────  Prefect workers:      ──────>   UI, API, Prefect server,
+vCenters,                    US1, UK1, ...                    database, identity, ...
+ServiceNow                   (CORE can also act as one)
+```
+
+| Zone | Can reach | Cannot reach |
 |---|---|---|
 | **core** | - | access, customer |
 | **access** | customer, core | - |
 | **customer** | access | core |
 
-Once a worker is running in an access zone, everything starts from
-there: data collection, posting results to core, and polling the Prefect
-server for work.
+Once an access zone's worker is running, everything starts there:
+polling core for work, collecting from customer systems, posting results
+back to core.
 
-### Core zone
+### 3.2 Core zone
 
-Maintains the core application and its supporting infrastructure. Three
-Rocky Linux servers running Rancher RKE2.
+One Kubernetes cluster: **3 Rocky Linux servers, RKE2.**
 
-- a reverse proxy as the entry point for the application
-- a SvelteKit UI for monitoring and managing backup-tool tasks,
-  administration included
-- a FastAPI server: backend for the UI, and ingress for collected data
-- **authentik** for identity and access management, tightly integrated
-  with the UI
-- a Prefect server for task and event orchestration
-- a Prefect worker for core-based tasks and events
-- a Postgres database where everything is stored; any of these that
-  needs a database uses it
-- a smallstep CA, for future certificate trust with workers in other
-  zones
-- a container registry that the other zones pull from
-- Loki for logs
-- Grafana for graphs
-- Apache Superset, if required, for reports
-- Redis, for potential caching
+| Component | Choice | Role |
+|---|---|---|
+| Entry point | reverse proxy / ingress | the one way in for users and workers |
+| UI | SvelteKit | monitoring, management and administration |
+| API | FastAPI | backend for the UI; ingress for collected data |
+| Identity | open-source IAM - **see 7.1** (Keycloak recommended) | local users, SSO (Okta, Google), roles, service accounts |
+| Orchestration | Prefect server | schedules, retries, run history, events |
+| Core worker | Prefect worker | tasks that run in core |
+| Database | Postgres - one cluster | see 3.5 |
+| Certificates | smallstep CA | trust for workers in other zones (mTLS, later) |
+| Registry | container registry (Harbor) | images for every zone |
+| Logs | Loki | |
+| Dashboards | Grafana | |
+| Reports | Apache Superset | if Grafana is not enough |
+| Cache | Redis | if caching is needed |
 
-### Access zones
+### 3.3 Access zones
 
-Run the worker pods that execute non-core tasks and event handling,
-including but not limited to backup-system data collection, vCenter
-polling and ServiceNow polling.
+One small Kubernetes cluster per zone - **US1, UK1, ...** - running
+almost nothing but Prefect workers. Core can act as an access zone too
+(the **CORE** work pool) for work it can do itself.
 
-- The main, and basically only, pods here are Prefect workers.
-- Each collection should spin up a dedicated container for its workload.
-- There may be several access zones - for example **US**, **UK** and
-  **CORE** (core can act as an access zone for certain tasks).
-- Open: three Rocky servers per access zone, or two smaller ones? RKE2,
-  or would K3s be simpler? (See part 5.)
+- Collects from backup products, polls vCenter and ServiceNow, handles
+  events.
+- **Each collection runs in its own container**: Prefect's Kubernetes
+  work pool turns every flow run into its own pod.
+- **RKE2**, as in core: one set of scripts, one upgrade path. Sizing is
+  open (7.2).
 
-### Customer zones
+### 3.4 Customer zones
 
-Where the data lives, and what blt collects from. An access zone may
-also hold some data.
+Where the data lives and what blt collects from - backup servers,
+vCenters, ServiceNow. Reachable only from an access zone.
 
-## 3. The UI
+### 3.5 Data
 
-Testing so far has used manual CLI collection, then Prefect; the next
-iteration is a full UI.
+**One Postgres cluster** (CloudNativePG), with a **separate database per
+service**, each with its own login:
 
-### Authentication
+| Database | Used by |
+|---|---|
+| `blt` | blt's API, collectors and flows |
+| `prefect` | Prefect server |
+| `keycloak` (or the chosen IAM) | identity |
+| `grafana`, `superset` | dashboards and reports, when added |
 
-The first point of entry. authentik handles a local admin and local
-users, and SSO integrations such as Okta or Google can be configured.
+Inside `blt`, **one schema per data source type** for that product's own
+data, and a common **`blt` schema** that ties them together:
 
-### Data sources (administration)
+```
+blt database
+├── commvault     Commvault's data, in its own shape
+├── netbackup
+├── veeam
+├── rubrik
+├── vmware
+├── servicenow
+└── blt           sources, blt job ids, assets, sightings, links,
+                  history, rules and findings - what the UI reads
+```
 
-- Source types in a drop-down when adding one: Commvault (CommCell),
-  Veeam, NetBackup, Rubrik, ServiceNow, VMware.
-- Which **work pool** the collection runs on: UK1, US1, CORE, ...
-- **How often** each module is collected: jobs, policies, catalog data,
-  storage, tape devices, events, ...
-- A **host** and a **method of authentication** - more than one per
-  source, for fallback on authentication failures and for rotation.
-- All work runs through the Prefect server and workers, so source
-  settings and credentials are expected to live in **Prefect blocks**.
+Product tables point up to `blt`; `blt` never points into a product
+schema. Words are defined in [glossary.md](glossary.md).
 
-### Work pools (administration)
+---
 
-Work pools will be deployed in several locations. They should be
-configurable here, including setting one up on its Kubernetes cluster,
-as a user-friendly experience.
+## 4. Capabilities
 
-### Users and roles (administration)
+Each area is a section of the UI. **Phase** refers to the roadmap (5).
 
-- Manage local accounts and SSO integrations (e.g. Okta).
-- Roles decide what each user may see, and who may administer the
-  application.
+### 4.1 Sign-in, users and roles - *Phase 1*
 
-### Jobs
+- Sign-in is the first point of entry: a local admin, local users, and
+  SSO through Okta, Google or others.
+- Users and SSO connections are managed from blt's UI.
+- **Roles** decide what each user may see and administer.
+- *Later:* roles **scoped to customers** - e.g. GDPR customers whose
+  backup data only UK-based engineers may see.
 
-- Jobs from every data source in one place: Prefect tasks, backup jobs,
-  VMware jobs, ...
-- blt carries **its own job id table**, linking jobs across tools and
-  schemas.
+### 4.2 Data sources - *Phase 2*
+
+Adding a data source:
+
+- **Type** from a drop-down: Commvault (CommCell), Veeam, NetBackup,
+  Rubrik, VMware, ServiceNow.
+- **Host**, and **one or more authentication methods** - tried in order,
+  for failover and credential rotation.
+- **Work pool** that collects it: US1, UK1, CORE, ...
+- **Frequency per module**: jobs, policies, catalog, storage, tape
+  devices, events, ...
+
+Settings and credentials are kept in **Prefect blocks**, because every
+collection runs through Prefect.
+
+### 4.3 Work pools - *Phase 2*
+
+- Create a work pool in the UI.
+- blt produces a **deployment bundle** for that zone's cluster: the
+  worker's manifests, its credentials, core's CA certificate.
+- The bundle is applied in the access zone; the worker then connects
+  back to core. Core never reaches into the zone.
+
+### 4.4 Jobs - *Phase 2*
+
+- Every job in one place: backup jobs from every product, Prefect runs,
+  VMware tasks.
+- **blt's own job id** links a job across tools and schemas.
 - Filter by product, state, client, ...; **save filters** per user.
-- Failed jobs shown in a different colour, with a **ServiceNow event**
-  column to drill into.
-- **Notes** on jobs.
-- **Follow** a job: be notified of its updates by various means.
+- Failed jobs stand out in colour, with their **ServiceNow event**
+  alongside to drill into (once events are written - 4.8).
+- **Notes** on a job; **follow** a job to be notified of its updates.
 
-### Inventory
+### 4.5 Inventory and the asset refinery - *Phase 3*
 
-- All data sources merged by a clear, definable **rules engine**;
-  assets are searchable.
-- An asset is any object discovered by any source, and can be linked
-  inside blt.
-- Assets can be **linked by hand** when matching gets it wrong.
-- A detailed **history** of mapping and of every change to an asset
-  (state changes, manual links).
-- An asset's page shows its whole history and relationships:
-  - which data sources it maps to
+- An **asset** is anything discovered by any data source, linked inside
+  blt.
+- A **rules engine** merges the data sources' views of each asset;
+  sources can be ranked as source of truth.
+- **Manual links** when matching gets it wrong.
+- Every change - matches, state changes, manual links - kept as
+  **history**.
+- Assets are **searchable**. An asset's page shows:
+  - every data source it maps to
   - the backup jobs it appears in, and its backup history
-  - standard checks, e.g. backed up and not in breach of its SLA
-  - tickets, alerts and events about it (e.g. a backup failed and an
-    event was raised), each one clickable
+  - standard checks - is it backed up, is it within its SLA
+  - tickets, alerts and events about it, each clickable
   - notes
 
-### Backup configuration management
+### 4.6 Configuration management and audits - *Phase 4*
 
-- Collect the **configuration state** of every backup environment.
-- When it changes, record the change as a **new version** - e.g. a
-  NetBackup policy recorded at noon is changed outside blt by 1 pm; the
-  change is recorded, and the policy's history shows it.
-- **Audit** settings regularly against intended goals, for example:
+- Collect the **configuration** of every backup environment, and keep
+  every change as a **new version** - e.g. a NetBackup policy changed
+  outside blt at 1 pm is recorded, and its history shows both versions.
+- **Audit** configuration regularly against business rules, for
+  example:
   - a policy should keep monthly backups for 7 years - does it?
-  - a monthly backup runs on the first Friday, but there is no Friday
-    backup window - a miss
-  - schedules with specific dates have run out of dates - find them,
-    and make sure they will actually run
-  - names follow the business naming rules; anything else is out of
-    compliance and gets changed
-- Later, **create, modify and delete** settings on backup products:
-  1. if the user's `requires_approver` flag is set, the change waits for
-     a user flagged as approver; otherwise it runs straight away
-  2. after approval, a ServiceNow change is raised with the standard
-     information
-  3. the change is moved to Implement
-  4. blt executes the change
-  5. the result is recorded, and the change ticket is updated and closed
-  6. the work's history is kept in blt, with rollback where the setting
-     allows it
-  7. notes can be recorded on settings
+  - a monthly backup on the first Friday, with no Friday backup window
+  - schedules with fixed dates that have run out
+  - names that break the naming standard
+- **Notes** on settings.
 
-### Reporting
+### 4.7 Changes with approval - *Phase 5*
 
-Visualisations, using tools such as Superset or Grafana.
+Create, modify and delete settings on a backup product from blt:
 
-### Observability
+1. Users flagged `requires_approver` wait for a user flagged as
+   approver; others run straight away.
+2. A **ServiceNow change** is raised with the standard information.
+3. The change moves to *Implement*.
+4. blt makes the change.
+5. The result is recorded; the change ticket is updated and closed.
+6. The history stays in blt, with **rollback** where the setting allows.
 
-Monitoring the infrastructure as a whole: the servers doing the backups,
-the state of blt's own services, storage use, ...
+### 4.8 ServiceNow
 
-### Also
+| | When |
+|---|---|
+| **Read** - CMDB for inventory and source of truth | *Phase 3* |
+| **Write events** - for failed backups | later |
+| **Write changes** - for approved changes (4.7) | *Phase 5* |
 
-- **Feature requests** recorded from the UI, reachable at the top of
-  every page.
-- **Theme** selection (dark and light) and **accessibility** features.
+### 4.9 Notifications
 
-## 4. Where it stands (2026-10-22)
+One notification service - email, Teams, Slack - for followed jobs, SLA
+breaches and failed collections.
 
-- Collection from Commvault (CommServes and Commvault Cloud) works, in
-  production, on Prefect: per-source flow runs in parallel, credentials
-  in blocks.
-- SDKs: Commvault (proven), Veeam and NetBackup (written, not yet run
-  against a server).
-- Next in the data model: product schemas (`commvault` first) under a
-  common `blt` schema (docs/glossary.md).
-- Infrastructure: `yoki-blt-infra` (RKE2 on Rocky 9) written, waiting
-  for servers; a home-lab rehearsal under `*.blt.ethos.home` with a
-  smallstep CA.
+### 4.10 Reporting and observability
 
-## 5. Open questions
+- **Reporting:** Grafana dashboards first; Superset when a report needs
+  it.
+- **Observability:** the backup servers, blt's own services, storage
+  use - through Loki and Grafana.
 
-1. **authentik instead of Zitadel.** Earlier plans named Zitadel. This
-   description names authentik - is that now the decision? (It is
-   assumed below.)
-2. **"proxy" is now "access", and there can be several.** Confirmed by
-   this description; the glossary and infra repository will be renamed.
-3. **Access-zone size and Kubernetes flavour.** See suggestion 2.
-4. **Setting up a work pool from the UI** collides with the zone rules:
-   core cannot reach an access zone, so the UI cannot reach into its
-   cluster. See suggestion 3.
-5. **Where credentials live.** Prefect blocks are stored in Prefect's
-   database in core, readable by anyone with Prefect admin access, and
-   every access zone's worker can fetch every block. Acceptable, or
-   should each access zone see only its own sources' credentials? See
-   suggestion 5.
-6. **Tenancy.** Are the customer zones different customers who must
-   not see each other's data in the UI? That decides whether roles are
-   scoped per customer or source.
-7. **ServiceNow's role in both directions.** Reading CMDB data
-   (inventory) and writing incidents and changes (events, approvals)
-   need different ServiceNow access. Which comes first?
-8. **Superset and Grafana together?** They overlap. See suggestion 9.
+### 4.11 Everyday comforts
 
-## 6. Suggestions
+- A **feature request** button at the top of every page.
+- **Themes** (light and dark) and **accessibility** features.
 
-1. **Phase it.** In dependency order, each phase usable on its own:
-   - *Platform* - core cluster, Postgres, authentik, Prefect, registry,
-     reverse proxy, one access zone.
-   - *Data foundation* - product schemas under `blt`; `blt.source` and
-     the common `blt.job`; sources configured in the UI instead of
-     `blt-prefect-import`; the jobs page.
-   - *Inventory* - sightings, assets, matching rules, manual links,
-     history; VMware and ServiceNow as sources; the asset page.
-   - *Configuration management* - versioned configuration snapshots,
-     then audit rules.
-   - *Changes* - approvals, ServiceNow changes, execution, rollback.
-   - Reporting and observability grow alongside from the platform phase
-     on (Loki and Grafana are cheap to start early).
-2. **Access zones: RKE2, sized to need.** The same distribution
-   everywhere means one set of scripts, one hardening story, one way to
-   upgrade - more valuable than K3s's lighter footprint. Access zones
-   hold no state, so they can be smaller: three servers of 2 vCPU /
-   8 GB give a highly available control plane (two give no more
-   protection than one - etcd needs three for a quorum). If budget is
-   tight, one server plus one or two agents works: if the server fails,
-   running collections finish and new ones wait - Prefect's retries
-   absorb that.
-3. **Work pools from the UI: create in core, apply in the zone.** The UI
-   creates the work pool in Prefect and produces a ready-to-apply
-   bundle for the access cluster: the worker's manifest or Helm values,
-   its credential, core's CA certificate. Someone in that zone applies
-   it - or better, the access cluster runs a GitOps agent (Fleet or Argo
-   CD) that pulls its configuration from core. Both keep the rule that
-   connections start in the access zone.
-4. **One dedicated container per collection** is Prefect's Kubernetes
-   work pool: each flow run becomes a Kubernetes Job with its own pod,
-   resources and logs. The worker itself stays small.
-5. **Credentials.** Keep a source's non-secret settings in its block,
-   and consider keeping the secrets nearer their use: per-access-zone
-   secrets (Kubernetes secrets, or OpenBao/Vault) referenced by the
-   block, so a US worker cannot read UK credentials and core holds no
-   customer passwords. Multiple authentication methods per source fit
-   either way: an ordered list, tried in turn, with the failure of each
-   recorded.
-6. **One Postgres server, separate databases.** blt, Prefect, authentik,
-   Grafana and Superset each get their own database and role inside one
-   Postgres cluster (CloudNativePG), rather than sharing one database.
-   blt's own data is where the per-product schemas apply.
-7. **blt's job id** is `blt.job`, with links to the product job and, when
-   the job came from a Prefect run, to that flow run - so a backup job,
-   the collection that found it, and the ServiceNow event raised for it
-   all join up.
-8. **Rules as data, evaluated by flows.** Matching rules, audit rules
-   (retention, schedule windows, naming) and SLA checks are all "a rule,
-   evaluated against collected data, producing findings". One rules
-   engine with findings stored in blt serves inventory, audits and SLA
-   breaches alike, and findings are what raise ServiceNow events.
-9. **Grafana first, Superset when a report needs it.** Grafana covers
-   operational dashboards and Loki's logs; Superset adds business-style
-   reporting. Starting with one avoids running two before either is
-   needed.
-10. **authentik in front of the tools that have no login of their own.**
-    authentik's proxy outpost can put the Prefect UI, Grafana and
-    Superset behind the same login and roles, so admin-only tools stay
-    admin-only - part of the single pane of glass.
-11. **Notifications as one service.** "Follow a job", SLA breaches and
-    failed collections all need email, Teams or Slack messages; one
-    notification component (Prefect automations can feed it) avoids
-    each feature inventing its own.
-12. **Feature requests** can live in blt's own database at first, and
-    later be pushed to GitHub issues automatically.
+---
+
+## 5. Roadmap
+
+Each phase is usable on its own and builds on the one before.
+
+| Phase | Delivers |
+|---|---|
+| **0 - Platform** | core cluster; Postgres, identity, Prefect, registry, ingress; one access zone; Loki and Grafana |
+| **1 - Front door** | the UI shell: sign-in, users and roles, themes |
+| **2 - Data foundation** | product schemas under `blt`; data sources and work pools in the UI; blt job ids; the jobs page |
+| **3 - Inventory** | VMware and ServiceNow (read) as sources; assets, matching rules, manual links, history; search and the asset page |
+| **4 - Configuration** | versioned configuration; audit rules and findings |
+| **5 - Changes** | approvals, ServiceNow changes, execution, rollback |
+| *Throughout* | notifications, reporting, observability, more products (Veeam, NetBackup, Rubrik) |
+
+## 6. Decisions
+
+| Date | Decision |
+|---|---|
+| 2026-10-15 | Prefect for orchestration; per-source flow runs, in parallel |
+| 2026-10-15 | Kubernetes: RKE2 on Rocky Linux 9 |
+| 2026-10-20 | The name stays **blt** |
+| 2026-10-22 | Zones are **core / access / customer**, with several access zones |
+| 2026-10-22 | Work pools: blt produces a bundle, applied in the access zone, which then connects back |
+| 2026-10-22 | Credentials for every source in Prefect blocks in core; a worker in one zone may read another zone's blocks (revisit later) |
+| 2026-10-22 | ServiceNow read-only to start; writing events and changes later |
+| 2026-10-22 | One Postgres cluster, a database per service, a schema per product inside `blt` |
+
+## 7. Open questions
+
+1. **Identity provider.** Free, open source, no enterprise licence.
+   Recommended: **Keycloak** (Apache 2.0, nothing held back for a paid
+   tier; heavier, plainer admin screens). Alternatives: authentik (MIT
+   community edition, some features enterprise-only), Zitadel (AGPL 3.0
+   since v3).
+2. **Access-zone size.** Three small servers (2 vCPU / 8 GB) for full
+   high availability, or one server plus one or two agents to save
+   cost. Two servers protect no better than one.
+3. **Customer-scoped roles** (GDPR, UK-only) - how customers are
+   defined in blt, when this becomes a priority.
+4. **Which product after Commvault** feeds the jobs page first.
+
+## 8. Where it stands
+
+*As of 2026-10-22.*
+
+- **Commvault** collection (CommServes and Commvault Cloud) runs in
+  production on Prefect: one flow run per source, in parallel,
+  credentials in blocks.
+- **SDKs:** Commvault (proven), Veeam and NetBackup (written, not yet
+  run against a server).
+- **Infrastructure:** `yoki-blt-infra` written (RKE2, kube-vip,
+  cert-manager, Longhorn, CloudNativePG, Harbor plan), waiting for
+  servers; a home-lab rehearsal at `*.blt.ethos.home` with a smallstep
+  CA.
+- **Next:** Commvault's tables into a `commvault` schema (2026.11.W01),
+  then the `blt` schema.
