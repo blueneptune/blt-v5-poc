@@ -68,7 +68,8 @@ back to core.
 
 ### 3.2 Core zone
 
-One Kubernetes cluster: **3 Rocky Linux servers, RKE2.**
+One Kubernetes cluster: **3 Rocky Linux servers, RKE2** - slightly larger
+than an access zone's.
 
 | Component | Choice | Role |
 |---|---|---|
@@ -96,8 +97,8 @@ almost nothing but Prefect workers. Core can act as an access zone too
   events.
 - **Each collection runs in its own container**: Prefect's Kubernetes
   work pool turns every flow run into its own pod.
-- **RKE2**, as in core: one set of scripts, one upgrade path. Sizing is
-  open (7.2).
+- **RKE2**, as in core: one set of scripts, one upgrade path. **Three
+  servers per zone**, slightly smaller than core's.
 
 ### 3.4 Customer zones
 
@@ -180,8 +181,21 @@ collection runs through Prefect.
 
 ### 4.4 Jobs - *Phase 2*
 
-- Every job in one place: backup jobs from every product, Prefect runs,
-  VMware tasks.
+- A **job** is any unit of work with a start, an end and an outcome,
+  from any source - not only backups:
+
+  | Kind | Examples | From |
+  |---|---|---|
+  | backup | Commvault job, NetBackup job, Veeam session, Rubrik event | backup products |
+  | restore | the same products' restores | backup products |
+  | collection | a Prefect flow run collecting a source | blt itself, via Prefect |
+  | vmware task | snapshot, migration, clone | vCenter - chosen task types only, as vCenter makes a task for nearly everything |
+
+- Every kind shares a **common shape**: blt job id, kind, source and
+  product, the product's own job id, a common **state** (queued,
+  running, succeeded, partial, failed, cancelled) beside the product's
+  own, start and end, and the asset it concerns. The product's full
+  detail stays in its schema.
 - **blt's own job id** links a job across tools and schemas.
 - Filter by product, state, client, ...; **save filters** per user.
 - Failed jobs stand out in colour, with their **ServiceNow event**
@@ -283,6 +297,8 @@ Each phase is usable on its own and builds on the one before.
 | 2026-10-22 | ServiceNow read-only to start; writing events and changes later |
 | 2026-10-22 | One Postgres cluster, a database per service, a schema per product inside `blt` |
 | 2026-10-22 | Identity: **Zitadel**, consumed unmodified - users, roles and SSO managed from blt's UI through its API |
+| 2026-10-22 | Every zone: **3 Rocky Linux servers with RKE2** - core slightly larger, access zones slightly smaller |
+| 2026-10-22 | **Jobs are generic**: backups, restores, Prefect collection runs and chosen VMware tasks share one shape and one jobs page |
 
 ## 7. Open questions
 
@@ -291,12 +307,9 @@ Each phase is usable on its own and builds on the one before.
    blt. The only blocker would be a company rule against AGPL software
    altogether - if there is one, Keycloak (Apache 2.0) takes its place;
    both speak OpenID Connect, so blt does not depend on the choice.
-2. **Access-zone size.** Three small servers (2 vCPU / 8 GB) for full
-   high availability, or one server plus one or two agents to save
-   cost. Two servers protect no better than one.
-3. **Customer-scoped roles** (GDPR, UK-only) - how customers are
+2. **Customer-scoped roles** (GDPR, UK-only) - how customers are
    defined in blt, when this becomes a priority.
-4. **Which product after Commvault** feeds the jobs page first.
+3. **Which product after Commvault** feeds the jobs page first.
 
 ## 8. Where it stands
 
