@@ -190,12 +190,28 @@ collection runs through Prefect.
   | restore | the same products' restores | backup products |
   | collection | a Prefect flow run collecting a source | blt itself, via Prefect |
   | vmware task | snapshot, migration, clone | vCenter - chosen task types only, as vCenter makes a task for nearly everything |
+  | event | submitting or closing a ServiceNow event | blt itself, triggered by another job |
 
 - Every kind shares a **common shape**: blt job id, kind, source and
   product, the product's own job id, a common **state** (queued,
   running, succeeded, partial, failed, cancelled) beside the product's
   own, start and end, and the asset it concerns. The product's full
   detail stays in its schema.
+- **Jobs link to each other.** What a job caused is itself a job: a
+  failed backup **triggers** an event job that submits a ServiceNow
+  event; a later successful backup of the same thing triggers another
+  that closes it, and **resolves** the failure. The same links record
+  **child of** (NetBackup's per-client jobs under a policy run,
+  Commvault's sub-jobs) and **retry of** (a retried collection).
+  External records - the ServiceNow event's number - are kept on the
+  job that created them. A failed job's page shows the whole chain:
+
+  ```
+  backup 4711 (NetBackup, failed)
+     └─ triggered ─> event job "submit ServiceNow event" -> INC0012345
+  backup 4790 (same client and policy, succeeded)   resolves 4711
+     └─ triggered ─> event job "close ServiceNow event"  -> INC0012345 closed
+  ```
 - **blt's own job id** links a job across tools and schemas.
 - Filter by product, state, client, ...; **save filters** per user.
 - Failed jobs stand out in colour, with their **ServiceNow event**
@@ -299,6 +315,7 @@ Each phase is usable on its own and builds on the one before.
 | 2026-10-22 | Identity: **Zitadel**, consumed unmodified - users, roles and SSO managed from blt's UI through its API |
 | 2026-10-22 | Every zone: **3 Rocky Linux servers with RKE2** - core slightly larger, access zones slightly smaller |
 | 2026-10-22 | **Jobs are generic**: backups, restores, Prefect collection runs and chosen VMware tasks share one shape and one jobs page |
+| 2026-10-22 | **Jobs link to each other** (triggered, resolves, child of, retry of); what a job causes - such as a ServiceNow event submission - is itself a job |
 
 ## 7. Open questions
 
