@@ -75,7 +75,7 @@ One Kubernetes cluster: **3 Rocky Linux servers, RKE2.**
 | Entry point | reverse proxy / ingress | the one way in for users and workers |
 | UI | SvelteKit | monitoring, management and administration |
 | API | FastAPI | backend for the UI; ingress for collected data |
-| Identity | open-source IAM - **see 7.1** (Keycloak recommended) | local users, SSO (Okta, Google), roles, service accounts |
+| Identity | **Keycloak** | local users, SSO (Okta, Google), roles, service accounts - managed from blt's UI through its admin API |
 | Orchestration | Prefect server | schedules, retries, run history, events |
 | Core worker | Prefect worker | tasks that run in core |
 | Database | Postgres - one cluster | see 3.5 |
@@ -113,7 +113,7 @@ service**, each with its own login:
 |---|---|
 | `blt` | blt's API, collectors and flows |
 | `prefect` | Prefect server |
-| `keycloak` (or the chosen IAM) | identity |
+| `keycloak` | identity |
 | `grafana`, `superset` | dashboards and reports, when added |
 
 Inside `blt`, **one schema per data source type** for that product's own
@@ -144,10 +144,14 @@ Each area is a section of the UI. **Phase** refers to the roadmap (5).
 
 - Sign-in is the first point of entry: a local admin, local users, and
   SSO through Okta, Google or others.
-- Users and SSO connections are managed from blt's UI.
+- Users, roles and SSO connections are managed **from blt's UI**, not
+  Keycloak's: blt's backend calls Keycloak's admin API with a service
+  account that may only manage users, groups, roles and identity
+  providers. Keycloak's own console stays as an emergency fallback.
 - **Roles** decide what each user may see and administer.
 - *Later:* roles **scoped to customers** - e.g. GDPR customers whose
-  backup data only UK-based engineers may see.
+  backup data only UK-based engineers may see. Keycloak's
+  *organizations* are the likely building block.
 
 ### 4.2 Data sources - *Phase 2*
 
@@ -256,7 +260,7 @@ Each phase is usable on its own and builds on the one before.
 
 | Phase | Delivers |
 |---|---|
-| **0 - Platform** | core cluster; Postgres, identity, Prefect, registry, ingress; one access zone; Loki and Grafana |
+| **0 - Platform** | core cluster; Postgres, Keycloak, Prefect, registry, ingress; one access zone; Loki and Grafana |
 | **1 - Front door** | the UI shell: sign-in, users and roles, themes |
 | **2 - Data foundation** | product schemas under `blt`; data sources and work pools in the UI; blt job ids; the jobs page |
 | **3 - Inventory** | VMware and ServiceNow (read) as sources; assets, matching rules, manual links, history; search and the asset page |
@@ -276,20 +280,16 @@ Each phase is usable on its own and builds on the one before.
 | 2026-10-22 | Credentials for every source in Prefect blocks in core; a worker in one zone may read another zone's blocks (revisit later) |
 | 2026-10-22 | ServiceNow read-only to start; writing events and changes later |
 | 2026-10-22 | One Postgres cluster, a database per service, a schema per product inside `blt` |
+| 2026-10-22 | Identity: **Keycloak** (Apache 2.0) - users, roles and SSO managed from blt's UI through Keycloak's admin API |
 
 ## 7. Open questions
 
-1. **Identity provider.** Free, open source, no enterprise licence.
-   Recommended: **Keycloak** (Apache 2.0, nothing held back for a paid
-   tier; heavier, plainer admin screens). Alternatives: authentik (MIT
-   community edition, some features enterprise-only), Zitadel (AGPL 3.0
-   since v3).
-2. **Access-zone size.** Three small servers (2 vCPU / 8 GB) for full
+1. **Access-zone size.** Three small servers (2 vCPU / 8 GB) for full
    high availability, or one server plus one or two agents to save
    cost. Two servers protect no better than one.
-3. **Customer-scoped roles** (GDPR, UK-only) - how customers are
+2. **Customer-scoped roles** (GDPR, UK-only) - how customers are
    defined in blt, when this becomes a priority.
-4. **Which product after Commvault** feeds the jobs page first.
+3. **Which product after Commvault** feeds the jobs page first.
 
 ## 8. Where it stands
 
