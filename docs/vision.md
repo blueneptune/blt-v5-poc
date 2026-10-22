@@ -213,7 +213,26 @@ collection runs through Prefect.
      └─ triggered ─> event job "close ServiceNow event"  -> INC0012345 closed
   ```
 - **blt's own job id** links a job across tools and schemas.
-- Filter by product, state, client, ...; **save filters** per user.
+- **Columns that are not only generic:**
+  - a common **protection** column that means the same thing in every
+    product - Commvault's plan or subclient, NetBackup's policy (and
+    schedule), Veeam's backup job, Rubrik's SLA domain - so the mixed
+    view still says *what* ran;
+  - **product-specific columns**, declared by each product (NetBackup's
+    schedule type, storage unit, media server; Commvault's storage
+    policy, backup level; ...), offered in a column chooser when the
+    view is filtered to that product.
+- Filter by product, state, client, ...; **save filters - and the
+  chosen columns - per user**.
+- **Every job is clickable**, opening its own page:
+  - its **logs** (NetBackup try logs, Veeam session logs, Commvault job
+    details) and its **progress** while running
+  - its **collection times** - first seen, last collected, by which
+    collection run
+  - its **links** - what triggered it, what it triggered, children,
+    retries, what resolved it
+  - the **asset** it concerns, its **ServiceNow events**, and **notes**
+  - the product's full record, for anything not shown elsewhere
 - Failed jobs stand out in colour, with their **ServiceNow event**
   alongside to drill into (once events are written - 4.8).
 - **Notes** on a job; **follow** a job to be notified of its updates.
@@ -316,6 +335,7 @@ Each phase is usable on its own and builds on the one before.
 | 2026-10-22 | Every zone: **3 Rocky Linux servers with RKE2** - core slightly larger, access zones slightly smaller |
 | 2026-10-22 | **Jobs are generic**: backups, restores, Prefect collection runs and chosen VMware tasks share one shape and one jobs page |
 | 2026-10-22 | **Jobs link to each other** (triggered, resolves, child of, retry of); what a job causes - such as a ServiceNow event submission - is itself a job |
+| 2026-10-22 | Jobs view: a common *protection* column plus product-specific columns per product; each job opens a detail page (logs, progress, collection times, links, asset, events, notes) |
 
 ## 7. Open questions
 
