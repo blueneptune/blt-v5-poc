@@ -117,15 +117,23 @@ word, the entry says so under **Today**.
 
 ## Backups
 
-**job** *(today)*
-: One run of a backup, restore or other operation on a source - what
-  Commvault calls a job, Veeam a session, NetBackup a job, Rubrik an
-  event. blt keeps one row per job holding its **latest state**, not
-  every state it passed through.
+**job** *(today, for backups; widened 2026-10-22)*
+: Any unit of work with a start, an end and an outcome, from any source:
+  - **backup** and **restore** jobs - what Commvault calls a job, Veeam
+    a session, NetBackup a job, Rubrik an event;
+  - **collection** jobs - blt's own Prefect flow runs collecting a
+    source;
+  - **VMware tasks** of chosen types (snapshot, migration, clone).
+
+  blt keeps one row per job holding its **latest state**, not every
+  state it passed through.
   - **product job** - the job as the source reports it, in the source
     type's own schema and words.
-  - **blt job** *(planned)* - the same job in blt's common shape, in the
-    `blt` schema, which reports and the UI use.
+  - **blt job** *(planned)* - the same job in blt's common shape, with
+    its **blt job id**, in the `blt` schema; what the jobs page and
+    reports use.
+  - **job kind** *(planned)* - `backup`, `restore`, `collection`,
+    `vmware_task`, ...
 
 **job status** *(planned for the common shape)*
 : One of `running`, `succeeded`, `partial`, `failed`, `cancelled`,
@@ -199,7 +207,7 @@ word, the entry says so under **Today**.
 | blt word | Commvault | NetBackup | Veeam (VBR) | VMware | ServiceNow | Rubrik |
 |---|---|---|---|---|---|---|
 | source | CommCell (CommServe), Commvault Cloud tenant | primary server (domain) | backup server | vCenter | instance | cluster |
-| job | job | job | session | - | - | event / task |
+| job | job | job | session | task | - | event / task |
 | object (backup client) | client | client | backup object / computer | - | - | object |
 | object (VM) | VM client | VM client | backup object | VM | CI (cmdb_ci_vm_instance) | VM |
 | protection | subclient + plan | policy + schedule | job | - | - | SLA domain |
