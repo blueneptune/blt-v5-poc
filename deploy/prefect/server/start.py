@@ -13,6 +13,10 @@ Nothing secret is printed.
 Environment: PG_HOST, PG_PORT, POSTGRES_PASSWORD (blt's Postgres user),
 PREFECT_DB_PASSWORD, PREFECT_LISTEN_HOST, PREFECT_LISTEN_PORT, plus the
 PREFECT_* settings passed through to the server.
+
+Without POSTGRES_PASSWORD step 2 is skipped: on a Kubernetes cluster the
+Postgres operator creates the role and the database, and this server is
+given only the prefect role's own password.
 """
 
 from __future__ import annotations
@@ -66,9 +70,12 @@ async def ensure_database(admin_password: str, prefect_password: str) -> None:
 
 
 def main() -> None:
-    admin = os.environ["POSTGRES_PASSWORD"]
+    admin = os.environ.get("POSTGRES_PASSWORD")
     prefect_password = os.environ["PREFECT_DB_PASSWORD"]
-    asyncio.run(ensure_database(admin, prefect_password))
+    if admin:
+        asyncio.run(ensure_database(admin, prefect_password))
+    else:
+        print("Prefect database: managed elsewhere, not checked", flush=True)
 
     host = os.environ.get("PG_HOST", "127.0.0.1")
     port = os.environ.get("PG_PORT", "5432")
