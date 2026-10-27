@@ -6,10 +6,12 @@
 
 Prints what it did, never a value.
 
-A CommCell's tokens may be used from one place only: whichever of the
-.env file and the block renews them first makes the other's pair
-worthless. So after importing, run that CommCell from Prefect only, or
-copy the tokens back with --to-env before going back to collect.sh.
+A CommCell's tokens may be used from one place only: renewing with a
+copy that has gone stale was seen to make Commvault refuse the current
+pair too. So importing moves them: the .env file's token lines are
+blanked and BLT_TOKENS_IN=prefect put in their place, and collect.sh and
+the other host tools refuse a CommCell marked so. --to-env moves them
+back and removes the mark.
 """
 
 from __future__ import annotations
@@ -20,7 +22,13 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from blt.collector.tokens import update_env_file
+from blt.collector.tokens import (
+    HELD_BY_KEY,
+    TOKEN_KEYS,
+    hand_over_tokens,
+    tokens_held_by,
+    update_env_file,
+)
 
 from .blocks import CommvaultCommCell
 
@@ -70,17 +78,30 @@ def tokens_to_env(name: str, config_dir: Path) -> None:
     block: CommvaultCommCell = CommvaultCommCell.load(name)  # type: ignore[assignment]
     path = config_dir / f"{name}.env"
     env = block.to_env()
-    updates = {
-        key: env.get(key, "")
-        for key in (
-            "CV_ACCESS_TOKEN",
-            "CV_REFRESH_TOKEN",
-            "CV_TOKEN_EXPIRES_AT",
-            "CV_TOKEN_RENEWABLE_UNTIL",
-        )
-    }
-    update_env_file(path, updates)
-    print(f"{name}: tokens copied from the block to {path}")
+    updates = {key: env.get(key, "") for key in TOKEN_KEYS}
+    update_env_file(path, {**updates, HELD_BY_KEY: ""})
+    print(
+        f"{name}: tokens copied from the block to {path}. Delete the block, or turn its "
+        "collect off, before using the file: one place only."
+    )
+
+
+def import_files(config_dir: Path, names: list[str], *, overwrite: bool = False) -> None:
+    """Each named .env file into a block; the tokens move, not copy."""
+    for name, block in blocks_from_env(config_dir, names).items():
+        path = config_dir / f"{name}.env"
+        holder = tokens_held_by(path)
+        if holder and block.access_token is None:
+            print(
+                f"{name}: skipped - its tokens are already in {holder} ({HELD_BY_KEY} in "
+                f"{path}). Change its settings with blt-prefect-block set."
+            )
+            continue
+        block.save(name, overwrite=overwrite)
+        print(describe(name, block))
+        if block.access_token is not None:
+            hand_over_tokens(path)
+            print(f"{name}: tokens removed from {path}; they live in the block now")
 
 
 def main() -> None:
@@ -106,13 +127,8 @@ def main() -> None:
     if missing:
         sys.exit(f"Not found: {', '.join(f'{args.config_dir}/{n}.env' for n in missing)}")
 
-    for name, block in blocks_from_env(args.config_dir, names).items():
-        block.save(name, overwrite=args.overwrite)
-        print(describe(name, block))
-    print(
-        "Done. These CommCells' tokens now live in their blocks: collect them from Prefect only, "
-        "or run with --to-env first to go back to collect.sh."
-    )
+    import_files(args.config_dir, names, overwrite=args.overwrite)
+    print("Done. Collect these CommCells from Prefect; --to-env moves tokens back to a file.")
 
 
 if __name__ == "__main__":

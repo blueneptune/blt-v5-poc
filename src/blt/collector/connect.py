@@ -18,7 +18,12 @@ from commvault_sdk import CommvaultClient, TokenSet
 
 from .lock import wait_lock
 from .settings import CollectorSettings, credentials_env_path
-from .tokens import env_token_saver, read_tokens, warn_if_regeneration_due
+from .tokens import (
+    env_token_saver,
+    read_tokens,
+    refuse_moved_tokens,
+    warn_if_regeneration_due,
+)
 
 
 class TokenStore(Protocol):
@@ -104,5 +109,7 @@ def commvault_client(
     """The client for a CommCell configured by .env files. Usually its
     tokens are in its own file; for an MSP, in one credentials file
     shared by a file per tenant."""
-    store = EnvTokenStore(credentials_env_path(settings, commcell, config_dir))
+    path = credentials_env_path(settings, commcell, config_dir)
+    refuse_moved_tokens(commcell, path)
+    store = EnvTokenStore(path)
     return build_client(settings, commcell, store, allow_changes=allow_changes)

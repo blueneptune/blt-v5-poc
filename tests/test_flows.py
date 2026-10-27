@@ -15,9 +15,11 @@ from prefect.states import Completed, Failed, Running
 from prefect.testing.utilities import prefect_test_harness
 from pydantic import SecretStr, ValidationError
 
+from blt.collector.settings import load_settings
+from blt.collector.tokens import hand_over_tokens, tokens_held_by
 from blt.flows import flows
 from blt.flows.blocks import BlockTokenStore, CommvaultCommCell, settings_from_blocks
-from blt.flows.importer import blocks_from_env, describe, env_names
+from blt.flows.importer import blocks_from_env, describe, env_names, import_files, tokens_to_env
 from blt.flows.manage import apply_settings, credentials_from_env, summary
 
 MSP_ENV = """\
@@ -212,3 +214,46 @@ def test_tokens_from_env_restores_credentials_and_leaves_the_rest(config: Path) 
 def test_an_msp_login_imported_on_its_own_is_still_not_collected(config: Path) -> None:
     assert blocks_from_env(config, ["msp"])["msp"].collect is False
     assert blocks_from_env(config, ["cs01"])["cs01"].collect is True
+
+
+def test_importing_moves_the_tokens_out_of_the_env_file(prefect_server: None, config: Path) -> None:
+    import_files(config, ["cs01"], overwrite=True)
+
+    block = CommvaultCommCell.load("cs01")
+    assert block.access_token.get_secret_value() == "cs-access-secret"
+    assert tokens_held_by(config / "cs01.env") == "prefect"
+    text = (config / "cs01.env").read_text()
+    assert "cs-access-secret" not in text
+    # Everything that is not a token stays.
+    assert "CV_BASE_URL=https://cs01/commandcenter/api" in text
+
+
+def test_a_moved_file_is_not_imported_again_over_its_block(
+    prefect_server: None, config: Path
+) -> None:
+    import_files(config, ["cs01"], overwrite=True)
+    import_files(config, ["cs01"], overwrite=True)  # nothing left to import
+
+    assert CommvaultCommCell.load("cs01").access_token.get_secret_value() == "cs-access-secret"
+
+
+def test_tokens_moved_back_to_the_file_lose_the_mark(prefect_server: None, config: Path) -> None:
+    import_files(config, ["cs01"], overwrite=True)
+    tokens_to_env("cs01", config)
+
+    assert tokens_held_by(config / "cs01.env") is None
+    assert "CV_ACCESS_TOKEN=cs-access-secret" in (config / "cs01.env").read_text()
+
+
+def test_host_tools_refuse_a_commcell_whose_tokens_moved(config: Path) -> None:
+    hand_over_tokens(config / "cs01.env")
+
+    with pytest.raises(SystemExit, match="lives in prefect"):
+        load_settings("cs01", config)
+
+
+def test_a_tenant_is_refused_when_its_msp_login_moved(config: Path) -> None:
+    hand_over_tokens(config / "msp.env")
+
+    with pytest.raises(SystemExit, match="lives in prefect"):
+        load_settings("acme", config)
