@@ -3,6 +3,7 @@
     blt-prefect-import cv-toaster            # config/cv-toaster.env -> block
     blt-prefect-import --all                 # every config/*.env but blt.env
     blt-prefect-import --to-env cv-toaster   # the block's tokens -> the .env file
+    blt-prefect-import --mark cv-toaster     # imported before files were marked
 
 Prints what it did, never a value.
 
@@ -113,7 +114,19 @@ def main() -> None:
     parser.add_argument(
         "--to-env", action="store_true", help="copy the named blocks' tokens back to .env files"
     )
+    parser.add_argument(
+        "--mark",
+        action="store_true",
+        help="blank the named files' tokens and mark them as moved to Prefect, touching no "
+        "block - for CommCells imported before importing did that itself",
+    )
     args = parser.parse_args()
+
+    if args.mark:
+        for name in args.names:
+            hand_over_tokens(args.config_dir / f"{name}.env")
+            print(f"{name}: tokens removed from {args.config_dir / f'{name}.env'}, marked moved")
+        return
 
     if args.to_env:
         for name in args.names:

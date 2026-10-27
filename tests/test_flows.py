@@ -19,7 +19,14 @@ from blt.collector.settings import load_settings
 from blt.collector.tokens import hand_over_tokens, tokens_held_by
 from blt.flows import flows
 from blt.flows.blocks import BlockTokenStore, CommvaultCommCell, settings_from_blocks
-from blt.flows.importer import blocks_from_env, describe, env_names, import_files, tokens_to_env
+from blt.flows.importer import (
+    blocks_from_env,
+    describe,
+    env_names,
+    import_files,
+    tokens_to_env,
+)
+from blt.flows.importer import main as importer_main
 from blt.flows.manage import apply_settings, credentials_from_env, summary
 
 MSP_ENV = """\
@@ -257,3 +264,17 @@ def test_a_tenant_is_refused_when_its_msp_login_moved(config: Path) -> None:
 
     with pytest.raises(SystemExit, match="lives in prefect"):
         load_settings("acme", config)
+
+
+def test_mark_blanks_the_file_and_touches_no_block(
+    config: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "sys.argv", ["blt-prefect-import", "--mark", "msp", "--config-dir", str(config)]
+    )
+    monkeypatch.setattr(CommvaultCommCell, "save", lambda *a, **k: pytest.fail("saved a block"))
+
+    importer_main()
+
+    assert tokens_held_by(config / "msp.env") == "prefect"
+    assert "msp-access-secret" not in (config / "msp.env").read_text()

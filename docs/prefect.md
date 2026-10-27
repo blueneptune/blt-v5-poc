@@ -200,6 +200,15 @@ uv run --extra prefect blt-prefect-import --to-env cv-toaster
 `collect.sh` keeps working as before for every CommCell that has not
 been imported.
 
+A CommCell imported **before** files were marked (blt before
+2026.11.W01) still has its old copy in the `.env` file. Mark it, which
+blanks that copy and changes no block - not `tokens-from-env`, which
+would copy the stale pair over the block's current one:
+
+```
+uv run --extra prefect blt-prefect-import --mark <name> [<name> ...]
+```
+
 ## Kubernetes manifest
 
 `deploy/kube/blt.yaml` is the same pod as a Kubernetes manifest: a
