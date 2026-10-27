@@ -173,21 +173,41 @@ Center, put it in the `.env` file, then run `tokens-from-env`.
 
 ### One home for each token
 
-A Commvault token pair can be used from one place only: renewing it
-makes the old pair worthless, and the next renewal attempt from the
-other place fails. So once a CommCell is imported:
+A Commvault token pair can be used from one place only. Renewing makes
+the old pair worthless - and on 2026-10-27 a renewal attempted with a
+stale copy made Commvault refuse the current pair too, so a stale copy
+is not just useless but dangerous.
 
-- collect it **from Prefect only**; the copy in its `.env` file goes
-  stale the next time Prefect renews (within two hours);
-- to go back to `collect.sh` for it, first copy the current tokens out
-  of the block, then delete the block (or turn its *collect* off):
+So importing **moves** the tokens. `blt-prefect-import` and
+`blt-prefect-block tokens-from-env` blank the token lines of the `.env`
+file and put `BLT_TOKENS_IN=prefect` in their place. `collect.sh`,
+`scripts/job-lookup.sh` and the other host tools then refuse that
+CommCell, and say where its token is. A file marked so is not imported
+over its block again either; change a block's settings with
+`blt-prefect-block set`.
 
-  ```
-  uv run --extra prefect blt-prefect-import --to-env cv-toaster
-  ```
+A new token for a CommCell already in Prefect: paste it into the `.env`
+file's token lines and run `blt-prefect-block tokens-from-env <name>` -
+the file is blanked again afterwards.
+
+To go back to `collect.sh` for a CommCell, move the tokens back, which
+also removes the mark, then delete the block or turn its *collect* off:
+
+```
+uv run --extra prefect blt-prefect-import --to-env cv-toaster
+```
 
 `collect.sh` keeps working as before for every CommCell that has not
 been imported.
+
+A CommCell imported **before** files were marked (blt before
+2026.11.W01) still has its old copy in the `.env` file. Mark it, which
+blanks that copy and changes no block - not `tokens-from-env`, which
+would copy the stale pair over the block's current one:
+
+```
+uv run --extra prefect blt-prefect-import --mark <name> [<name> ...]
+```
 
 ## Kubernetes manifest
 

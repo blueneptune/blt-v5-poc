@@ -25,6 +25,8 @@ from dotenv import dotenv_values
 from prefect.client.orchestration import get_client
 from pydantic import ValidationError
 
+from blt.collector.tokens import hand_over_tokens
+
 from .blocks import BLOCK_TYPE_SLUG, CommvaultCommCell
 from .importer import env_names
 
@@ -163,6 +165,11 @@ def main() -> None:
                 if copied:
                     block.save(name, overwrite=True)
                 print(f"{name}: {', '.join(copied) if copied else 'no credentials in the file'}")
+                if "access_token" in copied:
+                    # Moved, not copied: the file must not keep a pair
+                    # that the block will renew.
+                    hand_over_tokens(env_file)
+                    print(f"{name}: tokens removed from {env_file}; they live in the block now")
     except (ValueError, ValidationError) as exc:
         sys.exit(str(exc))
 

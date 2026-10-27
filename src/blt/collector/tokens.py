@@ -30,6 +30,18 @@ from loguru import logger
 # How long before the renewable-until date runs start warning about it.
 REGENERATE_WARNING = timedelta(days=7)
 
+TOKEN_KEYS = (
+    "CV_ACCESS_TOKEN",
+    "CV_REFRESH_TOKEN",
+    "CV_TOKEN_EXPIRES_AT",
+    "CV_TOKEN_RENEWABLE_UNTIL",
+)
+# Set in a .env file whose tokens have moved somewhere else (a Prefect
+# block), in place of the tokens. A pair must live in one place: renewing
+# with a copy that has gone stale was seen to make Commvault refuse the
+# current pair as well, so nothing may use - or keep - the file's copy.
+HELD_BY_KEY = "BLT_TOKENS_IN"
+
 
 def _write_private(path: Path, text: str) -> None:
     """Atomic replace, owner-only: a reader sees the old file or the new
@@ -53,6 +65,30 @@ def update_env_file(path: Path, updates: dict[str, str]) -> None:
             lines[index] = f"{match.group(1)}={remaining.pop(match.group(1))}"
     lines.extend(f"{key}={value}" for key, value in remaining.items())
     _write_private(path, "\n".join(lines) + "\n")
+
+
+def hand_over_tokens(path: Path, holder: str = "prefect") -> None:
+    """Blank the token lines of an env file and mark where they went."""
+    update_env_file(path, {**dict.fromkeys(TOKEN_KEYS, ""), HELD_BY_KEY: holder})
+
+
+def tokens_held_by(path: Path) -> str | None:
+    """Where this env file's tokens went, or None if they are its own."""
+    if not path.is_file():
+        return None
+    return (dotenv_values(path).get(HELD_BY_KEY) or "").strip() or None
+
+
+def refuse_moved_tokens(commcell: str, path: Path) -> None:
+    """Stop a host tool from using a token pair that now lives elsewhere."""
+    holder = tokens_held_by(path)
+    if holder:
+        raise SystemExit(
+            f"{commcell}: its Commvault token lives in {holder}, not in {path} "
+            f"({HELD_BY_KEY}={holder}). Use it there - for the cluster, "
+            "`source scripts/use-cluster.sh` first - or move it back with "
+            f"`blt-prefect-import --to-env {path.stem}`."
+        )
 
 
 def _iso(moment: datetime) -> str:

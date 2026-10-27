@@ -8,6 +8,8 @@ from dotenv import dotenv_values
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .tokens import refuse_moved_tokens
+
 
 class CollectorSettings(BaseSettings):
     """Everything one collection run needs. Loaded from two files in the
@@ -144,6 +146,9 @@ def load_settings(commcell: str, config_dir: Path) -> CollectorSettings:
                 "does not exist."
             )
         files.append(credentials_env)
+    # Before the settings are read: a file whose tokens moved has none,
+    # and the reason matters more than "set CV_ACCESS_TOKEN".
+    refuse_moved_tokens(commcell, credentials_env if shared else commcell_env)
     files.append(commcell_env)
     return CollectorSettings(_env_file=tuple(files))  # type: ignore[call-arg]
 
