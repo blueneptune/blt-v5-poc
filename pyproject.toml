@@ -51,7 +51,7 @@ commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.gi
 # The Rubrik SDK (yoki-py-rubrik-sdk). Pinned to a commit of its
 # release/2026.11.W01 until that week's release tags it v0.2.0; then the
 # tag, like the others.
-rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", rev = "d7a4b9a2cf3c9663c817bb57479f07b656c61ab1" }
+rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", rev = "eafdbdc4a2f0d6aa96c38bb7998439246cf6ca0f" }
 
 [build-system]
 requires = ["hatchling"]
