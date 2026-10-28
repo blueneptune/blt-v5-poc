@@ -48,10 +48,10 @@ sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag =
 # a sibling checkout instead:
 #   commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
 commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.2.0" }
-# The Rubrik SDK (yoki-py-rubrik-sdk). A sibling checkout until its
-# repository is on GitHub and tagged; then a tag, like the others - the
-# images cannot build from a path outside this repository.
-rubrik-sdk = { path = "../yoki-py-rubrik-sdk", editable = true }
+# The Rubrik SDK (yoki-py-rubrik-sdk). Pinned to a commit of its
+# release/2026.11.W01 until that week's release tags it v0.2.0; then the
+# tag, like the others.
+rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", rev = "d7a4b9a2cf3c9663c817bb57479f07b656c61ab1" }
 
 [build-system]
 requires = ["hatchling"]
