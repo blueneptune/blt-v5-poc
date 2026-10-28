@@ -44,6 +44,23 @@ deployments:
     work_pool:
       name: blt
 
+  # Rubrik: every account block hourly, ten minutes after Commvault so
+  # the two do not start at the same moment; one account each below.
+  - name: hourly
+    description: Jobs from every Rubrik account block - what `blt-rubrik collect <name>` does.
+    entrypoint: blt.flows.rubrik:rubrik_collect_jobs
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "17 * * * *"
+        timezone: UTC
+
+  - name: per-account
+    description: Jobs from one Rubrik account. Started by blt-rubrik-collect-jobs/hourly.
+    entrypoint: blt.flows.rubrik:rubrik_collect_account
+    work_pool:
+      name: blt
+
   - name: by-hand
     description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
     entrypoint: blt.flows.flows:backfill

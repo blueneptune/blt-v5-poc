@@ -46,6 +46,7 @@ from blt.schemas import (
 )
 
 from .models import CollectionRun, Commcell, InstanceBackupReport, Job, SourceObject
+from .rubrik import rubrik_router
 from .settings import ApiSettings
 
 # Runs that collect "now": the ones a watermark can be taken from. A
@@ -656,4 +657,5 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         )
 
     app.include_router(router)
+    app.include_router(rubrik_router(get_session, require_api_key))
     return app

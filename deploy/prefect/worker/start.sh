@@ -29,6 +29,7 @@ POOL="${BLT_WORK_POOL:-blt}"
 prefect --no-prompt work-pool inspect "$POOL" >/dev/null 2>&1 \
     || prefect --no-prompt work-pool create "$POOL" --type process
 prefect --no-prompt block register -m blt.flows.blocks
+prefect --no-prompt block register -m blt.flows.rubrik
 # How many CommCells may collect at the same time (flows.SLOTS).
 SLOTS="${BLT_MAX_PARALLEL:-4}"
 prefect --no-prompt global-concurrency-limit update blt-commcell-runs --limit "$SLOTS" >/dev/null 2>&1 \

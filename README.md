@@ -2,7 +2,9 @@
 
 Collects job history from one or more Commvault CommCells into Postgres,
 and keeps it current: after every run the database holds each job in the
-state Commvault last reported for it.
+state Commvault last reported for it. Rubrik Security Cloud jobs are
+collected the same way, into a schema of their own - see
+[docs/rubrik.md](docs/rubrik.md).
 
 ```
 collect.sh <commcell>            host, by hand or on a timer
@@ -16,6 +18,7 @@ Guides: **[setting it up against a production CommCell](docs/production-setup.md
 [Commvault Cloud / SaaS](docs/saas-setup.md) ·
 [how a run works, step by step](docs/blt-flow.md) ·
 [the Commvault SDK blt depends on](docs/commvault-sdk.md) ·
+[Rubrik Security Cloud jobs](docs/rubrik.md) ·
 [the lab rig for the eval CommServe, in its own repository](https://github.com/blueneptune/yoki-commvault-lab) ·
 [scripts for checking what was collected](scripts/README.md) ·
 [open items](TODO.md) ·

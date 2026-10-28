@@ -23,6 +23,7 @@ api = [
 ]
 collector = [
     "commvault-sdk",
+    "rubrik-sdk",
     "sdk-primer",
 ]
 # The orchestration layer: flows, blocks, and the worker that runs them.
@@ -38,6 +39,7 @@ blt-migrate = "blt.api.migrate:main"
 blt-lookup = "blt.collector.lookup:main"
 blt-prefect-import = "blt.flows.importer:main"
 blt-prefect-block = "blt.flows.manage:main"
+blt-rubrik = "blt.rubrik.cli:main"
 
 [tool.uv.sources]
 sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag = "v0.1.0" }
@@ -46,6 +48,10 @@ sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag =
 # a sibling checkout instead:
 #   commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
 commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.2.0" }
+# The Rubrik SDK (yoki-py-rubrik-sdk). A sibling checkout until its
+# repository is on GitHub and tagged; then a tag, like the others - the
+# images cannot build from a path outside this repository.
+rubrik-sdk = { path = "../yoki-py-rubrik-sdk", editable = true }
 
 [build-system]
 requires = ["hatchling"]
