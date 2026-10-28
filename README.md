@@ -168,7 +168,9 @@ terms onto them.
 
 [docs/vision.md](docs/vision.md) records the goal - one UI over several
 backup products, an asset refinery, three network zones - with open
-questions and suggestions.
+questions and suggestions. [docs/deployment.md](docs/deployment.md) is how
+it gets there: one set of images run on a podman host or on Kubernetes,
+and the runbook for moving from one to the other.
 
 ## Prefect
 
