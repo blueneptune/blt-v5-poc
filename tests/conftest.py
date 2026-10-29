@@ -25,6 +25,10 @@ API_KEY = "test-key"
 def database_url(monkeypatch: pytest.MonkeyPatch) -> str:
     url = os.environ.get("BLT_TEST_DATABASE_URL")
     if not url:
+        # In CI a missing database is a broken setup, not a reason to skip
+        # half the suite and go green.
+        if os.environ.get("CI"):
+            pytest.fail("BLT_TEST_DATABASE_URL not set in CI")
         pytest.skip("BLT_TEST_DATABASE_URL not set")
     monkeypatch.setenv("BLT_DATABASE_URL", url)
     monkeypatch.setenv("BLT_API_KEY", API_KEY)
