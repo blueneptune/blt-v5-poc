@@ -76,7 +76,7 @@ CommServe to describe itself (`GET /CommServ`) and stops.
 Transport - retries with backoff, typed errors, per-request log ids -
 comes from `sdk-primer-core`'s `APIClient`.
 
-### 4. Where did we leave off? - `GET /commcells/<name>/last-run`
+### 4. Where did we leave off? - `GET /v1/sources/commvault/<name>/last-run`
 
 The collector asks the blt API for the **watermark**: the start time of
 the most recent run for this CommCell that *succeeded*.
@@ -93,7 +93,7 @@ fine on a small CommCell, heavy on a large one.
 History older than the initial window is collected separately; see
 "Backfill" below.
 
-It then records that a run has started (`POST /commcells/<name>/runs`),
+It then records that a run has started (`POST /v1/sources/commvault/<name>/runs`),
 which also registers the CommCell the first time it is seen.
 
 ### 5. Pass one: collect - `POST /Jobs` on the CommServe
@@ -107,7 +107,7 @@ returns:
 Each job's `jobSummary` is translated into blt's own shape
 (in the SDK, then `blt/collector/source.py`) - epoch seconds become timestamps, `0`
 becomes "not set" - with the original JSON kept alongside. Each page is
-posted to the blt API as it arrives (`POST /commcells/<name>/jobs`).
+posted to the blt API as it arrives (`POST /v1/sources/commvault/<name>/jobs`).
 
 ### 6. The upsert - `blt/api/app.py`
 
@@ -129,18 +129,18 @@ not allowed to overwrite it.
 
 The collector asks the API: *which jobs do you still have as active that
 this run did not just send you?*
-(`GET /commcells/<name>/jobs?active=true&unseen_in_run=<run id>`)
+(`GET /v1/sources/commvault/<name>/jobs?active=true&unseen_in_run=<run id>`)
 
 Normally none. But a job can finish and fall outside the window, or be
 removed from the CommServe. For each one returned:
 
 - `GET /Job/<id>` on the CommServe. Found: upsert whatever it is now.
-- Not found: mark it `missing` (`PATCH /commcells/<name>/jobs/<id>`).
+- Not found: mark it `missing` (`PATCH /v1/sources/commvault/<name>/jobs/<id>`).
 
 After this pass, every job the database believes is active really was
 active when this run looked.
 
-### 8. Closing the run - `POST /commcells/<name>/runs/<id>/finish`
+### 8. Closing the run - `POST /v1/sources/commvault/<name>/runs/<id>/finish`
 
 - Both passes completed: the run is recorded as **succeeded**, and its
   start time becomes the new watermark.
@@ -154,14 +154,14 @@ A separate mode for history older than the first run reached, built so a
 long history is never one heavy pull on either side.
 
 1. Asks the API how far back this CommCell has been collected
-   (`GET /commcells/<name>/backfill`).
+   (`GET /v1/sources/commvault/<name>/backfill`).
 2. Asks the CommServe for its oldest finished job (one row), which is
    where to stop.
 3. Walks backwards in time slices (`CV_BACKFILL_CHUNK_HOURS`, default
    24). Each slice is one query for *finished* jobs whose end time falls
    inside it (`endTimeRange`), posted through the same upsert.
 4. Saves its position after every slice
-   (`PUT /commcells/<name>/backfill`), so a failure repeats one slice at
+   (`PUT /v1/sources/commvault/<name>/backfill`), so a failure repeats one slice at
    most.
 5. Stops after `CV_BACKFILL_MAX_CHUNKS` slices (default 30), pausing
    `CV_BACKFILL_PAUSE_SECONDS` between them. Run it again to continue;
@@ -186,7 +186,7 @@ Jobs say what the backup product *did*. Inventory says what it thinks
      Commvault records each database its backup discovery has seen;
    - **protected** - `GET /sql/databases?instance=`, which gives a last
      backup time and job per user database.
-4. Posts all of it, parents first, to `POST /commcells/<name>/objects`.
+4. Posts all of it, parents first, to `POST /v1/sources/commvault/<name>/objects`.
    Each thing is one row in `source_object`, keyed by the source's own
    identifier and updated in place.
 5. When the run finishes successfully, the API marks every object the
@@ -197,7 +197,7 @@ watermark.
 
 ## Validation - `./collect.sh <name> --validate`
 
-Reads the stored inventory through `GET /commcells/<name>/validation`.
+Reads the stored inventory through `GET /v1/sources/commvault/<name>/validation`.
 Commvault is not contacted, so it is cheap and can run as often as
 wanted.
 
@@ -237,7 +237,7 @@ nothing discovered, a note saying so - because a report made only of
 backups would leave out exactly the hosts that have none.
 
 The live report is computed from the inventory
-(`GET /commcells/<name>/instance-report`). Each successful `--inventory`
+(`GET /v1/sources/commvault/<name>/instance-report`). Each successful `--inventory`
 also stores it in `instance_backup_report`, one row per instance per full
 backup job, so earlier backups can be queried or grouped
 (`--report --history`, or SQL). That history is only as fine as the

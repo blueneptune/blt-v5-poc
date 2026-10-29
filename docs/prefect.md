@@ -173,21 +173,41 @@ Center, put it in the `.env` file, then run `tokens-from-env`.
 
 ### One home for each token
 
-A Commvault token pair can be used from one place only: renewing it
-makes the old pair worthless, and the next renewal attempt from the
-other place fails. So once a CommCell is imported:
+A Commvault token pair can be used from one place only. Renewing makes
+the old pair worthless - and on 2026-10-27 a renewal attempted with a
+stale copy made Commvault refuse the current pair too, so a stale copy
+is not just useless but dangerous.
 
-- collect it **from Prefect only**; the copy in its `.env` file goes
-  stale the next time Prefect renews (within two hours);
-- to go back to `collect.sh` for it, first copy the current tokens out
-  of the block, then delete the block (or turn its *collect* off):
+So importing **moves** the tokens. `blt-prefect-import` and
+`blt-prefect-block tokens-from-env` blank the token lines of the `.env`
+file and put `BLT_TOKENS_IN=prefect` in their place. `collect.sh`,
+`scripts/job-lookup.sh` and the other host tools then refuse that
+CommCell, and say where its token is. A file marked so is not imported
+over its block again either; change a block's settings with
+`blt-prefect-block set`.
 
-  ```
-  uv run --extra prefect blt-prefect-import --to-env cv-toaster
-  ```
+A new token for a CommCell already in Prefect: paste it into the `.env`
+file's token lines and run `blt-prefect-block tokens-from-env <name>` -
+the file is blanked again afterwards.
+
+To go back to `collect.sh` for a CommCell, move the tokens back, which
+also removes the mark, then delete the block or turn its *collect* off:
+
+```
+uv run --extra prefect blt-prefect-import --to-env cv-toaster
+```
 
 `collect.sh` keeps working as before for every CommCell that has not
 been imported.
+
+A CommCell imported **before** files were marked (blt before
+2026.11.W01) still has its old copy in the `.env` file. Mark it, which
+blanks that copy and changes no block - not `tokens-from-env`, which
+would copy the stale pair over the block's current one:
+
+```
+uv run --extra prefect blt-prefect-import --mark <name> [<name> ...]
+```
 
 ## Kubernetes manifest
 
@@ -212,6 +232,29 @@ a pipe, so the filled-in copy with passwords is never written to disk.
 - For a real cluster, the next step is one Deployment per service with
   a Service in front of each, and the images pushed to a registry. One
   pod keeps the local setup identical to `deploy/up.sh` for now.
+
+## On the Kubernetes cluster
+
+blt also runs on the lab's RKE2 cluster (manifests in `yoki-blt-infra`,
+`clusters/core/blt`): the API at `https://api.blt.lab.ethos.home`, Prefect
+at `https://prefect.blt.lab.ethos.home`, same login and API key as
+`config/blt.env`. The commands above work against it unchanged once the
+shell points there:
+
+```
+source scripts/use-cluster.sh
+uv run --extra prefect blt-prefect-block show
+uv run --extra prefect blt-prefect-block tokens-from-env <name>
+```
+
+`use-cluster.sh` sets `PREFECT_API_URL`, the login, `BLT_API_URL` and
+`BLT_API_KEY` for that shell only (environment variables win over
+`blt.env`), and makes Python trust the lab's root CA. Without it - or
+without `PREFECT_API_URL` at all - the Prefect CLI quietly starts an
+empty Prefect of its own and reports that no block exists.
+
+Inside the cluster, `kubectl -n blt exec deploy/prefect-worker --
+blt-prefect-block show` works too, but cannot read local `.env` files.
 
 ## Looking at it
 

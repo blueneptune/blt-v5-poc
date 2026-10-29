@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlmodel import SQLModel
 
 import blt.api.models  # noqa: F401  (registers the tables on SQLModel.metadata)
+import blt.api.rubrik  # noqa: F401  (and Rubrik's, in their own schema)
 from blt.api.settings import ApiSettings
 
 target_metadata = SQLModel.metadata

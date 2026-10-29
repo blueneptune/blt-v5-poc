@@ -2,7 +2,8 @@
 Postgres-specific, so there is no SQLite stand-in).
 
 Point BLT_TEST_DATABASE_URL at a scratch database - its public schema is
-dropped and rebuilt from the migrations for every test:
+dropped and rebuilt from the migrations for every test (with the
+rubrik schema):
 
     BLT_TEST_DATABASE_URL=postgresql+psycopg://blt:<pw>@127.0.0.1:5433/blt_test uv run pytest
 """
@@ -24,12 +25,17 @@ API_KEY = "test-key"
 def database_url(monkeypatch: pytest.MonkeyPatch) -> str:
     url = os.environ.get("BLT_TEST_DATABASE_URL")
     if not url:
+        # In CI a missing database is a broken setup, not a reason to skip
+        # half the suite and go green.
+        if os.environ.get("CI"):
+            pytest.fail("BLT_TEST_DATABASE_URL not set in CI")
         pytest.skip("BLT_TEST_DATABASE_URL not set")
     monkeypatch.setenv("BLT_DATABASE_URL", url)
     monkeypatch.setenv("BLT_API_KEY", API_KEY)
 
     engine = create_engine(url)
     with engine.begin() as connection:
+        connection.execute(text("DROP SCHEMA IF EXISTS rubrik CASCADE"))
         connection.execute(text("DROP SCHEMA public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))
     engine.dispose()

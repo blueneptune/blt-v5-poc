@@ -57,8 +57,8 @@ class JobIn(BaseModel):
     """One job as of one collection. `raw` is Commvault's jobSummary
     untouched, so a field nobody modelled yet is still recoverable."""
 
-    job_id: int
-    status: str
+    job_id: int = Field(description="Commvault's job id.")
+    status: str = Field(description="Commvault status, as Commvault words it.")
     job_type: str | None = None
     operation: str | None = None
     backup_level: str | None = None
@@ -80,12 +80,21 @@ class JobIn(BaseModel):
     failed_files: int | None = None
     pending_reason: str | None = None
     is_aged: bool | None = None
-    raw: dict[str, Any] = Field(default_factory=dict)
+    raw: dict[str, Any] = Field(
+        default_factory=dict, description="Commvault's jobSummary for the job, untouched."
+    )
 
 
 class JobBatch(BaseModel):
-    run_id: int | None = None
-    collected_at: AwareDatetime
+    run_id: int | None = Field(
+        default=None, description="The run this batch belongs to: the `id` from `POST .../runs`."
+    )
+    collected_at: AwareDatetime = Field(
+        description=(
+            "When this was read from the source. Nothing older than what is already stored "
+            "overwrites it."
+        )
+    )
     jobs: list[JobIn]
 
 
@@ -103,16 +112,32 @@ class JobOut(JobIn):
     model_config = ConfigDict(from_attributes=True)
 
     commcell_id: int
-    state: str
-    is_active: bool
-    first_seen_at: AwareDatetime
-    last_collected_at: AwareDatetime
-    last_seen_run_id: int | None = None
+    state: str = Field(
+        description=(
+            "blt's state for `status`: running, queued, waiting, pending, suspended, stopping, "
+            "completed, completed_with_errors, completed_with_warnings, committed, failed, killed,"
+            " no_run, missing (the CommCell no longer knows the job), or unknown."
+        )
+    )
+    is_active: bool = Field(
+        description="Still going to change. A status blt does not recognise counts as active."
+    )
+    first_seen_at: AwareDatetime = Field(description="When blt first collected the job.")
+    last_collected_at: AwareDatetime = Field(
+        description="When this state of the job was read from the CommCell."
+    )
+    last_seen_run_id: int | None = Field(
+        default=None, description="The last run that collected the job."
+    )
 
 
 class UpsertResult(BaseModel):
-    received: int
-    written: int
+    received: int = Field(description="Items in the batch.")
+    written: int = Field(
+        description=(
+            "Items inserted or changed. Fewer than received when some were already stored as newer."
+        )
+    )
 
 
 # initial  - first ever run: what is active plus a short recent window
@@ -125,18 +150,30 @@ RunStatus = Literal["running", "succeeded", "failed"]
 
 
 class RunStart(BaseModel):
-    mode: RunMode
-    started_at: AwareDatetime
-    lookup_seconds: int
+    mode: RunMode = Field(
+        description=(
+            "initial: first ever run, active jobs plus a short recent window. delta: everything "
+            "since the watermark. full: the whole history in one query. backfill: older history, a"
+            " time slice at a time. inventory: what the CommCell says exists, not jobs."
+        )
+    )
+    started_at: AwareDatetime = Field(
+        description=(
+            "When the run started. A succeeded collection run's start becomes the watermark."
+        )
+    )
+    lookup_seconds: int = Field(description="How far before started_at the run looked for jobs.")
 
 
 class RunFinish(BaseModel):
     status: Literal["succeeded", "failed"]
     finished_at: AwareDatetime
     jobs_collected: int = 0
-    jobs_reconciled: int = 0
-    jobs_missing: int = 0
-    error: str | None = None
+    jobs_reconciled: int = Field(default=0, description="Active jobs checked on one by one.")
+    jobs_missing: int = Field(
+        default=0, description="Jobs marked as no longer known to the CommCell."
+    )
+    error: str | None = Field(default=None, description="Why a failed run failed.")
 
 
 class RunOut(BaseModel):
@@ -169,23 +206,34 @@ class ObjectIn(BaseModel):
     """
 
     kind: ObjectKind
-    source_key: str
+    source_key: str = Field(description="The source's own stable id for it, unique per kind.")
     name: str
-    parent_kind: ObjectKind | None = None
-    parent_key: str | None = None
-    # What sort of thing within its kind: "SQL Server", "File System", ...
-    app_type: str | None = None
-    # Protection evidence, where the source reports it per object.
-    last_backup_at: AwareDatetime | None = None
-    last_backup_job_id: int | None = None
-    # The last *full* backup that included it, where the source says.
-    last_full_job_id: int | None = None
-    attributes: dict[str, Any] = Field(default_factory=dict)
+    parent_kind: ObjectKind | None = Field(
+        default=None, description="The parent's kind. The parent must already have been sent."
+    )
+    parent_key: str | None = Field(default=None, description="The parent's source_key.")
+    app_type: str | None = Field(
+        default=None,
+        description='What sort of thing within its kind: "SQL Server", "File System", ...',
+    )
+    last_backup_at: AwareDatetime | None = Field(
+        default=None, description="Its last backup, where the source reports one per object."
+    )
+    last_backup_job_id: int | None = Field(
+        default=None, description="The job that took that backup."
+    )
+    last_full_job_id: int | None = Field(
+        default=None,
+        description="The last full backup job that included it, where the source says.",
+    )
+    attributes: dict[str, Any] = Field(
+        default_factory=dict, description="Anything else the source says about it."
+    )
 
 
 class ObjectBatch(BaseModel):
-    run_id: int
-    collected_at: AwareDatetime
+    run_id: int = Field(description="The inventory run this batch belongs to.")
+    collected_at: AwareDatetime = Field(description="When this was read from the source.")
     objects: list[ObjectIn]
 
 
@@ -200,7 +248,9 @@ class ObjectOut(BaseModel):
     app_type: str | None = None
     last_backup_at: AwareDatetime | None = None
     last_backup_job_id: int | None = None
-    present: bool
+    present: bool = Field(
+        description="Listed by the latest inventory. False: it was known, and is gone."
+    )
     first_seen_at: AwareDatetime
     last_seen_at: AwareDatetime
     attributes: dict[str, Any] = Field(default_factory=dict)
@@ -254,7 +304,14 @@ class ValidationRow(BaseModel):
     kind: ObjectKind
     name: str
     app_type: str | None = None
-    verdict: Verdict
+    verdict: Verdict = Field(
+        description=(
+            "ok: backed up within the allowed age. stale: backed up, but longer ago. unprotected: "
+            "known to the source, with no backup. empty: an instance with no databases known under"
+            " it. unverified: in backup content, but the source gives no per-object backup time "
+            "(SQL Server system databases). gone: the latest inventory no longer lists it."
+        )
+    )
     detail: str
     last_backup_at: AwareDatetime | None = None
     last_backup_job_id: int | None = None
@@ -274,8 +331,8 @@ class ValidationReport(BaseModel):
     sources: list[str]
     inventory_at: AwareDatetime | None = None
     max_age_hours: float
-    counts: dict[str, int]
-    problems: int
+    counts: dict[str, int] = Field(description="Rows per verdict.")
+    problems: int = Field(description="Rows that are stale, unprotected or empty.")
     rows: list[ValidationRow]
 
 
@@ -294,8 +351,10 @@ class BackfillState(BaseModel):
 
 
 class BackfillUpdate(BaseModel):
-    backfilled_to: AwareDatetime
-    complete: bool = False
+    backfilled_to: AwareDatetime = Field(description="The oldest point now collected.")
+    complete: bool = Field(
+        default=False, description="The start of the CommCell's history has been reached."
+    )
 
 
 class LastRun(BaseModel):

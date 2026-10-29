@@ -81,7 +81,7 @@ def _inventory(*levels: list[ObjectIn]):  # noqa: ANN202
 
 
 def _verdicts(http: TestClient, **params: float) -> dict[str, str]:
-    report = http.get("/commcells/prod/validation", params=params).json()
+    report = http.get("/v1/sources/commvault/prod/validation", params=params).json()
     return {row["name"]: row["verdict"] for row in report["rows"]}
 
 
@@ -135,7 +135,7 @@ def test_every_verdict(http: TestClient, store: BltStore) -> None:
         # a file system instance with no databases is not.
         "sql02": "empty",
     }
-    report = http.get("/commcells/prod/validation").json()
+    report = http.get("/v1/sources/commvault/prod/validation").json()
     assert report["problems"] == 3  # stale + unprotected + empty
     assert report["sources"] == ["commvault"]
     assert report["inventory_at"] is not None
@@ -157,13 +157,15 @@ def test_a_complete_inventory_marks_what_it_did_not_see_as_gone(
         ),
         store,
     )
-    first_seen = {o["name"]: o["first_seen_at"] for o in http.get("/commcells/prod/objects").json()}
+    first_seen = {
+        o["name"]: o["first_seen_at"] for o in http.get("/v1/sources/commvault/prod/objects").json()
+    }
 
     # Next inventory: "tmp" has been dropped.
     run_inventory(_inventory(clients, instances, [_database("6", "sales", fresh)]), store)
 
     assert _verdicts(http) == {"sales": "ok", "tmp": "gone"}
-    objects = {o["name"]: o for o in http.get("/commcells/prod/objects").json()}
+    objects = {o["name"]: o for o in http.get("/v1/sources/commvault/prod/objects").json()}
     assert objects["tmp"]["present"] is False
     # Same rows, updated in place.
     assert objects["sales"]["first_seen_at"] == first_seen["sales"]
@@ -194,14 +196,14 @@ def test_a_failed_inventory_marks_nothing_gone(http: TestClient, store: BltStore
     # It saw less because it stopped, not because the database vanished.
     assert _verdicts(http) == {"sales": "ok"}
     # And an inventory run never moves the job watermark.
-    last = http.get("/commcells/prod/last-run").json()
+    last = http.get("/v1/sources/commvault/prod/last-run").json()
     assert last["last_run"]["mode"] == "inventory"
     assert last["last_run"]["status"] == "failed"
 
 
 def test_children_need_their_parents_first(http: TestClient, store: BltStore) -> None:
     run = http.post(
-        "/commcells/prod/runs",
+        "/v1/sources/commvault/prod/runs",
         json={"mode": "inventory", "started_at": _now().isoformat(), "lookup_seconds": 0},
     ).json()
     body = {
@@ -209,7 +211,7 @@ def test_children_need_their_parents_first(http: TestClient, store: BltStore) ->
         "collected_at": _now().isoformat(),
         "objects": [_database("99", "orphan").model_dump(mode="json")],
     }
-    response = http.post("/commcells/prod/objects", json=body)
+    response = http.post("/v1/sources/commvault/prod/objects", json=body)
     assert response.status_code == 422
     assert "send parents first" in response.text
 
@@ -219,7 +221,7 @@ def test_validation_shows_the_status_of_the_last_backup_job(
 ) -> None:
     # blt already collected job 116 as Completed...
     http.post(
-        "/commcells/prod/jobs",
+        "/v1/sources/commvault/prod/jobs",
         json={
             "collected_at": _now().isoformat(),
             "jobs": [JobIn(job_id=116, status="Completed").model_dump(mode="json")],
@@ -234,7 +236,7 @@ def test_validation_shows_the_status_of_the_last_backup_job(
         ),
         store,
     )
-    rows = {r["name"]: r for r in http.get("/commcells/prod/validation").json()["rows"]}
+    rows = {r["name"]: r for r in http.get("/v1/sources/commvault/prod/validation").json()["rows"]}
     assert rows["sales"]["last_backup_job_status"] == "Completed"
     # ...and has never seen job 999.
     assert rows["hr"]["last_backup_job_status"] is None
@@ -374,13 +376,13 @@ def test_commvault_inventory_separates_existing_from_backed_up() -> None:
 
 
 def _report(http: TestClient, **params: str) -> dict[str, dict]:
-    rows = http.get("/commcells/prod/instance-report", params=params).json()
+    rows = http.get("/v1/sources/commvault/prod/instance-report", params=params).json()
     return {row["instance"]: row for row in rows}
 
 
 def _collect_job(http: TestClient, job_id: int, status: str = "Completed") -> None:
     http.post(
-        "/commcells/prod/jobs",
+        "/v1/sources/commvault/prod/jobs",
         json={
             "collected_at": _now().isoformat(),
             "jobs": [JobIn(job_id=job_id, status=status).model_dump(mode="json")],
@@ -472,7 +474,9 @@ def test_report_cannot_see_databases_added_since_the_backup(
     assert (row["job_id"], row["discovered"], row["backed_up"]) == (130, 2, 2)
 
     # History keeps one row per full backup job.
-    history = http.get("/commcells/prod/instance-report", params={"history": "true"}).json()
+    history = http.get(
+        "/v1/sources/commvault/prod/instance-report", params={"history": "true"}
+    ).json()
     assert [(r["job_id"], r["discovered"], r["backed_up"]) for r in history] == [
         (112, 1, 1),
         (130, 2, 2),
@@ -501,7 +505,9 @@ def test_report_instance_with_no_sql_backup_still_gets_a_row(
     row = report["sql02"]
     assert (row["job_id"], row["discovered"], row["backed_up"]) == (None, 0, 0)
     assert "no SQL backup has ever run" in row["notes"]
-    history = http.get("/commcells/prod/instance-report", params={"history": "true"}).json()
+    history = http.get(
+        "/v1/sources/commvault/prod/instance-report", params={"history": "true"}
+    ).json()
     assert [(r["instance"], r["job_id"]) for r in history] == [("sql02", None)]
 
 
@@ -529,7 +535,7 @@ def test_one_unreadable_client_is_skipped_not_fatal(http: TestClient, store: Blt
 
     assert len(skipped) == 1 and skipped[0].startswith("client broken:")
     # What could be read is stored...
-    objects = {o["name"]: o for o in http.get("/commcells/prod/objects").json()}
+    objects = {o["name"]: o for o in http.get("/v1/sources/commvault/prod/objects").json()}
     assert {"good", "broken", "old"} <= set(objects)
     # ...but an inventory with a hole in it is not a complete one, so it
     # is recorded as failed and nothing is declared gone.

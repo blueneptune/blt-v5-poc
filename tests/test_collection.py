@@ -75,7 +75,7 @@ def _job(job_id: int, status: str, **fields: object) -> JobIn:
 
 
 def _states(http: TestClient, commcell: str = "prod") -> dict[int, str]:
-    jobs = http.get(f"/commcells/{commcell}/jobs").json()
+    jobs = http.get(f"/v1/sources/commvault/{commcell}/jobs").json()
     return {job["job_id"]: job["state"] for job in jobs}
 
 
@@ -85,7 +85,7 @@ def test_full_then_delta_then_reconcile(http: TestClient, blt_api: APIClient) ->
     clock = Clock(T0)
 
     # Never collected: no watermark, and that is not an error.
-    assert http.get("/commcells/prod/last-run").json()["watermark"] is None
+    assert http.get("/v1/sources/commvault/prod/last-run").json()["watermark"] is None
 
     # --- Run 1: nothing stored yet, so what is active plus a short window.
     commvault.listed = [
@@ -102,7 +102,7 @@ def test_full_then_delta_then_reconcile(http: TestClient, blt_api: APIClient) ->
     assert commvault.lookups == [6 * 3600]
     assert commvault.looked_up == []  # everything active was just seen
     assert _states(http) == {1: "completed", 2: "running", 3: "queued", 4: "waiting"}
-    first_seen = http.get("/commcells/prod/jobs/2").json()["first_seen_at"]
+    first_seen = http.get("/v1/sources/commvault/prod/jobs/2").json()["first_seen_at"]
 
     # --- Run 2, an hour later. Job 2 finished and shows up in the delta
     # window. Job 3 finished but is NOT in the listing; job 4 is gone from
@@ -127,16 +127,16 @@ def test_full_then_delta_then_reconcile(http: TestClient, blt_api: APIClient) ->
     }
 
     # One row per job, updated in place: same first_seen_at, new state.
-    job2 = http.get("/commcells/prod/jobs/2").json()
+    job2 = http.get("/v1/sources/commvault/prod/jobs/2").json()
     assert job2["first_seen_at"] == first_seen
     assert job2["percent_complete"] == 100
     assert job2["last_seen_run_id"] == second.id
 
     # "What is still in flight?" is now just job 5.
-    active = http.get("/commcells/prod/jobs", params={"active": "true"}).json()
+    active = http.get("/v1/sources/commvault/prod/jobs", params={"active": "true"}).json()
     assert [job["job_id"] for job in active] == [5]
 
-    assert http.get("/commcells/prod/last-run").json()[
+    assert http.get("/v1/sources/commvault/prod/last-run").json()[
         "watermark"
     ] == second.started_at.isoformat().replace("+00:00", "Z")
 
@@ -166,7 +166,7 @@ def test_a_failed_run_does_not_move_the_watermark(http: TestClient, blt_api: API
     else:
         raise AssertionError("expected the run to fail")
 
-    last = http.get("/commcells/prod/last-run").json()
+    last = http.get("/v1/sources/commvault/prod/last-run").json()
     assert last["last_run"]["status"] == "failed"
     assert "CommServe went away" in last["last_run"]["error"]
     # Still run 1's start: the next run re-covers what the failed one didn't finish.
@@ -192,7 +192,7 @@ def test_an_older_batch_cannot_overwrite_a_newer_one(http: TestClient) -> None:
             "collected_at": at.isoformat(),
             "jobs": [_job(1, status).model_dump(mode="json")],
         }
-        return http.post("/commcells/prod/jobs", json=body).json()
+        return http.post("/v1/sources/commvault/prod/jobs", json=body).json()
 
     assert post("Completed", T0 + timedelta(minutes=5))["written"] == 1
     assert post("Running", T0)["written"] == 0
@@ -200,7 +200,10 @@ def test_an_older_batch_cannot_overwrite_a_newer_one(http: TestClient) -> None:
 
 
 def test_requests_without_the_key_are_rejected(http: TestClient) -> None:
-    assert http.get("/commcells/prod/last-run", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert (
+        http.get("/v1/sources/commvault/prod/last-run", headers={"X-API-Key": "wrong"}).status_code
+        == 401
+    )
     assert http.get("/healthz", headers={"X-API-Key": "wrong"}).status_code == 200
 
 
@@ -247,22 +250,22 @@ def test_backfill_walks_back_in_slices_and_resumes(http: TestClient, blt_api: AP
     # Slices are contiguous, newest first.
     for newer, older in zip(commvault.slices, commvault.slices[1:], strict=False):
         assert older[1] == newer[0]
-    state = http.get("/commcells/prod/backfill").json()
+    state = http.get("/v1/sources/commvault/prod/backfill").json()
     assert state["complete"] is False
     assert datetime.fromisoformat(state["backfilled_to"]) == commvault.slices[-1][0]
     stored = set(_states(http))
     assert {101, 102}.issubset(stored) and 109 not in stored
 
     # A backfill run must not move the watermark the deltas work from.
-    assert datetime.fromisoformat(http.get("/commcells/prod/last-run").json()["watermark"]) == (
-        initial.started_at
-    )
+    assert datetime.fromisoformat(
+        http.get("/v1/sources/commvault/prod/last-run").json()["watermark"]
+    ) == (initial.started_at)
 
     # Second batch picks up exactly where the first stopped, and finishes.
     resumed_from = commvault.slices[-1][0]
     run_backfill(commvault, store, chunk_hours=24, max_chunks=50, now=clock, sleep=lambda _: None)
     assert commvault.slices[4][1] == resumed_from
-    assert http.get("/commcells/prod/backfill").json()["complete"] is True
+    assert http.get("/v1/sources/commvault/prod/backfill").json()["complete"] is True
     assert set(_states(http)) == {1, *range(101, 110)}
     # It stopped at the oldest job rather than walking back ten years.
     assert len(commvault.slices) < 20
@@ -283,4 +286,16 @@ def test_backfill_after_a_forced_full_has_nothing_to_do(
 
     assert run_backfill(commvault, store, now=Clock(T0), sleep=lambda _: None) is None
     assert commvault.slices == []
-    assert http.get("/commcells/prod/backfill").json()["complete"] is True
+    assert http.get("/v1/sources/commvault/prod/backfill").json()["complete"] is True
+
+
+def test_the_paths_from_before_v1_still_work_and_say_they_are_deprecated(
+    http: TestClient,
+) -> None:
+    old = http.get("/commcells/prod/last-run")
+    new = http.get("/v1/sources/commvault/prod/last-run")
+
+    assert old.status_code == new.status_code == 200
+    assert old.json() == new.json()
+    assert old.headers["Deprecation"] == "true" and "Deprecation" not in new.headers
+    assert http.get("/rubrik/acme/last-run").headers["Deprecation"] == "true"
