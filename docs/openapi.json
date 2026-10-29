@@ -1450,6 +1450,27 @@
             "description": "Only jobs still running (true) or finished (false)."
           },
           {
+            "name": "activity_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these activity types, any case; repeat for several: `?activity_type=Backup&activity_type=Replication`. blt collects every type, including RSC's own Index, Diagnostic, Classification and RadarAnalysis runs.",
+              "title": "Activity Type"
+            },
+            "description": "Only these activity types, any case; repeat for several: `?activity_type=Backup&activity_type=Replication`. blt collects every type, including RSC's own Index, Diagnostic, Classification and RadarAnalysis runs."
+          },
+          {
             "name": "status",
             "in": "query",
             "required": false,
@@ -2898,6 +2919,18 @@
             ],
             "title": "Progress"
           },
+          "percent_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Complete",
+            "description": "`progress` as a number."
+          },
           "sla_domain_name": {
             "anyOf": [
               {
@@ -2908,6 +2941,133 @@
               }
             ],
             "title": "Sla Domain Name"
+          },
+          "last_activity_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity Message",
+            "description": "The latest event's message, as RSC words it."
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason",
+            "description": "Why the job failed, if it did."
+          },
+          "cause_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Code"
+          },
+          "cause_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Message"
+          },
+          "cause_error_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Reason"
+          },
+          "cause_error_remedy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Remedy"
+          },
+          "attempt_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Number"
+          },
+          "is_on_demand": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is On Demand",
+            "description": "Run by hand rather than by its SLA domain."
+          },
+          "data_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Transferred",
+            "description": "Bytes."
+          },
+          "logical_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Size",
+            "description": "Bytes."
+          },
+          "effective_throughput": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Throughput",
+            "description": "Bytes per second."
           },
           "start_time": {
             "anyOf": [
@@ -2931,7 +3091,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Updated"
+            "title": "Last Updated",
+            "description": "When RSC last changed the job. RSC has no end time: for a finished job, this is when it ended."
           },
           "raw": {
             "additionalProperties": true,
@@ -3092,6 +3253,18 @@
             ],
             "title": "Progress"
           },
+          "percent_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Complete",
+            "description": "`progress` as a number."
+          },
           "sla_domain_name": {
             "anyOf": [
               {
@@ -3102,6 +3275,133 @@
               }
             ],
             "title": "Sla Domain Name"
+          },
+          "last_activity_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity Message",
+            "description": "The latest event's message, as RSC words it."
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason",
+            "description": "Why the job failed, if it did."
+          },
+          "cause_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Code"
+          },
+          "cause_error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Message"
+          },
+          "cause_error_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Reason"
+          },
+          "cause_error_remedy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause Error Remedy"
+          },
+          "attempt_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Number"
+          },
+          "is_on_demand": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is On Demand",
+            "description": "Run by hand rather than by its SLA domain."
+          },
+          "data_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Transferred",
+            "description": "Bytes."
+          },
+          "logical_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Size",
+            "description": "Bytes."
+          },
+          "effective_throughput": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Throughput",
+            "description": "Bytes per second."
           },
           "start_time": {
             "anyOf": [
@@ -3125,7 +3425,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Updated"
+            "title": "Last Updated",
+            "description": "When RSC last changed the job. RSC has no end time: for a finished job, this is when it ended."
           },
           "raw": {
             "additionalProperties": true,

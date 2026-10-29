@@ -80,6 +80,7 @@ class RubrikJob(SQLModel, table=True):
         Index("ix_rubrik_job_account_active", "account_id", "is_active"),
         Index("ix_rubrik_job_account_updated", "account_id", "last_updated"),
         Index("ix_rubrik_job_account_start", "account_id", "start_time"),
+        Index("ix_rubrik_job_account_type_updated", "account_id", "activity_type", "last_updated"),
         {"schema": SCHEMA},
     )
 
@@ -99,7 +100,19 @@ class RubrikJob(SQLModel, table=True):
     is_active: bool = False
     severity: str | None = None
     progress: str | None = None
+    percent_complete: float | None = None
     sla_domain_name: str | None = None
+    last_activity_message: str | None = None
+    failure_reason: str | None = None
+    cause_error_code: str | None = None
+    cause_error_message: str | None = None
+    cause_error_reason: str | None = None
+    cause_error_remedy: str | None = None
+    attempt_number: int | None = None
+    is_on_demand: bool | None = None
+    data_transferred: int | None = Field(default=None, sa_column=Column(BigInteger))
+    logical_size: int | None = Field(default=None, sa_column=Column(BigInteger))
+    effective_throughput: int | None = Field(default=None, sa_column=Column(BigInteger))
     start_time: datetime | None = _ts()
     last_updated: datetime | None = _ts()
     raw: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False))
@@ -247,6 +260,14 @@ def rubrik_router(
         active: Annotated[
             bool | None, Query(description="Only jobs still running (true) or finished (false).")
         ] = None,
+        activity_type: Annotated[
+            list[str] | None,
+            Query(
+                description="Only these activity types, any case; repeat for several: "
+                "`?activity_type=Backup&activity_type=Replication`. blt collects every type, "
+                "including RSC's own Index, Diagnostic, Classification and RadarAnalysis runs."
+            ),
+        ] = None,
         status_is: Annotated[
             str | None,
             Query(alias="status", description="RSC's status, any case: Success, Failure, ..."),
@@ -265,6 +286,9 @@ def rubrik_router(
         query = select(RubrikJob).where(RubrikJob.account_id == account.id)
         if active is not None:
             query = query.where(RubrikJob.is_active == active)
+        if activity_type:
+            wanted = [name.lower() for name in activity_type]
+            query = query.where(func.lower(RubrikJob.activity_type).in_(wanted))
         if status_is is not None:
             query = query.where(func.lower(RubrikJob.status) == status_is.lower())
         if object_name:

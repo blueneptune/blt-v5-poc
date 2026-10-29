@@ -23,14 +23,16 @@ T0 = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
 
 def job(key: str, status: str = "Success", updated: datetime = T0, **fields: object) -> RubrikJobIn:
     return RubrikJobIn(
-        series_key=key,
-        status=status,
-        is_active=status == "Running",
-        object_name=f"vm-{key}",
-        activity_type="Backup",
-        start_time=updated - timedelta(minutes=30),
-        last_updated=updated,
-        **fields,  # type: ignore[arg-type]
+        **{  # type: ignore[arg-type]
+            "series_key": key,
+            "status": status,
+            "is_active": status == "Running",
+            "object_name": f"vm-{key}",
+            "activity_type": "Backup",
+            "start_time": updated - timedelta(minutes=30),
+            "last_updated": updated,
+            **fields,
+        }
     )
 
 
@@ -153,6 +155,46 @@ def test_jobs_can_be_filtered(http: TestClient) -> None:
     assert keys("?limit=1&offset=1") == ["b"]
 
 
+def test_jobs_can_be_filtered_by_activity_type(http: TestClient) -> None:
+    jobs = [
+        job("a", updated=T0),
+        job("b", updated=T0 + timedelta(minutes=1), activity_type="Index"),
+        job("c", updated=T0 + timedelta(minutes=2), activity_type="Replication"),
+        job("d", updated=T0 + timedelta(minutes=3), activity_type="RadarAnalysis"),
+    ]
+    http.post(
+        "/rubrik/acme/jobs",
+        json={"collected_at": T0.isoformat(), "jobs": [j.model_dump(mode="json") for j in jobs]},
+    )
+
+    def keys(query: str) -> list[str]:
+        return [j["series_key"] for j in http.get(f"/rubrik/acme/jobs{query}").json()]
+
+    assert keys("") == ["d", "c", "b", "a"]  # every type is kept
+    assert keys("?activity_type=backup") == ["a"]
+    assert keys("?activity_type=Backup&activity_type=REPLICATION") == ["c", "a"]
+
+
+def test_the_job_details_are_stored(http: TestClient) -> None:
+    details = {
+        "failure_reason": "Snapshot failed",
+        "cause_error_code": "RBK-1",
+        "last_activity_message": "Failed to back up",
+        "percent_complete": 14.0,
+        "attempt_number": 2,
+        "is_on_demand": True,
+        "logical_size": 107374182400,  # more than an int column holds
+    }
+    body = {
+        "collected_at": T0.isoformat(),
+        "jobs": [job("a", "Failure", **details).model_dump(mode="json")],
+    }
+    http.post("/rubrik/acme/jobs", json=body)
+
+    stored = http.get("/rubrik/acme/jobs").json()[0]
+    assert {name: stored[name] for name in details} == details
+
+
 def test_an_unknown_account_has_no_jobs_but_a_normal_last_run(http: TestClient) -> None:
     assert http.get("/rubrik/nobody/jobs").status_code == 404
     assert http.get("/rubrik/nobody/last-run").json() == {
@@ -185,6 +227,13 @@ def test_an_activity_series_becomes_a_job() -> None:
             "objectName": "sql01",
             "objectType": "Mssql",
             "slaDomainName": "Gold",
+            "progress": "14%",
+            "failureReason": "",
+            "causeErrorMessage": "Snapshot failed",
+            "lastActivityMessage": "Taking snapshot",
+            "attemptNumber": 1,
+            "isOnDemand": False,
+            "dataTransferred": 52428800,
             "cluster": {"id": "c-1", "name": "rubrik-east"},
         }
     )
@@ -197,6 +246,11 @@ def test_an_activity_series_becomes_a_job() -> None:
     assert out.cluster_name == "rubrik-east"
     assert out.last_updated == datetime(2026, 10, 28, 10, 30, tzinfo=UTC)
     assert out.raw["objectName"] == "sql01"
+    assert out.percent_complete == 14.0
+    assert out.failure_reason is None and out.cause_error_message == "Snapshot failed"
+    assert out.last_activity_message == "Taking snapshot"
+    assert out.attempt_number == 1 and out.is_on_demand is False
+    assert out.data_transferred == 52428800
 
 
 def test_the_block_holds_the_service_account_and_hides_the_secret() -> None:

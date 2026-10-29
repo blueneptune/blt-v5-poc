@@ -6,10 +6,10 @@ series* - through the
 [Rubrik SDK](https://github.com/blueneptune/yoki-py-rubrik-sdk), into
 its own `rubrik` schema. Hourly on Prefect, beside Commvault.
 
-> **Status (2026-10-28): built against Rubrik's published queries; not
-> yet run against a real RSC account.** The steps below start with
-> `rubrik-probe` for that reason - it checks every name blt relies on
-> before anything is collected.
+> **Status (2026-10-29): checked against a live RSC account** -
+> `rubrik-probe` passes, and masked samples (`rubrik-sample`,
+> `rubrik-mask`) parse in full. Not yet collected into blt from a live
+> account.
 
 ## How it works
 
@@ -26,6 +26,16 @@ its own `rubrik` schema. Hourly on Prefect, beside Commvault.
   `full` parameter) takes everything changed within a year.
 - Each job is one row in `rubrik.job`, overwritten with its latest
   state - as `job` is for Commvault. Its full RSC record is in `raw`.
+- **Every activity type is collected**, not only backups. In a day of
+  the first live account, over half were RSC's own work: Index,
+  Diagnostic, Classification, RadarAnalysis, Configuration,
+  THREAT_MONITORING, beside Backup and Replication. Readers that want
+  backups ask for them (`?activity_type=Backup`).
+- Besides status and times, each row has why it failed
+  (`failure_reason`, `cause_error_*`), the latest event's message,
+  progress as a number, attempt, whether it was run on demand, and
+  sizes in bytes. RSC has **no end time**: for a finished job,
+  `last_updated` is when it ended.
 
 | Table | |
 |---|---|
@@ -86,20 +96,21 @@ uv run --extra prefect blt-rubrik collect acme --service-account ~/blt-reader.js
 ```
 curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/jobs?active=true"
 curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/jobs?status=failure&limit=20"
+curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/jobs?activity_type=Backup&activity_type=Replication"
 curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/last-run"
 ```
 
-`/rubrik/{account}/jobs` takes `active`, `status` (any case),
+`/rubrik/{account}/jobs` takes `active`, `activity_type` (any case,
+repeatable), `status` (any case),
 `object_name` (part of it, any case), `updated_after`, `limit`,
 `offset`; newest change first.
 
 ## Not done yet
 
-- **Run against a real account** (step 2), and correct the SDK where RSC
-  differs.
-- **Failure reasons.** The list query leaves out each job's event
-  timeline to stay light; the message of a failed job's last event is
-  the next thing to add.
+- **Collect from a live account** (steps 3 and 4).
+- **See a failure.** The first samples (a day, 64 jobs) had none, so how
+  RSC fills `failure_reason` and the `cause_error_*` fields is not yet
+  seen.
 - **Jobs RSC forgets.** A job blt holds as running that RSC stops
   reporting (aged out) stays "running" in blt. Commvault has a
   reconcile pass for this; Rubrik will need one if it happens.

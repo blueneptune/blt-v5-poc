@@ -44,9 +44,29 @@ class RubrikJobIn(BaseModel):
     is_active: bool = Field(default=False, description="Still running or queued.")
     severity: str | None = None
     progress: str | None = None
+    percent_complete: float | None = Field(default=None, description="`progress` as a number.")
     sla_domain_name: str | None = None
+    last_activity_message: str | None = Field(
+        default=None, description="The latest event's message, as RSC words it."
+    )
+    failure_reason: str | None = Field(default=None, description="Why the job failed, if it did.")
+    cause_error_code: str | None = None
+    cause_error_message: str | None = None
+    cause_error_reason: str | None = None
+    cause_error_remedy: str | None = None
+    attempt_number: int | None = None
+    is_on_demand: bool | None = Field(
+        default=None, description="Run by hand rather than by its SLA domain."
+    )
+    data_transferred: int | None = Field(default=None, description="Bytes.")
+    logical_size: int | None = Field(default=None, description="Bytes.")
+    effective_throughput: int | None = Field(default=None, description="Bytes per second.")
     start_time: AwareDatetime | None = None
-    last_updated: AwareDatetime | None = None
+    last_updated: AwareDatetime | None = Field(
+        default=None,
+        description="When RSC last changed the job. RSC has no end time: for a finished job, "
+        "this is when it ended.",
+    )
     raw: dict[str, Any] = Field(
         default_factory=dict, description="RSC's activity series record, untouched."
     )
