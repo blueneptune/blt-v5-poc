@@ -176,109 +176,71 @@ in `config/blt.env`, and described in [docs/prefect.md](docs/prefect.md).
 
 ## Releases
 
-blt is released once a week. `main` holds only released code and is what
-production runs; nothing is committed to it directly.
+While blt is still being built, there is no weekly release train: it
+was paused on 2026-10-29, and comes back once someone besides its
+developer depends on it. Work merges to `main` as soon as it is
+finished and CI passes; a **release is a tag on `main`**, made when
+that commit is deployed.
 
-### The week
-
-| Day | What happens |
-|---|---|
-| Monday | The previous week's release is merged to `main` and tagged. Production pulls it. The new week's release branch opens from `main`. |
-| Monday - Thursday | Work happens on short branches and is merged into the week's release branch as each piece is finished. |
-| Thursday, end of day | Cut-off. What is not merged waits for next week. |
-| Friday | The release branch is tested as a whole (see below). No new work goes in - only fixes for what the testing finds. |
-| Monday | If Friday's tests passed, release. If not, the release is held until they do, or skipped; a week without a release is fine. |
-
-### Names
-
-A release is named for the Monday it is released on: `YYYY.MM.Wnn`,
-where `nn` counts the Mondays of that month. `2026.10.W02` was released
-on Monday 12 October 2026, the second Monday of October. The work done
-in the week that follows goes into `release/2026.10.W03` and is released
-on Monday 19 October.
-
-So the branch to be on is always the one named for **next** Monday.
-
-| Thing | Name | Example |
-|---|---|---|
-| Release branch | `release/<release>` | `release/2026.10.W02` |
-| Feature branch | `<release>/F/<What_it_does>` | `2026.10.W02/F/Add_policy_management` |
-| Bug-fix branch | `<release>/B/<What_it_fixes>` | `2026.10.W02/B/Backfill_skips_last_slice` |
-| Hotfix branch | `<release>/H/<What_it_fixes>` | `2026.10.W02/H/Token_renewal_loop` |
-| Release tag, on `main` | `<release>` | `2026.10.W02` |
-| Hotfix tag, on `main` | `<release>.<n>` | `2026.10.W02.1` |
-| Version in `pyproject.toml` | the same, as numbers | `2026.10.2`, `2026.10.2.1` |
-
-Two details behind that table:
-
-- The release *branch* carries a `release/` prefix because git cannot
-  hold a branch called `2026.10.W02` and branches called
-  `2026.10.W02/F/...` at the same time. The *tag* has no such limit, so
-  it is the plain name.
-- Python does not accept `W02` in a package version, so `pyproject.toml`
-  says `2026.10.2`. The tag is the name people use.
+`main` always passes its checks, but it is not what production runs.
+Production - the lab cluster, the work install - runs a tag.
 
 ### The loop for one piece of work
 
 ```
-git checkout release/2026.10.W02 && git pull
-git checkout -b 2026.10.W02/F/Add_policy_management
-# work in small commits; run the checks often (see Development)
-git push -u origin 2026.10.W02/F/Add_policy_management
-git checkout release/2026.10.W02
-git merge --no-ff 2026.10.W02/F/Add_policy_management
-git push
-```
-
-- **Feature and bug-fix branches** start from the week's release branch
-  and merge back into it.
-- **Hotfix branches** are for something production cannot wait until
-  Monday for. They start from `main`, merge to `main` with a hotfix tag,
-  and are then merged into the open release branch as well so the fix
-  is not lost the following Monday.
-
-### Friday's test
-
-On the release branch, all of:
-
-1. `ruff check`, `ruff format --check`, `mypy`, and the unit tests.
-2. Against a real CommServe: `--check`, `--probe`, a collection, a
-   second collection (a delta), `--inventory` and `--report`.
-
-If no CommServe is reachable, step 2 has not happened, and the release
-either waits or is tagged with that stated in the tag message - it does
-not go to `main` described as tested.
-
-### Releasing, on Monday
-
-```
 git checkout main && git pull
-git merge --no-ff release/2026.10.W02
-git tag -a 2026.10.W02 -m "..."
-git push origin main 2026.10.W02
-git checkout -b release/2026.10.W03 && git push -u origin release/2026.10.W03
+git checkout -b F/Add_policy_management
+# small commits, each with its tests; run the checks often (see Development)
+git push -u origin F/Add_policy_management     # and push often: CI runs on every push
+git checkout main && git pull
+git merge --no-ff F/Add_policy_management
+git push
+git branch -d F/Add_policy_management && git push origin --delete F/Add_policy_management
 ```
 
-Production then runs `git pull` (or `git checkout 2026.10.W02` to pin a
-release; checking out the previous tag is the rollback).
+| Thing | Name | Example |
+|---|---|---|
+| Feature branch | `F/<What_it_does>` | `F/Add_policy_management` |
+| Bug-fix branch | `B/<What_it_fixes>` | `B/Backfill_skips_last_slice` |
+| Hotfix branch | `H/<What_it_fixes>` | `H/Token_renewal_loop` |
+| Release tag, on `main` | the day it is deployed, `YYYY.MM.DD` | `2026.10.29`, then `2026.10.29.1` for a second the same day |
+| Version in `pyproject.toml` | the same | `2026.10.29` |
 
-### Tidying up
+- **Merge only once CI is green on the branch**, so `main` always passes.
+- **A branch that needs another's work** is merged after it, not stacked
+  on it for long: merge the first, then branch from `main`.
+- **Delete a branch once it is merged**, locally and on GitHub.
+  `git branch -d` refuses a branch that is not merged, which is the
+  check that nothing is lost.
 
-A branch is deleted once it has been merged, locally and on GitHub:
+### Releasing: tag, then deploy
+
+Before tagging, against a real CommServe where the change touches
+Commvault: `--check`, `--probe`, a collection, a second collection (a
+delta), `--inventory` and `--report`. If none is reachable, say so in
+the tag message.
 
 ```
-git branch -d 2026.10.W02/F/Add_policy_management
-git push origin --delete 2026.10.W02/F/Add_policy_management
+git checkout -b B/Version_2026_10_29
+# version in pyproject.toml: 2026.10.29; then:
+uv lock
+git commit -am "Version 2026.10.29"
+git checkout main && git merge --no-ff B/Version_2026_10_29 && git push
+git tag -a 2026.10.29 -m "What changed, in a line or two"
+git push origin 2026.10.29
 ```
 
-`git branch -d` refuses to delete a branch that has not been merged
-into the branch you are on, which is the check that nothing is lost. A
-release branch is deleted the same way after its Monday release; the
-tag keeps that release reachable.
+Then deploy that tag: on the cluster, its images by that tag
+(docs/deployment.md); on a single host, `git checkout 2026.10.29`.
+Checking out or deploying the previous tag is the rollback.
 
 ### The SDKs
 
-`yoki-py-commvault-sdk` and `yoki-py-veeam-sdk` use the same branch loop
-but are not on the weekly clock: each is tagged whenever it has a
-change, and blt takes a new SDK by changing the tag it pins in
-`pyproject.toml` as part of that week's release.
+`yoki-py-commvault-sdk`, `yoki-py-rubrik-sdk`, `yoki-py-veeam-sdk` and
+`sdk-primer-core` use the same branch loop and are tagged `vX.Y.Z` when
+blt needs a change. blt takes one by changing the tag it pins under
+`[tool.uv.sources]` in `pyproject.toml`, `uv lock`, and its tests.
+
+**Every project pins the same `sdk-primer` tag.** uv reads each SDK's
+own pin, so two SDKs on different `sdk-primer` tags cannot both be in
+blt. Moving `sdk-primer` forward means a new tag of every SDK blt uses.

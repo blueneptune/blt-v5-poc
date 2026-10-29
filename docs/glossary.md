@@ -205,10 +205,11 @@ word, the entry says so under **Today**.
 ## Releases
 
 **release**
-: A week's changes, named for the Monday they ship: `YYYY.MM.Wnn`
-  (`2026.10.W04`). Branches: `release/<release>`, and
-  `<release>/F|B|H/<What_it_does>` for features, bug fixes and hotfixes.
-  See the README.
+: A tag on `main`, made when that commit is deployed, named for the day:
+  `YYYY.MM.DD` (`2026.10.29`). Work goes on `F|B|H/<What_it_does>`
+  branches and merges to `main` when CI passes. Until 2026-10-29
+  releases were weekly, `YYYY.MM.Wnn` (`2026.10.W04`); that train is
+  paused while blt is being built. See the README.
 
 ## Each product's words, mapped
 
