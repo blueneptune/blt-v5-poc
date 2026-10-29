@@ -1,6 +1,6 @@
 [project]
 name = "blt"
-version = "2026.10.2"
+version = "2026.10.29"
 description = "Commvault job-history collector: per-CommCell collection script, FastAPI ingest API, Postgres store."
 requires-python = ">=3.12"
 # Only what both halves share (the API schemas in blt.schemas). Everything
@@ -43,16 +43,14 @@ blt-rubrik = "blt.rubrik.cli:main"
 blt-openapi = "blt.api.openapi:main"
 
 [tool.uv.sources]
-sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag = "v0.1.0" }
+sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag = "v0.1.2" }
 # blt's Commvault SDK, in its own repository (yoki-py-commvault-sdk),
 # pinned to a tag like sdk-primer. To work on both at once, point this at
 # a sibling checkout instead:
 #   commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
-commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.2.0" }
-# The Rubrik SDK (yoki-py-rubrik-sdk). Pinned to a commit (its
-# 2026.11.W02/F/Job_details branch) until a release tags it; then the
-# tag, like the others.
-rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", rev = "6d7b4f959809fc51ec2cdde03d8d2c6ead2de88e" }
+commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.3.1" }
+# The Rubrik SDK (yoki-py-rubrik-sdk), pinned to a tag like the others.
+rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", tag = "v0.2.0" }
 
 [build-system]
 requires = ["hatchling"]

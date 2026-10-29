@@ -124,18 +124,21 @@ and the core's addresses. Comes after 4.2 is solid.
 
 ## 5. Releases and promotion
 
-Already decided: weekly releases named `YYYY.MM.Wnn`, merged by Thursday,
-tested Friday, released Monday. Deployment follows the same rhythm:
+A release is a tag on `main`, named for the day it is deployed
+(`YYYY.MM.DD`; the README's Releases section). The weekly train
+(`YYYY.MM.Wnn`, merged Thursday, tested Friday, released Monday) is
+paused while blt is being built, and comes back when others depend on
+it. Either way, deployment works the same:
 
 ```
-tag 2026.11.W02 ──> CI builds blt-api, blt-prefect-server, blt-prefect-worker
-                    tagged 2026.11.W02 (and the commit) ──> Harbor
+tag 2026.11.09 ──> CI builds blt-api, blt-prefect-server, blt-prefect-worker
+                   tagged 2026.11.09 (and the commit) ──> Harbor
                                     │
           ┌─────────────────────────┼─────────────────────────┐
           ▼                         ▼                         ▼
   lab cluster: bump tag      production cluster:        single hosts:
   in yoki-blt-infra,         same tag, after the        release bundle (tar)
-  Fleet applies (Friday)     lab has run it (Monday)    + `systemctl restart blt`
+  Fleet applies              lab has run it             + `systemctl restart blt`
 ```
 
 - An image tag is **never reused**; rolling back is setting the previous
@@ -143,7 +146,7 @@ tag 2026.11.W02 ──> CI builds blt-api, blt-prefect-server, blt-prefect-worke
 - The infra repo records *what runs where*; its history is the
   deployment history.
 - Release notes say if a release needs anything beyond a tag bump (a new
-  secret, a manual step) - then it is not a Friday-afternoon release.
+  secret, a manual step).
 
 ## 6. Migrating from podman to Kubernetes
 
