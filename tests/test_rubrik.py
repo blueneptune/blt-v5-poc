@@ -83,11 +83,13 @@ def test_first_run_takes_a_recent_window_then_deltas_reach_back_to_the_watermark
 
     assert second.mode == "delta"
     assert rsc.asked[1] == T0 - timedelta(minutes=10)
-    rows = {j["series_key"]: j for j in http.get("/rubrik/acme/jobs").json()}
+    rows = {j["series_key"]: j for j in http.get("/v1/sources/rubrik/acme/jobs").json()}
     assert rows["a"]["status"] == "Success" and rows["a"]["is_active"] is False
     assert rows["a"]["first_seen_at"] < rows["a"]["last_collected_at"]
     assert rows["c"]["status"] == "Failure"
-    assert [j["series_key"] for j in http.get("/rubrik/acme/jobs?active=true").json()] == []
+    assert [
+        j["series_key"] for j in http.get("/v1/sources/rubrik/acme/jobs?active=true").json()
+    ] == []
 
 
 def test_a_full_run_reaches_the_history_limit(store: RubrikStore) -> None:
@@ -113,12 +115,12 @@ def test_a_failed_run_keeps_what_it_got_but_does_not_move_the_watermark(
     with pytest.raises(ConnectionError):
         run_rubrik_collection(rsc, store, now=lambda: next(ticks))
 
-    last = http.get("/rubrik/acme/last-run").json()
+    last = http.get("/v1/sources/rubrik/acme/last-run").json()
     assert last["watermark"] is None
     assert last["last_run"]["status"] == "failed"
     assert last["last_run"]["jobs_collected"] == 2
     assert "RSC went away" in last["last_run"]["error"]
-    assert len(http.get("/rubrik/acme/jobs").json()) == 2
+    assert len(http.get("/v1/sources/rubrik/acme/jobs").json()) == 2
 
 
 def test_an_older_batch_does_not_overwrite_a_newer_one(http: TestClient) -> None:
@@ -127,11 +129,11 @@ def test_an_older_batch_does_not_overwrite_a_newer_one(http: TestClient) -> None
             "collected_at": collected.isoformat(),
             "jobs": [job("a", status).model_dump(mode="json")],
         }
-        return http.post("/rubrik/acme/jobs", json=body).json()
+        return http.post("/v1/sources/rubrik/acme/jobs", json=body).json()
 
     assert post(T0, "Success") == {"received": 1, "written": 1}
     assert post(T0 - timedelta(minutes=5), "Running") == {"received": 1, "written": 0}
-    assert http.get("/rubrik/acme/jobs").json()[0]["status"] == "Success"
+    assert http.get("/v1/sources/rubrik/acme/jobs").json()[0]["status"] == "Success"
 
 
 def test_jobs_can_be_filtered(http: TestClient) -> None:
@@ -141,12 +143,12 @@ def test_jobs_can_be_filtered(http: TestClient) -> None:
         job("c", "Success", updated=T0 + timedelta(minutes=2)),
     ]
     http.post(
-        "/rubrik/acme/jobs",
+        "/v1/sources/rubrik/acme/jobs",
         json={"collected_at": T0.isoformat(), "jobs": [j.model_dump(mode="json") for j in jobs]},
     )
 
     def keys(query: str) -> list[str]:
-        return [j["series_key"] for j in http.get(f"/rubrik/acme/jobs{query}").json()]
+        return [j["series_key"] for j in http.get(f"/v1/sources/rubrik/acme/jobs{query}").json()]
 
     assert keys("") == ["c", "b", "a"]  # newest change first
     assert keys("?active=true") == ["a"]
@@ -163,12 +165,12 @@ def test_jobs_can_be_filtered_by_activity_type(http: TestClient) -> None:
         job("d", updated=T0 + timedelta(minutes=3), activity_type="RadarAnalysis"),
     ]
     http.post(
-        "/rubrik/acme/jobs",
+        "/v1/sources/rubrik/acme/jobs",
         json={"collected_at": T0.isoformat(), "jobs": [j.model_dump(mode="json") for j in jobs]},
     )
 
     def keys(query: str) -> list[str]:
-        return [j["series_key"] for j in http.get(f"/rubrik/acme/jobs{query}").json()]
+        return [j["series_key"] for j in http.get(f"/v1/sources/rubrik/acme/jobs{query}").json()]
 
     assert keys("") == ["d", "c", "b", "a"]  # every type is kept
     assert keys("?activity_type=backup") == ["a"]
@@ -189,15 +191,15 @@ def test_the_job_details_are_stored(http: TestClient) -> None:
         "collected_at": T0.isoformat(),
         "jobs": [job("a", "Failure", **details).model_dump(mode="json")],
     }
-    http.post("/rubrik/acme/jobs", json=body)
+    http.post("/v1/sources/rubrik/acme/jobs", json=body)
 
-    stored = http.get("/rubrik/acme/jobs").json()[0]
+    stored = http.get("/v1/sources/rubrik/acme/jobs").json()[0]
     assert {name: stored[name] for name in details} == details
 
 
 def test_an_unknown_account_has_no_jobs_but_a_normal_last_run(http: TestClient) -> None:
-    assert http.get("/rubrik/nobody/jobs").status_code == 404
-    assert http.get("/rubrik/nobody/last-run").json() == {
+    assert http.get("/v1/sources/rubrik/nobody/jobs").status_code == 404
+    assert http.get("/v1/sources/rubrik/nobody/last-run").json() == {
         "account": "nobody",
         "watermark": None,
         "last_run": None,
@@ -208,7 +210,7 @@ def test_the_rubrik_endpoints_need_the_key(database_url: str) -> None:
     from blt.api.app import create_app
 
     with TestClient(create_app()) as anonymous:
-        assert anonymous.get("/rubrik/acme/last-run").status_code == 401
+        assert anonymous.get("/v1/sources/rubrik/acme/last-run").status_code == 401
 
 
 # -- without Postgres -------------------------------------------------------

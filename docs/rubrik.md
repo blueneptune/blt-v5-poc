@@ -94,13 +94,13 @@ uv run --extra prefect blt-rubrik collect acme --service-account ~/blt-reader.js
 ## Reading it
 
 ```
-curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/jobs?active=true"
-curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/jobs?status=failure&limit=20"
-curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/jobs?activity_type=Backup&activity_type=Replication"
-curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/rubrik/acme/last-run"
+curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/jobs?active=true"
+curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/jobs?status=failure&limit=20"
+curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/jobs?activity_type=Backup&activity_type=Replication"
+curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/last-run"
 ```
 
-`/rubrik/{account}/jobs` takes `active`, `activity_type` (any case,
+`/v1/sources/rubrik/{name}/jobs` takes `active`, `activity_type` (any case,
 repeatable), `status` (any case),
 `object_name` (part of it, any case), `updated_after`, `limit`,
 `offset`; newest change first.

@@ -34,9 +34,10 @@ word, the entry says so under **Today**.
   tenant, a NetBackup primary server, a Veeam Backup & Replication
   server, a vCenter, a ServiceNow instance. Each source has a **name**
   (unique in blt, e.g. `cv-toaster`), a **source type** and a zone.
-  **Today:** the code, the API paths (`/commcells/{name}`), the
-  `commcell` table and `collect.sh <commcell>` say CommCell, because
-  Commvault is the only source type.
+  The API names sources this way: `/v1/sources/{source type}/{name}`.
+  **Today:** the code, the `commcell` table and
+  `collect.sh <commcell>` still say CommCell, from when Commvault was
+  the only source type.
 
 **source type**
 : What kind of system a source is: `commvault`, `netbackup`, `veeam`,

@@ -1,5 +1,5 @@
 """Rubrik in the API: its tables, in their own `rubrik` schema, and the
-endpoints its collector talks to, under /rubrik/{account}.
+endpoints its collector talks to, under /v1/sources/rubrik/{name}.
 
 The first product in a schema of its own, as docs/vision.md section 3.5
 plans for every product: Commvault's tables move to a `commvault` schema
@@ -126,8 +126,8 @@ def rubrik_router(
     get_session: Callable[[], Iterator[Session]], require_api_key: Callable[..., None]
 ) -> APIRouter:
     SessionDep = Annotated[Session, Depends(get_session)]
+    # No prefix: app.py mounts it under /v1/sources/rubrik/{source_name}.
     router = APIRouter(
-        prefix="/rubrik/{account_name}",
         tags=["rubrik"],
         dependencies=[Depends(require_api_key)],
         responses=UNAUTHORIZED,
@@ -154,14 +154,14 @@ def rubrik_router(
         return run
 
     @router.get("/last-run", summary="Where the last collection got to")
-    def last_run(account_name: str, session: SessionDep) -> RubrikLastRun:
+    def last_run(source_name: str, session: SessionDep) -> RubrikLastRun:
         """The account's watermark and its most recent run. An unknown
         account is not an error: no watermark means do an initial run."""
         account = session.exec(
-            select(RubrikAccount).where(RubrikAccount.name == account_name)
+            select(RubrikAccount).where(RubrikAccount.name == source_name)
         ).first()
         if account is None:
-            return RubrikLastRun(account=account_name)
+            return RubrikLastRun(account=source_name)
         watermark = session.exec(
             select(func.max(RubrikRun.started_at)).where(
                 RubrikRun.account_id == account.id, RubrikRun.status == "succeeded"
@@ -174,16 +174,16 @@ def rubrik_router(
             .limit(1)
         ).first()
         return RubrikLastRun(
-            account=account_name,
+            account=source_name,
             watermark=watermark,
             last_run=RubrikRunOut.model_validate(latest) if latest else None,
         )
 
     @router.post("/runs", status_code=status.HTTP_201_CREATED, summary="Open a collection run")
-    def start_run(account_name: str, body: RubrikRunStart, session: SessionDep) -> RubrikRunOut:
+    def start_run(source_name: str, body: RubrikRunStart, session: SessionDep) -> RubrikRunOut:
         """Opens a run (status `running`); send its `id` with each batch.
         The account is created on its first run."""
-        account = get_or_create_account(session, account_name)
+        account = get_or_create_account(session, source_name)
         assert account.id is not None
         run = RubrikRun(
             account_id=account.id,
@@ -203,11 +203,11 @@ def rubrik_router(
         responses=not_found("account or run"),
     )
     def finish_run(
-        account_name: str, run_id: int, body: RubrikRunFinish, session: SessionDep
+        source_name: str, run_id: int, body: RubrikRunFinish, session: SessionDep
     ) -> RubrikRunOut:
         """Records how the run went; a succeeded run becomes the new
         watermark."""
-        run = find_run(session, find_account(session, account_name), run_id)
+        run = find_run(session, find_account(session, source_name), run_id)
         run.status = body.status
         run.finished_at = body.finished_at
         run.jobs_collected = body.jobs_collected
@@ -218,10 +218,10 @@ def rubrik_router(
         return RubrikRunOut.model_validate(run)
 
     @router.post("/jobs", summary="Store a batch of jobs")
-    def upsert_jobs(account_name: str, body: RubrikJobBatch, session: SessionDep) -> UpsertResult:
+    def upsert_jobs(source_name: str, body: RubrikJobBatch, session: SessionDep) -> UpsertResult:
         """Inserts new jobs and updates known ones, keyed by `series_key`.
         A job collected earlier than what is stored is left alone."""
-        account = get_or_create_account(session, account_name)
+        account = get_or_create_account(session, source_name)
         # One INSERT ... ON CONFLICT cannot touch a row twice: a series
         # repeated in a batch keeps its last occurrence.
         rows: dict[str, dict[str, object]] = {}
@@ -255,7 +255,7 @@ def rubrik_router(
 
     @router.get("/jobs", summary="List jobs", responses=not_found("account"))
     def list_jobs(
-        account_name: str,
+        source_name: str,
         session: SessionDep,
         active: Annotated[
             bool | None, Query(description="Only jobs still running (true) or finished (false).")
@@ -282,7 +282,7 @@ def rubrik_router(
         offset: Annotated[int, Query(ge=0, description="Rows to skip.")] = 0,
     ) -> list[RubrikJobOut]:
         """Jobs, most recently updated first."""
-        account = find_account(session, account_name)
+        account = find_account(session, source_name)
         query = select(RubrikJob).where(RubrikJob.account_id == account.id)
         if active is not None:
             query = query.where(RubrikJob.is_active == active)

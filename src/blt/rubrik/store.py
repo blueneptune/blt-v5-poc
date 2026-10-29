@@ -1,5 +1,5 @@
 """The Rubrik collector's view of the blt API: one method per endpoint
-under /rubrik/{account}. The same sdk-primer APIClient the Commvault
+under /v1/sources/rubrik/{account}. The same sdk-primer APIClient the Commvault
 side uses (blt.collector.store), so a blip talking to the API is
 retried the same way."""
 
@@ -24,7 +24,7 @@ from .schemas import (
 class RubrikStore:
     def __init__(self, client: APIClient, account: str) -> None:
         self._client = client
-        self._base = f"/rubrik/{account}"
+        self._base = f"/v1/sources/rubrik/{account}"
 
     def last_run(self) -> RubrikLastRun:
         return RubrikLastRun.model_validate(self._client.get(f"{self._base}/last-run").json())

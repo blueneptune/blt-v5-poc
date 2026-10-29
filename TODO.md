@@ -122,8 +122,8 @@ current work.
 
     Also to decide: what an "object" is for Commvault - the client, the
     subclient, or both as parent and child. And `commcell`-specific
-    names in the API (`/commcells/{name}/...`) and in `job` columns will
-    want generalising at the same time.
+    names in `job` columns will want generalising at the same time (the
+    API paths already did, as `/v1/sources/commvault/{name}`).
 
 14. **MSSQL backup validation** (prototype working in the lab since
     2026-10-06: `lab/50-sql-validate.sh` in yoki-commvault-lab, see its
@@ -220,3 +220,12 @@ current work.
     Linux. Next: run it on the WSL desktop; move CommCells over with
     blt-prefect-import; failure notifications; phase out deploy/up.sh
     once deploy/kube/up.sh has proven itself. See docs/prefect.md.
+
+21. **Remove the API paths from before /v1** (`/commcells/{name}/...`,
+    `/rubrik/{name}/...`), added 2026-10-29 with `/v1/sources/...`. They
+    are kept so a collector on the previous release keeps working
+    during an upgrade. Remove them in the release after the one that
+    ships /v1 - after checking nothing still calls them (each answer
+    carries `Deprecation: true`; the API log shows the paths called).
+    Scripts outside this repository that use curl are the likely
+    stragglers.

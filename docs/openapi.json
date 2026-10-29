@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "blt API",
-    "description": "\nblt collects backup jobs and inventory from backup products (Commvault,\nRubrik) into one database. **This API is the only thing that reads or\nwrites that database.** Collectors never touch Postgres: they ask the API\nwhere they left off, post what they collected, and report how the run\nwent. Reports and other readers use the same API.\n\n## Signing in\n\nEvery endpoint except `/healthz` needs the API key in an `X-API-Key`\nheader. In these docs: **Authorize** (top right), paste the key, and the\n*Try it out* buttons send it.\n\n```\ncurl -H \"X-API-Key: $BLT_API_KEY\" https://api.blt.lab.ethos.home/commcells/cv-toaster/last-run\n```\n\n## Conventions\n\n- **Sources are named in the path**: a CommCell under\n  `/commcells/{commcell_name}`, an RSC account under\n  `/rubrik/{account_name}`. The name is blt's own (its Prefect block's),\n  not the product's.\n- **Times** are ISO 8601 with a time zone (`2026-10-29T14:00:00Z`). A\n  time in a request body without one is refused.\n- **Lists** page with `limit` and `offset`.\n- **Errors** come back as `{\"detail\": \"...\"}`: 401 for a missing or wrong\n  key, 404 for an unknown source, run or job, 422 for a body or\n  parameter that does not validate.\n- **Writes are upserts**, keyed by the source's own ids. Posting the same\n  batch twice changes nothing; a batch collected *before* what is\n  already stored is ignored, so a slow run cannot roll a job back.\n\n## One collection run\n\n1. `GET .../last-run` - the watermark: where the last successful run\n   started. None means never collected.\n2. `POST .../runs` - open a run; keep its `id`.\n3. `POST .../jobs` - the jobs collected, in batches, each with the run id.\n4. `POST .../runs/{run_id}/finish` - succeeded or failed. Only a\n   succeeded run moves the watermark.\n\nCommvault runs also check on jobs still active (`GET .../jobs?active=true`)\nand reconcile ones the CommCell no longer knows (`PATCH .../jobs/{job_id}`).\nRubrik runs need neither: RSC reports every change, so one pass covers it.\n",
+    "description": "\nblt collects backup jobs and inventory from backup products (Commvault,\nRubrik) into one database. **This API is the only thing that reads or\nwrites that database.** Collectors never touch Postgres: they ask the API\nwhere they left off, post what they collected, and report how the run\nwent. Reports and other readers use the same API.\n\n## Signing in\n\nEvery endpoint except `/healthz` needs the API key in an `X-API-Key`\nheader. In these docs: **Authorize** (top right), paste the key, and the\n*Try it out* buttons send it.\n\n```\ncurl -H \"X-API-Key: $BLT_API_KEY\" \\\n    https://api.blt.lab.ethos.home/v1/sources/commvault/cv-toaster/last-run\n```\n\n## Conventions\n\n- **Sources are named in the path**:\n  `/v1/sources/{source type}/{source name}/...` - a CommCell is\n  `/v1/sources/commvault/cv-toaster`, an RSC account\n  `/v1/sources/rubrik/work`. The name is blt's own (its Prefect\n  block's), not the product's. Each source type has its own endpoints\n  below that, in its product's own terms.\n- **Times** are ISO 8601 with a time zone (`2026-10-29T14:00:00Z`). A\n  time in a request body without one is refused.\n- **Lists** page with `limit` and `offset`.\n- **Errors** come back as `{\"detail\": \"...\"}`: 401 for a missing or wrong\n  key, 404 for an unknown source, run or job, 422 for a body or\n  parameter that does not validate.\n- **Writes are upserts**, keyed by the source's own ids. Posting the same\n  batch twice changes nothing; a batch collected *before* what is\n  already stored is ignored, so a slow run cannot roll a job back.\n\n## Versions\n\nEverything except `/healthz` is under `/v1`. Changes that don't break a\nclient (a new endpoint, field or optional parameter) are made in `/v1`\nas it stands. A change that would break one goes into a `/v2` beside\nit, and `/v1` stays until every collector has moved over.\n\nThe paths from before versioning (`/commcells/{name}/...`,\n`/rubrik/{name}/...`) still work, for collectors on an older release.\nThey answer with a `Deprecation: true` header, are not listed here, and\nwill be removed.\n\n## One collection run\n\n1. `GET .../last-run` - the watermark: where the last successful run\n   started. None means never collected.\n2. `POST .../runs` - open a run; keep its `id`.\n3. `POST .../jobs` - the jobs collected, in batches, each with the run id.\n4. `POST .../runs/{run_id}/finish` - succeeded or failed. Only a\n   succeeded run moves the watermark.\n\nCommvault runs also check on jobs still active (`GET .../jobs?active=true`)\nand reconcile ones the CommCell no longer knows (`PATCH .../jobs/{job_id}`).\nRubrik runs need neither: RSC reports every change, so one pass covers it.\n",
     "version": "2026.10.2"
   },
   "paths": {
@@ -32,14 +32,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/last-run": {
+    "/v1/sources/commvault/{source_name}/last-run": {
       "get": {
         "tags": [
           "commvault: collection"
         ],
         "summary": "Where the last collection got to",
         "description": "The CommCell's watermark and its most recent run. An unknown\nCommCell is not an error: it comes back with no watermark, which\ntells a collector to start with an initial run.",
-        "operationId": "last_run_commcells__commcell_name__last_run_get",
+        "operationId": "last_run_v1_sources_commvault__source_name__last_run_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -47,12 +47,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -90,14 +90,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/backfill": {
+    "/v1/sources/commvault/{source_name}/backfill": {
       "get": {
         "tags": [
           "commvault: collection"
         ],
         "summary": "How far back history has been collected",
         "description": "Where the next backfill chunk should end, and whether backfill\nhas reached the start of the CommCell's history.",
-        "operationId": "backfill_state_commcells__commcell_name__backfill_get",
+        "operationId": "backfill_state_v1_sources_commvault__source_name__backfill_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -105,12 +105,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -153,7 +153,7 @@
         ],
         "summary": "Record backfill progress",
         "description": "Called by the backfill flow after each chunk it collects.",
-        "operationId": "save_backfill_commcells__commcell_name__backfill_put",
+        "operationId": "save_backfill_v1_sources_commvault__source_name__backfill_put",
         "security": [
           {
             "APIKeyHeader": []
@@ -161,12 +161,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -224,14 +224,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/runs": {
+    "/v1/sources/commvault/{source_name}/runs": {
       "post": {
         "tags": [
           "commvault: collection"
         ],
         "summary": "Open a collection run",
         "description": "Opens a run (status `running`) and returns it; send its `id`\nwith each batch of jobs or objects. The CommCell is created on its\nfirst run.",
-        "operationId": "start_run_commcells__commcell_name__runs_post",
+        "operationId": "start_run_v1_sources_commvault__source_name__runs_post",
         "security": [
           {
             "APIKeyHeader": []
@@ -239,12 +239,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -292,14 +292,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/runs/{run_id}/finish": {
+    "/v1/sources/commvault/{source_name}/runs/{run_id}/finish": {
       "post": {
         "tags": [
           "commvault: collection"
         ],
         "summary": "Close a collection run",
         "description": "Records how the run went. A succeeded collection run (initial,\ndelta or full) becomes the new watermark. A succeeded inventory\nrun marks everything it did not list as no longer present, and\nstores that day's per-instance report.",
-        "operationId": "finish_run_commcells__commcell_name__runs__run_id__finish_post",
+        "operationId": "finish_run_v1_sources_commvault__source_name__runs__run_id__finish_post",
         "security": [
           {
             "APIKeyHeader": []
@@ -307,12 +307,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           },
           {
@@ -379,14 +379,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/jobs": {
+    "/v1/sources/commvault/{source_name}/jobs": {
       "post": {
         "tags": [
           "commvault: collection"
         ],
         "summary": "Store a batch of jobs",
         "description": "Inserts new jobs and updates known ones, keyed by Commvault's\njob id. A job collected earlier than what is stored is left alone.\n`written` counts the jobs actually inserted or changed.",
-        "operationId": "upsert_jobs_commcells__commcell_name__jobs_post",
+        "operationId": "upsert_jobs_v1_sources_commvault__source_name__jobs_post",
         "security": [
           {
             "APIKeyHeader": []
@@ -394,12 +394,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -452,7 +452,7 @@
         ],
         "summary": "List jobs",
         "description": "Jobs in job id order. The collector uses `active=true` to find\njobs to check on, and `unseen_in_run` to find ones to reconcile.",
-        "operationId": "list_jobs_commcells__commcell_name__jobs_get",
+        "operationId": "list_jobs_v1_sources_commvault__source_name__jobs_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -460,12 +460,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           },
           {
@@ -560,7 +560,7 @@
                   "items": {
                     "$ref": "#/components/schemas/JobOut"
                   },
-                  "title": "Response List Jobs Commcells  Commcell Name  Jobs Get"
+                  "title": "Response List Jobs V1 Sources Commvault  Source Name  Jobs Get"
                 }
               }
             }
@@ -598,14 +598,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/jobs/{job_id}": {
+    "/v1/sources/commvault/{source_name}/jobs/{job_id}": {
       "get": {
         "tags": [
           "commvault: collection"
         ],
         "summary": "One job",
         "description": "One job by Commvault's job id, with its full Commvault record in\n`raw`.",
-        "operationId": "get_job_commcells__commcell_name__jobs__job_id__get",
+        "operationId": "get_job_v1_sources_commvault__source_name__jobs__job_id__get",
         "security": [
           {
             "APIKeyHeader": []
@@ -613,12 +613,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           },
           {
@@ -680,7 +680,7 @@
         ],
         "summary": "Change one job's status",
         "description": "Used to mark a job the CommCell no longer knows as \"Not found in\nCommCell\"; anything Commvault can still describe goes through\n`POST .../jobs`.",
-        "operationId": "patch_job_commcells__commcell_name__jobs__job_id__patch",
+        "operationId": "patch_job_v1_sources_commvault__source_name__jobs__job_id__patch",
         "security": [
           {
             "APIKeyHeader": []
@@ -688,12 +688,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           },
           {
@@ -760,14 +760,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/objects": {
+    "/v1/sources/commvault/{source_name}/objects": {
       "post": {
         "tags": [
           "commvault: inventory and reports"
         ],
         "summary": "Store a batch of inventory",
         "description": "Clients, instances and databases as the CommCell lists them,\nduring an inventory run. Parents go before their children: clients,\nthen instances, then databases.",
-        "operationId": "upsert_objects_commcells__commcell_name__objects_post",
+        "operationId": "upsert_objects_v1_sources_commvault__source_name__objects_post",
         "security": [
           {
             "APIKeyHeader": []
@@ -775,12 +775,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -836,7 +836,7 @@
         ],
         "summary": "List inventory",
         "description": "What the CommCell says exists, by kind then name.",
-        "operationId": "list_objects_commcells__commcell_name__objects_get",
+        "operationId": "list_objects_v1_sources_commvault__source_name__objects_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -844,12 +844,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           },
           {
@@ -926,7 +926,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ObjectOut"
                   },
-                  "title": "Response List Objects Commcells  Commcell Name  Objects Get"
+                  "title": "Response List Objects V1 Sources Commvault  Source Name  Objects Get"
                 }
               }
             }
@@ -964,14 +964,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/instance-report": {
+    "/v1/sources/commvault/{source_name}/instance-report": {
       "get": {
         "tags": [
           "commvault: inventory and reports"
         ],
         "summary": "SQL Server instances: discovered vs backed up",
         "description": "Databases discovered against databases backed up, per SQL\nServer instance, for its most recent full backup.",
-        "operationId": "instance_report_commcells__commcell_name__instance_report_get",
+        "operationId": "instance_report_v1_sources_commvault__source_name__instance_report_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -979,12 +979,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           },
           {
@@ -1010,7 +1010,7 @@
                   "items": {
                     "$ref": "#/components/schemas/InstanceReportRow"
                   },
-                  "title": "Response Instance Report Commcells  Commcell Name  Instance Report Get"
+                  "title": "Response Instance Report V1 Sources Commvault  Source Name  Instance Report Get"
                 }
               }
             }
@@ -1048,14 +1048,14 @@
         }
       }
     },
-    "/commcells/{commcell_name}/validation": {
+    "/v1/sources/commvault/{source_name}/validation": {
       "get": {
         "tags": [
           "commvault: inventory and reports"
         ],
         "summary": "Is everything backed up",
         "description": "Is everything this source says exists also backed up?\n\nJudged entirely from the source's own inventory (see\nValidationReport for what that can and cannot establish), with\neach database's last backup job looked up in the job table as a\nsecond opinion on whether that backup actually succeeded.",
-        "operationId": "validation_commcells__commcell_name__validation_get",
+        "operationId": "validation_v1_sources_commvault__source_name__validation_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -1063,12 +1063,12 @@
         ],
         "parameters": [
           {
-            "name": "commcell_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Commcell Name"
+              "title": "Source Name"
             }
           },
           {
@@ -1129,14 +1129,14 @@
         }
       }
     },
-    "/rubrik/{account_name}/last-run": {
+    "/v1/sources/rubrik/{source_name}/last-run": {
       "get": {
         "tags": [
           "rubrik"
         ],
         "summary": "Where the last collection got to",
         "description": "The account's watermark and its most recent run. An unknown\naccount is not an error: no watermark means do an initial run.",
-        "operationId": "last_run_rubrik__account_name__last_run_get",
+        "operationId": "last_run_v1_sources_rubrik__source_name__last_run_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -1144,12 +1144,12 @@
         ],
         "parameters": [
           {
-            "name": "account_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Account Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -1187,14 +1187,14 @@
         }
       }
     },
-    "/rubrik/{account_name}/runs": {
+    "/v1/sources/rubrik/{source_name}/runs": {
       "post": {
         "tags": [
           "rubrik"
         ],
         "summary": "Open a collection run",
         "description": "Opens a run (status `running`); send its `id` with each batch.\nThe account is created on its first run.",
-        "operationId": "start_run_rubrik__account_name__runs_post",
+        "operationId": "start_run_v1_sources_rubrik__source_name__runs_post",
         "security": [
           {
             "APIKeyHeader": []
@@ -1202,12 +1202,12 @@
         ],
         "parameters": [
           {
-            "name": "account_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Account Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -1255,14 +1255,14 @@
         }
       }
     },
-    "/rubrik/{account_name}/runs/{run_id}/finish": {
+    "/v1/sources/rubrik/{source_name}/runs/{run_id}/finish": {
       "post": {
         "tags": [
           "rubrik"
         ],
         "summary": "Close a collection run",
         "description": "Records how the run went; a succeeded run becomes the new\nwatermark.",
-        "operationId": "finish_run_rubrik__account_name__runs__run_id__finish_post",
+        "operationId": "finish_run_v1_sources_rubrik__source_name__runs__run_id__finish_post",
         "security": [
           {
             "APIKeyHeader": []
@@ -1270,12 +1270,12 @@
         ],
         "parameters": [
           {
-            "name": "account_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Account Name"
+              "title": "Source Name"
             }
           },
           {
@@ -1342,14 +1342,14 @@
         }
       }
     },
-    "/rubrik/{account_name}/jobs": {
+    "/v1/sources/rubrik/{source_name}/jobs": {
       "post": {
         "tags": [
           "rubrik"
         ],
         "summary": "Store a batch of jobs",
         "description": "Inserts new jobs and updates known ones, keyed by `series_key`.\nA job collected earlier than what is stored is left alone.",
-        "operationId": "upsert_jobs_rubrik__account_name__jobs_post",
+        "operationId": "upsert_jobs_v1_sources_rubrik__source_name__jobs_post",
         "security": [
           {
             "APIKeyHeader": []
@@ -1357,12 +1357,12 @@
         ],
         "parameters": [
           {
-            "name": "account_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Account Name"
+              "title": "Source Name"
             }
           }
         ],
@@ -1415,7 +1415,7 @@
         ],
         "summary": "List jobs",
         "description": "Jobs, most recently updated first.",
-        "operationId": "list_jobs_rubrik__account_name__jobs_get",
+        "operationId": "list_jobs_v1_sources_rubrik__source_name__jobs_get",
         "security": [
           {
             "APIKeyHeader": []
@@ -1423,12 +1423,12 @@
         ],
         "parameters": [
           {
-            "name": "account_name",
+            "name": "source_name",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Account Name"
+              "title": "Source Name"
             }
           },
           {
@@ -1563,7 +1563,7 @@
                   "items": {
                     "$ref": "#/components/schemas/RubrikJobOut"
                   },
-                  "title": "Response List Jobs Rubrik  Account Name  Jobs Get"
+                  "title": "Response List Jobs V1 Sources Rubrik  Source Name  Jobs Get"
                 }
               }
             }

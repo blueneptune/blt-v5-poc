@@ -153,7 +153,7 @@ def main() -> None:
             live = CommvaultJobs(commvault).get(args.job)
             try:
                 stored: JobOut | None = JobOut.model_validate(
-                    api.get(f"/commcells/{args.commcell}/jobs/{args.job}").json()
+                    api.get(f"/v1/sources/commvault/{args.commcell}/jobs/{args.job}").json()
                 )
             except NotFoundError:
                 stored = None

@@ -20,6 +20,9 @@ except PackageNotFoundError:  # running from a bare checkout
 
 TITLE = "blt API"
 
+# Every path but /healthz is under this. See DESCRIPTION, "Versions".
+API_V1 = "/v1"
+
 DESCRIPTION = """
 blt collects backup jobs and inventory from backup products (Commvault,
 Rubrik) into one database. **This API is the only thing that reads or
@@ -34,15 +37,18 @@ header. In these docs: **Authorize** (top right), paste the key, and the
 *Try it out* buttons send it.
 
 ```
-curl -H "X-API-Key: $BLT_API_KEY" https://api.blt.lab.ethos.home/commcells/cv-toaster/last-run
+curl -H "X-API-Key: $BLT_API_KEY" \\
+    https://api.blt.lab.ethos.home/v1/sources/commvault/cv-toaster/last-run
 ```
 
 ## Conventions
 
-- **Sources are named in the path**: a CommCell under
-  `/commcells/{commcell_name}`, an RSC account under
-  `/rubrik/{account_name}`. The name is blt's own (its Prefect block's),
-  not the product's.
+- **Sources are named in the path**:
+  `/v1/sources/{source type}/{source name}/...` - a CommCell is
+  `/v1/sources/commvault/cv-toaster`, an RSC account
+  `/v1/sources/rubrik/work`. The name is blt's own (its Prefect
+  block's), not the product's. Each source type has its own endpoints
+  below that, in its product's own terms.
 - **Times** are ISO 8601 with a time zone (`2026-10-29T14:00:00Z`). A
   time in a request body without one is refused.
 - **Lists** page with `limit` and `offset`.
@@ -52,6 +58,18 @@ curl -H "X-API-Key: $BLT_API_KEY" https://api.blt.lab.ethos.home/commcells/cv-to
 - **Writes are upserts**, keyed by the source's own ids. Posting the same
   batch twice changes nothing; a batch collected *before* what is
   already stored is ignored, so a slow run cannot roll a job back.
+
+## Versions
+
+Everything except `/healthz` is under `/v1`. Changes that don't break a
+client (a new endpoint, field or optional parameter) are made in `/v1`
+as it stands. A change that would break one goes into a `/v2` beside
+it, and `/v1` stays until every collector has moved over.
+
+The paths from before versioning (`/commcells/{name}/...`,
+`/rubrik/{name}/...`) still work, for collectors on an older release.
+They answer with a `Deprecation: true` header, are not listed here, and
+will be removed.
 
 ## One collection run
 

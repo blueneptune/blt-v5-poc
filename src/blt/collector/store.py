@@ -34,7 +34,7 @@ _PAGE = 1000
 class BltStore:
     def __init__(self, client: APIClient, commcell: str) -> None:
         self._client = client
-        self._base = f"/commcells/{commcell}"
+        self._base = f"/v1/sources/commvault/{commcell}"
 
     def last_run(self) -> LastRun:
         return LastRun.model_validate(self._client.get(f"{self._base}/last-run").json())

@@ -33,13 +33,32 @@ no data.
 
 | Group | Paths | For |
 |---|---|---|
-| commvault: collection | `/commcells/{commcell_name}/...` last-run, runs, jobs, backfill | the Commvault collector; reading jobs |
-| commvault: inventory and reports | `/commcells/{commcell_name}/...` objects, validation, instance-report | inventory runs; "is everything backed up" |
-| rubrik | `/rubrik/{account_name}/...` last-run, runs, jobs | the Rubrik collector; reading Rubrik jobs |
+| commvault: collection | `/v1/sources/commvault/{source_name}/...` last-run, runs, jobs, backfill | the Commvault collector; reading jobs |
+| commvault: inventory and reports | `/v1/sources/commvault/{source_name}/...` objects, validation, instance-report | inventory runs; "is everything backed up" |
+| rubrik | `/v1/sources/rubrik/{source_name}/...` last-run, runs, jobs | the Rubrik collector; reading Rubrik jobs |
 | health | `/healthz` | probes |
 
+Paths are `/v1/sources/{source type}/{source name}/...`: the source type
+is the product (`commvault`, `rubrik`, later `netbackup`, `veeam`), the
+name is blt's own for that source. blt's own resources, when it has
+them (users, a jobs view across every product), will sit beside
+`/v1/sources`, not under it.
+
 The overview at the top of `/docs` describes the conventions (times,
-paging, errors, upserts) and the steps of one collection run.
+paging, errors, upserts), how versions work, and the steps of one
+collection run.
+
+## Versions
+
+Everything but `/healthz` is under `/v1`. Additions - an endpoint, a
+field, an optional parameter - go into `/v1`. A change that would break
+a client goes into `/v2` beside it; `/v1` stays until every collector
+has moved, then goes.
+
+The paths from before `/v1` (`/commcells/{name}/...`,
+`/rubrik/{name}/...`) still work so a collector on the previous release
+keeps going during an upgrade. They answer with `Deprecation: true` and
+are not in the docs. They go once nothing calls them (TODO.md).
 
 ## Keeping it current
 

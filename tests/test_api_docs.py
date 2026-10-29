@@ -42,3 +42,14 @@ def test_each_endpoint_is_in_exactly_one_group() -> None:
     for path, operations in openapi.spec()["paths"].items():
         for method, operation in operations.items():
             assert len(operation["tags"]) == 1, f"{method.upper()} {path}: {operation['tags']}"
+
+
+def test_every_path_but_the_health_check_is_versioned_and_named_by_source() -> None:
+    for path in openapi.spec()["paths"]:
+        if path != "/healthz":
+            assert path.startswith(("/v1/sources/commvault/", "/v1/sources/rubrik/")), path
+
+
+def test_the_paths_from_before_v1_are_left_out_of_the_docs() -> None:
+    paths = openapi.spec()["paths"]
+    assert not [p for p in paths if p.startswith(("/commcells/", "/rubrik/"))]
