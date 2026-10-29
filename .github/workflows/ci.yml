@@ -1,0 +1,46 @@
+# Tests, lint and types on every push to every branch. Branch protection
+# on main requires the `test` check, so nothing reaches main red.
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The upsert is Postgres-specific, so the database tests need a real
+    # one; the same major version as the cluster's (CNPG 17).
+    services:
+      postgres:
+        image: docker.io/library/postgres:17
+        env:
+          POSTGRES_USER: blt
+          POSTGRES_PASSWORD: blt
+          POSTGRES_DB: blt_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U blt -d blt_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      BLT_TEST_DATABASE_URL: postgresql+psycopg://blt:blt@localhost:5432/blt_test
+      # The images run 3.12.
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-extras
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run mypy
+      - run: uv run pytest -q -rs
