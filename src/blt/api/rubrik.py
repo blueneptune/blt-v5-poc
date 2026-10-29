@@ -32,6 +32,8 @@ from blt.rubrik.schemas import (
 )
 from blt.schemas import UpsertResult
 
+from .docs import UNAUTHORIZED, not_found
+
 SCHEMA = "rubrik"
 
 # Set on insert only: the key, and when the job was first seen.
@@ -115,6 +117,7 @@ def rubrik_router(
         prefix="/rubrik/{account_name}",
         tags=["rubrik"],
         dependencies=[Depends(require_api_key)],
+        responses=UNAUTHORIZED,
     )
 
     def find_account(session: Session, name: str) -> RubrikAccount:
@@ -137,8 +140,10 @@ def rubrik_router(
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown run {run_id}")
         return run
 
-    @router.get("/last-run")
+    @router.get("/last-run", summary="Where the last collection got to")
     def last_run(account_name: str, session: SessionDep) -> RubrikLastRun:
+        """The account's watermark and its most recent run. An unknown
+        account is not an error: no watermark means do an initial run."""
         account = session.exec(
             select(RubrikAccount).where(RubrikAccount.name == account_name)
         ).first()
@@ -161,8 +166,10 @@ def rubrik_router(
             last_run=RubrikRunOut.model_validate(latest) if latest else None,
         )
 
-    @router.post("/runs", status_code=status.HTTP_201_CREATED)
+    @router.post("/runs", status_code=status.HTTP_201_CREATED, summary="Open a collection run")
     def start_run(account_name: str, body: RubrikRunStart, session: SessionDep) -> RubrikRunOut:
+        """Opens a run (status `running`); send its `id` with each batch.
+        The account is created on its first run."""
         account = get_or_create_account(session, account_name)
         assert account.id is not None
         run = RubrikRun(
@@ -177,10 +184,16 @@ def rubrik_router(
         session.refresh(run)
         return RubrikRunOut.model_validate(run)
 
-    @router.post("/runs/{run_id}/finish")
+    @router.post(
+        "/runs/{run_id}/finish",
+        summary="Close a collection run",
+        responses=not_found("account or run"),
+    )
     def finish_run(
         account_name: str, run_id: int, body: RubrikRunFinish, session: SessionDep
     ) -> RubrikRunOut:
+        """Records how the run went; a succeeded run becomes the new
+        watermark."""
         run = find_run(session, find_account(session, account_name), run_id)
         run.status = body.status
         run.finished_at = body.finished_at
@@ -191,8 +204,10 @@ def rubrik_router(
         session.refresh(run)
         return RubrikRunOut.model_validate(run)
 
-    @router.post("/jobs")
+    @router.post("/jobs", summary="Store a batch of jobs")
     def upsert_jobs(account_name: str, body: RubrikJobBatch, session: SessionDep) -> UpsertResult:
+        """Inserts new jobs and updates known ones, keyed by `series_key`.
+        A job collected earlier than what is stored is left alone."""
         account = get_or_create_account(session, account_name)
         # One INSERT ... ON CONFLICT cannot touch a row twice: a series
         # repeated in a batch keeps its last occurrence.
@@ -225,19 +240,27 @@ def rubrik_router(
         session.commit()
         return UpsertResult(received=len(body.jobs), written=written)
 
-    @router.get("/jobs")
+    @router.get("/jobs", summary="List jobs", responses=not_found("account"))
     def list_jobs(
         account_name: str,
         session: SessionDep,
-        active: bool | None = None,
-        status_is: Annotated[str | None, Query(alias="status")] = None,
-        object_name: str | None = None,
-        updated_after: datetime | None = None,
-        limit: Annotated[int, Query(ge=1, le=1000)] = 100,
-        offset: Annotated[int, Query(ge=0)] = 0,
+        active: Annotated[
+            bool | None, Query(description="Only jobs still running (true) or finished (false).")
+        ] = None,
+        status_is: Annotated[
+            str | None,
+            Query(alias="status", description="RSC's status, any case: Success, Failure, ..."),
+        ] = None,
+        object_name: Annotated[
+            str | None, Query(description="Part of the protected object's name, any case.")
+        ] = None,
+        updated_after: Annotated[
+            datetime | None, Query(description="Only jobs RSC changed after this time.")
+        ] = None,
+        limit: Annotated[int, Query(ge=1, le=1000, description="Page size.")] = 100,
+        offset: Annotated[int, Query(ge=0, description="Rows to skip.")] = 0,
     ) -> list[RubrikJobOut]:
-        """Jobs, most recently updated first. `object_name` matches part
-        of the name, ignoring case."""
+        """Jobs, most recently updated first."""
         account = find_account(session, account_name)
         query = select(RubrikJob).where(RubrikJob.account_id == account.id)
         if active is not None:

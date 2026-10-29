@@ -19,6 +19,7 @@ Guides: **[setting it up against a production CommCell](docs/production-setup.md
 [how a run works, step by step](docs/blt-flow.md) ·
 [the Commvault SDK blt depends on](docs/commvault-sdk.md) ·
 [Rubrik Security Cloud jobs](docs/rubrik.md) ·
+[the REST API](docs/api.md) ·
 [the lab rig for the eval CommServe, in its own repository](https://github.com/blueneptune/yoki-commvault-lab) ·
 [scripts for checking what was collected](scripts/README.md) ·
 [open items](TODO.md) ·
@@ -104,21 +105,12 @@ works on Windows and without the shell script too), so it is safe to schedule ti
 
 ## API
 
-All under `/commcells/{name}`, all requiring `X-API-Key`. Interactive
-docs at `http://127.0.0.1:8088/docs`.
-
-| | |
-|---|---|
-| `GET /last-run` | watermark + the most recent run |
-| `POST /runs`, `POST /runs/{id}/finish` | record a run starting / ending |
-| `POST /jobs` | upsert a batch of jobs |
-| `GET /jobs?active=true&state=&unseen_in_run=` | query stored jobs |
-| `GET /jobs/{job_id}` | one job, including Commvault's raw summary |
-| `POST /objects`, `GET /objects?kind=&present=` | upsert / query the inventory |
-| `GET /validation?max_age_hours=` | verdict per database, from the stored inventory |
-| `GET /instance-report?history=` | per SQL instance: databases discovered vs backed up by its latest full |
-| `GET`, `PUT /backfill` | how far back history has been collected |
-| `PATCH /jobs/{job_id}` | set one job's status (used for `missing`) |
+Collectors and readers go through the API, never the database. Its
+reference is generated from the code: **`/docs`** on a running API
+(`http://127.0.0.1:8088/docs` under podman,
+`https://api.blt.lab.ethos.home/docs` on the lab cluster), `/redoc`, and
+[docs/openapi.json](docs/openapi.json). [docs/api.md](docs/api.md) covers
+where to find it, signing in, and keeping it current.
 
 ## Database
 

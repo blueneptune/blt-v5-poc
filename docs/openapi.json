@@ -1,0 +1,3788 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "blt API",
+    "description": "\nblt collects backup jobs and inventory from backup products (Commvault,\nRubrik) into one database. **This API is the only thing that reads or\nwrites that database.** Collectors never touch Postgres: they ask the API\nwhere they left off, post what they collected, and report how the run\nwent. Reports and other readers use the same API.\n\n## Signing in\n\nEvery endpoint except `/healthz` needs the API key in an `X-API-Key`\nheader. In these docs: **Authorize** (top right), paste the key, and the\n*Try it out* buttons send it.\n\n```\ncurl -H \"X-API-Key: $BLT_API_KEY\" https://api.blt.lab.ethos.home/commcells/cv-toaster/last-run\n```\n\n## Conventions\n\n- **Sources are named in the path**: a CommCell under\n  `/commcells/{commcell_name}`, an RSC account under\n  `/rubrik/{account_name}`. The name is blt's own (its Prefect block's),\n  not the product's.\n- **Times** are ISO 8601 with a time zone (`2026-10-29T14:00:00Z`). A\n  time in a request body without one is refused.\n- **Lists** page with `limit` and `offset`.\n- **Errors** come back as `{\"detail\": \"...\"}`: 401 for a missing or wrong\n  key, 404 for an unknown source, run or job, 422 for a body or\n  parameter that does not validate.\n- **Writes are upserts**, keyed by the source's own ids. Posting the same\n  batch twice changes nothing; a batch collected *before* what is\n  already stored is ignored, so a slow run cannot roll a job back.\n\n## One collection run\n\n1. `GET .../last-run` - the watermark: where the last successful run\n   started. None means never collected.\n2. `POST .../runs` - open a run; keep its `id`.\n3. `POST .../jobs` - the jobs collected, in batches, each with the run id.\n4. `POST .../runs/{run_id}/finish` - succeeded or failed. Only a\n   succeeded run moves the watermark.\n\nCommvault runs also check on jobs still active (`GET .../jobs?active=true`)\nand reconcile ones the CommCell no longer knows (`PATCH .../jobs/{job_id}`).\nRubrik runs need neither: RSC reports every change, so one pass covers it.\n",
+    "version": "2026.10.2"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health check",
+        "description": "`{\"status\": \"ok\"}` once the API can query its database. No key\nneeded: this is what the liveness and readiness probes call.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/last-run": {
+      "get": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "Where the last collection got to",
+        "description": "The CommCell's watermark and its most recent run. An unknown\nCommCell is not an error: it comes back with no watermark, which\ntells a collector to start with an initial run.",
+        "operationId": "last_run_commcells__commcell_name__last_run_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LastRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/backfill": {
+      "get": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "How far back history has been collected",
+        "description": "Where the next backfill chunk should end, and whether backfill\nhas reached the start of the CommCell's history.",
+        "operationId": "backfill_state_commcells__commcell_name__backfill_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillState"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "Record backfill progress",
+        "description": "Called by the backfill flow after each chunk it collects.",
+        "operationId": "save_backfill_commcells__commcell_name__backfill_put",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackfillUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillState"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/runs": {
+      "post": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "Open a collection run",
+        "description": "Opens a run (status `running`) and returns it; send its `id`\nwith each batch of jobs or objects. The CommCell is created on its\nfirst run.",
+        "operationId": "start_run_commcells__commcell_name__runs_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunStart"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/runs/{run_id}/finish": {
+      "post": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "Close a collection run",
+        "description": "Records how the run went. A succeeded collection run (initial,\ndelta or full) becomes the new watermark. A succeeded inventory\nrun marks everything it did not list as no longer present, and\nstores that day's per-instance report.",
+        "operationId": "finish_run_commcells__commcell_name__runs__run_id__finish_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell or run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/jobs": {
+      "post": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "Store a batch of jobs",
+        "description": "Inserts new jobs and updates known ones, keyed by Commvault's\njob id. A job collected earlier than what is stored is left alone.\n`written` counts the jobs actually inserted or changed.",
+        "operationId": "upsert_jobs_commcells__commcell_name__jobs_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "List jobs",
+        "description": "Jobs in job id order. The collector uses `active=true` to find\njobs to check on, and `unseen_in_run` to find ones to reconcile.",
+        "operationId": "list_jobs_commcells__commcell_name__jobs_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs still running (true) or finished (false).",
+              "title": "Active"
+            },
+            "description": "Only jobs still running (true) or finished (false)."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "blt's normalised state: running, completed, failed, ...",
+              "title": "State"
+            },
+            "description": "blt's normalised state: running, completed, failed, ..."
+          },
+          {
+            "name": "unseen_in_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs that run did not collect - what is left to reconcile.",
+              "title": "Unseen In Run"
+            },
+            "description": "Only jobs that run did not collect - what is left to reconcile."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobOut"
+                  },
+                  "title": "Response List Jobs Commcells  Commcell Name  Jobs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "One job",
+        "description": "One job by Commvault's job id, with its full Commvault record in\n`raw`.",
+        "operationId": "get_job_commcells__commcell_name__jobs__job_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell or job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "commvault: collection"
+        ],
+        "summary": "Change one job's status",
+        "description": "Used to mark a job the CommCell no longer knows as \"Not found in\nCommCell\"; anything Commvault can still describe goes through\n`POST .../jobs`.",
+        "operationId": "patch_job_commcells__commcell_name__jobs__job_id__patch",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell or job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/objects": {
+      "post": {
+        "tags": [
+          "commvault: inventory and reports"
+        ],
+        "summary": "Store a batch of inventory",
+        "description": "Clients, instances and databases as the CommCell lists them,\nduring an inventory run. Parents go before their children: clients,\nthen instances, then databases.",
+        "operationId": "upsert_objects_commcells__commcell_name__objects_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell or run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parent the batch names has not been sent yet"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "commvault: inventory and reports"
+        ],
+        "summary": "List inventory",
+        "description": "What the CommCell says exists, by kind then name.",
+        "operationId": "list_objects_commcells__commcell_name__objects_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "client, instance or database.",
+              "title": "Kind"
+            },
+            "description": "client, instance or database."
+          },
+          {
+            "name": "present",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "false: things the latest inventory no longer lists.",
+              "title": "Present"
+            },
+            "description": "false: things the latest inventory no longer lists."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ObjectOut"
+                  },
+                  "title": "Response List Objects Commcells  Commcell Name  Objects Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/instance-report": {
+      "get": {
+        "tags": [
+          "commvault: inventory and reports"
+        ],
+        "summary": "SQL Server instances: discovered vs backed up",
+        "description": "Databases discovered against databases backed up, per SQL\nServer instance, for its most recent full backup.",
+        "operationId": "instance_report_commcells__commcell_name__instance_report_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          },
+          {
+            "name": "history",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Every stored row, one per instance per full backup job.",
+              "default": false,
+              "title": "History"
+            },
+            "description": "Every stored row, one per instance per full backup job."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InstanceReportRow"
+                  },
+                  "title": "Response Instance Report Commcells  Commcell Name  Instance Report Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/commcells/{commcell_name}/validation": {
+      "get": {
+        "tags": [
+          "commvault: inventory and reports"
+        ],
+        "summary": "Is everything backed up",
+        "description": "Is everything this source says exists also backed up?\n\nJudged entirely from the source's own inventory (see\nValidationReport for what that can and cannot establish), with\neach database's last backup job looked up in the job table as a\nsecond opinion on whether that backup actually succeeded.",
+        "operationId": "validation_commcells__commcell_name__validation_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "commcell_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Commcell Name"
+            }
+          },
+          {
+            "name": "max_age_hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "A backup older than this is stale.",
+              "default": 24,
+              "title": "Max Age Hours"
+            },
+            "description": "A backup older than this is stale."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown CommCell",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rubrik/{account_name}/last-run": {
+      "get": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "Where the last collection got to",
+        "description": "The account's watermark and its most recent run. An unknown\naccount is not an error: no watermark means do an initial run.",
+        "operationId": "last_run_rubrik__account_name__last_run_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubrikLastRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rubrik/{account_name}/runs": {
+      "post": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "Open a collection run",
+        "description": "Opens a run (status `running`); send its `id` with each batch.\nThe account is created on its first run.",
+        "operationId": "start_run_rubrik__account_name__runs_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubrikRunStart"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubrikRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rubrik/{account_name}/runs/{run_id}/finish": {
+      "post": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "Close a collection run",
+        "description": "Records how the run went; a succeeded run becomes the new\nwatermark.",
+        "operationId": "finish_run_rubrik__account_name__runs__run_id__finish_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Name"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubrikRunFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubrikRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown account or run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rubrik/{account_name}/jobs": {
+      "post": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "Store a batch of jobs",
+        "description": "Inserts new jobs and updates known ones, keyed by `series_key`.\nA job collected earlier than what is stored is left alone.",
+        "operationId": "upsert_jobs_rubrik__account_name__jobs_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubrikJobBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "List jobs",
+        "description": "Jobs, most recently updated first.",
+        "operationId": "list_jobs_rubrik__account_name__jobs_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Account Name"
+            }
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs still running (true) or finished (false).",
+              "title": "Active"
+            },
+            "description": "Only jobs still running (true) or finished (false)."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "RSC's status, any case: Success, Failure, ...",
+              "title": "Status"
+            },
+            "description": "RSC's status, any case: Success, Failure, ..."
+          },
+          {
+            "name": "object_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the protected object's name, any case.",
+              "title": "Object Name"
+            },
+            "description": "Part of the protected object's name, any case."
+          },
+          {
+            "name": "updated_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs RSC changed after this time.",
+              "title": "Updated After"
+            },
+            "description": "Only jobs RSC changed after this time."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RubrikJobOut"
+                  },
+                  "title": "Response List Jobs Rubrik  Account Name  Jobs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BackfillState": {
+        "properties": {
+          "commcell": {
+            "type": "string",
+            "title": "Commcell"
+          },
+          "resume_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume From"
+          },
+          "backfilled_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backfilled To"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "commcell"
+        ],
+        "title": "BackfillState",
+        "description": "How far back a CommCell's history has been collected.\n\n`resume_from` is where the next backfill chunk should end: the oldest\npoint already covered, whether by a backfill or by ordinary runs.\nNone means nothing has been collected yet, so there is nothing to\nbackfill behind."
+      },
+      "BackfillUpdate": {
+        "properties": {
+          "backfilled_to": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Backfilled To",
+            "description": "The oldest point now collected."
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete",
+            "description": "The start of the CommCell's history has been reached.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "backfilled_to"
+        ],
+        "title": "BackfillUpdate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InstanceReportRow": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "instance": {
+            "type": "string",
+            "title": "Instance"
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "job_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Status"
+          },
+          "job_ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Ended At"
+          },
+          "discovered": {
+            "type": "integer",
+            "title": "Discovered"
+          },
+          "backed_up": {
+            "type": "integer",
+            "title": "Backed Up"
+          },
+          "reported_backed_up": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported Backed Up"
+          },
+          "reported_skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported Skipped"
+          },
+          "missed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missed"
+          },
+          "unconfirmed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unconfirmed"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "default": ""
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instance",
+          "discovered",
+          "backed_up"
+        ],
+        "title": "InstanceReportRow",
+        "description": "One database instance and its most recent full backup: how many\ndatabases the source knows on it, how many that backup took, and\nwhich ones it missed.\n\n`backed_up` counts the known databases whose last full is this job,\nby name. `reported_backed_up` / `reported_skipped` are the backup\nproduct's own totals for the job, kept alongside as a cross-check\nrather than trusted on their own. System databases cannot be checked\nby name (the source gives them no per-database job), so they are\ncounted in `discovered` and reported separately in `unconfirmed`."
+      },
+      "JobBatch": {
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "The run this batch belongs to: the `id` from `POST .../runs`."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When this was read from the source. Nothing older than what is already stored overwrites it."
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobIn"
+            },
+            "type": "array",
+            "title": "Jobs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collected_at",
+          "jobs"
+        ],
+        "title": "JobBatch"
+      },
+      "JobIn": {
+        "properties": {
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id",
+            "description": "Commvault's job id."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Commvault status, as Commvault words it."
+          },
+          "job_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Type"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "backup_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Level"
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "subclient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subclient Name"
+          },
+          "backupset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backupset Name"
+          },
+          "instance_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Name"
+          },
+          "storage_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Policy"
+          },
+          "percent_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Complete"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "last_update_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Update Time"
+          },
+          "elapsed_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Seconds"
+          },
+          "size_of_application": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Of Application"
+          },
+          "size_of_media": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Of Media"
+          },
+          "total_files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Files"
+          },
+          "failed_files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Files"
+          },
+          "pending_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Reason"
+          },
+          "is_aged": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Aged"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw",
+            "description": "Commvault's jobSummary for the job, untouched."
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "JobIn",
+        "description": "One job as of one collection. `raw` is Commvault's jobSummary\nuntouched, so a field nobody modelled yet is still recoverable."
+      },
+      "JobOut": {
+        "properties": {
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id",
+            "description": "Commvault's job id."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Commvault status, as Commvault words it."
+          },
+          "job_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Type"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "backup_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Level"
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "subclient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subclient Name"
+          },
+          "backupset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backupset Name"
+          },
+          "instance_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Name"
+          },
+          "storage_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Policy"
+          },
+          "percent_complete": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Complete"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "last_update_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Update Time"
+          },
+          "elapsed_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Seconds"
+          },
+          "size_of_application": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Of Application"
+          },
+          "size_of_media": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Of Media"
+          },
+          "total_files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Files"
+          },
+          "failed_files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Files"
+          },
+          "pending_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Reason"
+          },
+          "is_aged": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Aged"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw",
+            "description": "Commvault's jobSummary for the job, untouched."
+          },
+          "commcell_id": {
+            "type": "integer",
+            "title": "Commcell Id"
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "blt's state for `status`: running, queued, waiting, pending, suspended, stopping, completed, completed_with_errors, completed_with_warnings, committed, failed, killed, no_run, missing (the CommCell no longer knows the job), or unknown."
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Still going to change. A status blt does not recognise counts as active."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When blt first collected the job."
+          },
+          "last_collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Collected At",
+            "description": "When this state of the job was read from the CommCell."
+          },
+          "last_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Run Id",
+            "description": "The last run that collected the job."
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "commcell_id",
+          "state",
+          "is_active",
+          "first_seen_at",
+          "last_collected_at"
+        ],
+        "title": "JobOut"
+      },
+      "JobPatch": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "collected_at"
+        ],
+        "title": "JobPatch",
+        "description": "A change to one already-known job - today only used to mark a job\nMISSING_STATUS, since anything Commvault can still describe goes\nthrough the batch upsert instead."
+      },
+      "LastRun": {
+        "properties": {
+          "commcell": {
+            "type": "string",
+            "title": "Commcell"
+          },
+          "watermark": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watermark"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "commcell"
+        ],
+        "title": "LastRun",
+        "description": "`watermark` is when the most recent *successful* collection run\n(initial, delta or full - not backfill) started - the\npoint a delta run has to reach back to. None means nothing has ever\nbeen collected for this CommCell, i.e. do a full run."
+      },
+      "ObjectBatch": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id",
+            "description": "The inventory run this batch belongs to."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When this was read from the source."
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/ObjectIn"
+            },
+            "type": "array",
+            "title": "Objects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "collected_at",
+          "objects"
+        ],
+        "title": "ObjectBatch"
+      },
+      "ObjectIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "client",
+              "instance",
+              "database"
+            ],
+            "title": "Kind"
+          },
+          "source_key": {
+            "type": "string",
+            "title": "Source Key",
+            "description": "The source's own stable id for it, unique per kind."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "client",
+                  "instance",
+                  "database"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Kind",
+            "description": "The parent's kind. The parent must already have been sent."
+          },
+          "parent_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Key",
+            "description": "The parent's source_key."
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type",
+            "description": "What sort of thing within its kind: \"SQL Server\", \"File System\", ..."
+          },
+          "last_backup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup At",
+            "description": "Its last backup, where the source reports one per object."
+          },
+          "last_backup_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup Job Id",
+            "description": "The job that took that backup."
+          },
+          "last_full_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Full Job Id",
+            "description": "The last full backup job that included it, where the source says."
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes",
+            "description": "Anything else the source says about it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "source_key",
+          "name"
+        ],
+        "title": "ObjectIn",
+        "description": "One thing a source says exists, as that source describes it.\n\nThis is the observation layer of docs/asset-refinery.md and nothing\nmore: no merging, no judgement. `source_key` is the source's own\nstable identifier for the thing, unique per (source, kind). A parent\nis named by its own (kind, source_key) and must already have been\nsent - clients before instances before databases."
+      },
+      "ObjectOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "client",
+              "instance",
+              "database"
+            ],
+            "title": "Kind"
+          },
+          "source_key": {
+            "type": "string",
+            "title": "Source Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type"
+          },
+          "last_backup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup At"
+          },
+          "last_backup_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup Job Id"
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "description": "Listed by the latest inventory. False: it was known, and is gone."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "source_key",
+          "name",
+          "present",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "ObjectOut"
+      },
+      "Problem": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "Problem",
+        "description": "An error: what went wrong, in words."
+      },
+      "RubrikJobBatch": {
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "The run this batch belongs to: the `id` from `POST .../runs`."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When this was read from the source. Nothing older than what is already stored overwrites it."
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/RubrikJobIn"
+            },
+            "type": "array",
+            "title": "Jobs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collected_at",
+          "jobs"
+        ],
+        "title": "RubrikJobBatch"
+      },
+      "RubrikJobIn": {
+        "properties": {
+          "series_key": {
+            "type": "string",
+            "title": "Series Key",
+            "description": "blt's key for the job: RSC's fid, or cluster id and series id when there is none."
+          },
+          "fid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fid"
+          },
+          "activity_series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Series Id"
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id"
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "object_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Name"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "activity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Type"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "RSC's status for the job's latest activity: Success, Failure, Running, ..."
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Still running or queued.",
+            "default": false
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "sla_domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Name"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "last_updated": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw",
+            "description": "RSC's activity series record, untouched."
+          }
+        },
+        "type": "object",
+        "required": [
+          "series_key"
+        ],
+        "title": "RubrikJobIn"
+      },
+      "RubrikJobOut": {
+        "properties": {
+          "series_key": {
+            "type": "string",
+            "title": "Series Key",
+            "description": "blt's key for the job: RSC's fid, or cluster id and series id when there is none."
+          },
+          "fid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fid"
+          },
+          "activity_series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Series Id"
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id"
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name"
+          },
+          "object_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Id"
+          },
+          "object_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Name"
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "activity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Type"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "RSC's status for the job's latest activity: Success, Failure, Running, ..."
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Still running or queued.",
+            "default": false
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "sla_domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Name"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "last_updated": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw",
+            "description": "RSC's activity series record, untouched."
+          },
+          "account_id": {
+            "type": "integer",
+            "title": "Account Id"
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At"
+          },
+          "last_collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Collected At"
+          },
+          "last_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "series_key",
+          "account_id",
+          "first_seen_at",
+          "last_collected_at"
+        ],
+        "title": "RubrikJobOut"
+      },
+      "RubrikLastRun": {
+        "properties": {
+          "account": {
+            "type": "string",
+            "title": "Account"
+          },
+          "watermark": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watermark"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RubrikRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "account"
+        ],
+        "title": "RubrikLastRun",
+        "description": "`watermark` is when the most recent successful run started - what\na delta run reaches back to. None: never collected, do an initial\nrun."
+      },
+      "RubrikRunFinish": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Finished At"
+          },
+          "jobs_collected": {
+            "type": "integer",
+            "title": "Jobs Collected",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "finished_at"
+        ],
+        "title": "RubrikRunFinish"
+      },
+      "RubrikRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "account_id": {
+            "type": "integer",
+            "title": "Account Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "delta",
+              "full"
+            ],
+            "title": "Mode"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "lookup_seconds": {
+            "type": "integer",
+            "title": "Lookup Seconds"
+          },
+          "jobs_collected": {
+            "type": "integer",
+            "title": "Jobs Collected"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "account_id",
+          "mode",
+          "status",
+          "started_at",
+          "lookup_seconds",
+          "jobs_collected"
+        ],
+        "title": "RubrikRunOut"
+      },
+      "RubrikRunStart": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "delta",
+              "full"
+            ],
+            "title": "Mode",
+            "description": "initial: first ever run, a recent window. delta: changes since the watermark, less an overlap. full: changes within the whole history limit."
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "lookup_seconds": {
+            "type": "integer",
+            "title": "Lookup Seconds",
+            "description": "How far back the run asked for changes: everything updated after started_at minus this."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "started_at",
+          "lookup_seconds"
+        ],
+        "title": "RubrikRunStart"
+      },
+      "RunFinish": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Finished At"
+          },
+          "jobs_collected": {
+            "type": "integer",
+            "title": "Jobs Collected",
+            "default": 0
+          },
+          "jobs_reconciled": {
+            "type": "integer",
+            "title": "Jobs Reconciled",
+            "description": "Active jobs checked on one by one.",
+            "default": 0
+          },
+          "jobs_missing": {
+            "type": "integer",
+            "title": "Jobs Missing",
+            "description": "Jobs marked as no longer known to the CommCell.",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Why a failed run failed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "finished_at"
+        ],
+        "title": "RunFinish"
+      },
+      "RunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "commcell_id": {
+            "type": "integer",
+            "title": "Commcell Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "full",
+              "delta",
+              "backfill",
+              "inventory"
+            ],
+            "title": "Mode"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "lookup_seconds": {
+            "type": "integer",
+            "title": "Lookup Seconds"
+          },
+          "jobs_collected": {
+            "type": "integer",
+            "title": "Jobs Collected"
+          },
+          "jobs_reconciled": {
+            "type": "integer",
+            "title": "Jobs Reconciled"
+          },
+          "jobs_missing": {
+            "type": "integer",
+            "title": "Jobs Missing"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "commcell_id",
+          "mode",
+          "status",
+          "started_at",
+          "lookup_seconds",
+          "jobs_collected",
+          "jobs_reconciled",
+          "jobs_missing"
+        ],
+        "title": "RunOut"
+      },
+      "RunStart": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "full",
+              "delta",
+              "backfill",
+              "inventory"
+            ],
+            "title": "Mode",
+            "description": "initial: first ever run, active jobs plus a short recent window. delta: everything since the watermark. full: the whole history in one query. backfill: older history, a time slice at a time. inventory: what the CommCell says exists, not jobs."
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "When the run started. A succeeded collection run's start becomes the watermark."
+          },
+          "lookup_seconds": {
+            "type": "integer",
+            "title": "Lookup Seconds",
+            "description": "How far before started_at the run looked for jobs."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "started_at",
+          "lookup_seconds"
+        ],
+        "title": "RunStart"
+      },
+      "UpsertResult": {
+        "properties": {
+          "received": {
+            "type": "integer",
+            "title": "Received",
+            "description": "Items in the batch."
+          },
+          "written": {
+            "type": "integer",
+            "title": "Written",
+            "description": "Items inserted or changed. Fewer than received when some were already stored as newer."
+          }
+        },
+        "type": "object",
+        "required": [
+          "received",
+          "written"
+        ],
+        "title": "UpsertResult"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ValidationReport": {
+        "properties": {
+          "commcell": {
+            "type": "string",
+            "title": "Commcell"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "inventory_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory At"
+          },
+          "max_age_hours": {
+            "type": "number",
+            "title": "Max Age Hours"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts",
+            "description": "Rows per verdict."
+          },
+          "problems": {
+            "type": "integer",
+            "title": "Problems",
+            "description": "Rows that are stale, unprotected or empty."
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "commcell",
+          "sources",
+          "max_age_hours",
+          "counts",
+          "problems",
+          "rows"
+        ],
+        "title": "ValidationReport",
+        "description": "Protection as judged from one source's own account of itself.\n\nToday the only witness to what exists is the backup product, so this\ncan find what that product knows about and has not protected. It\ncannot find what the product has never seen; `inventory_at` and\n`sources` are here so a reader can tell how much the answer rests on."
+      },
+      "ValidationRow": {
+        "properties": {
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "client",
+              "instance",
+              "database"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "unprotected",
+              "empty",
+              "unverified",
+              "gone"
+            ],
+            "title": "Verdict",
+            "description": "ok: backed up within the allowed age. stale: backed up, but longer ago. unprotected: known to the source, with no backup. empty: an instance with no databases known under it. unverified: in backup content, but the source gives no per-object backup time (SQL Server system databases). gone: the latest inventory no longer lists it."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "last_backup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup At"
+          },
+          "last_backup_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup Job Id"
+          },
+          "last_backup_job_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup Job Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "name",
+          "verdict",
+          "detail"
+        ],
+        "title": "ValidationRow"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "type": "apiKey",
+        "description": "blt's API key (BLT_API_KEY). Every endpoint but /healthz needs it.",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Is the API up, and can it reach its database."
+    },
+    {
+      "name": "commvault: collection",
+      "description": "What the Commvault collector calls each run: watermark, runs, jobs, backfill. Readers use `GET .../jobs` too."
+    },
+    {
+      "name": "commvault: inventory and reports",
+      "description": "What each CommCell says exists (clients, instances, databases), and the reports built from it: is everything it knows about backed up."
+    },
+    {
+      "name": "rubrik",
+      "description": "Rubrik Security Cloud accounts: watermark, runs, and jobs (RSC *activity series*). See docs/rubrik.md."
+    }
+  ]
+}

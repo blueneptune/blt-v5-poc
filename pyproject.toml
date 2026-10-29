@@ -40,6 +40,7 @@ blt-lookup = "blt.collector.lookup:main"
 blt-prefect-import = "blt.flows.importer:main"
 blt-prefect-block = "blt.flows.manage:main"
 blt-rubrik = "blt.rubrik.cli:main"
+blt-openapi = "blt.api.openapi:main"
 
 [tool.uv.sources]
 sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag = "v0.1.0" }

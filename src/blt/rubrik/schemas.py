@@ -23,7 +23,11 @@ RubrikRunStatus = Literal["running", "succeeded", "failed"]
 
 
 class RubrikJobIn(BaseModel):
-    series_key: str
+    series_key: str = Field(
+        description=(
+            "blt's key for the job: RSC's fid, or cluster id and series id when there is none."
+        )
+    )
     fid: str | None = None
     activity_series_id: str | None = None
     cluster_id: str | None = None
@@ -33,19 +37,31 @@ class RubrikJobIn(BaseModel):
     object_type: str | None = None
     location: str | None = None
     activity_type: str | None = None
-    status: str | None = None
-    is_active: bool = False
+    status: str | None = Field(
+        default=None,
+        description="RSC's status for the job's latest activity: Success, Failure, Running, ...",
+    )
+    is_active: bool = Field(default=False, description="Still running or queued.")
     severity: str | None = None
     progress: str | None = None
     sla_domain_name: str | None = None
     start_time: AwareDatetime | None = None
     last_updated: AwareDatetime | None = None
-    raw: dict[str, Any] = Field(default_factory=dict)
+    raw: dict[str, Any] = Field(
+        default_factory=dict, description="RSC's activity series record, untouched."
+    )
 
 
 class RubrikJobBatch(BaseModel):
-    run_id: int | None = None
-    collected_at: AwareDatetime
+    run_id: int | None = Field(
+        default=None, description="The run this batch belongs to: the `id` from `POST .../runs`."
+    )
+    collected_at: AwareDatetime = Field(
+        description=(
+            "When this was read from the source. Nothing older than what is already stored "
+            "overwrites it."
+        )
+    )
     jobs: list[RubrikJobIn]
 
 
@@ -59,11 +75,19 @@ class RubrikJobOut(RubrikJobIn):
 
 
 class RubrikRunStart(BaseModel):
-    mode: RubrikRunMode
+    mode: RubrikRunMode = Field(
+        description=(
+            "initial: first ever run, a recent window. delta: changes since the watermark, less an"
+            " overlap. full: changes within the whole history limit."
+        )
+    )
     started_at: AwareDatetime
-    # How far back this run asked for changes: everything updated after
-    # started_at minus this.
-    lookup_seconds: int
+    lookup_seconds: int = Field(
+        description=(
+            "How far back the run asked for changes: everything updated after started_at minus "
+            "this."
+        )
+    )
 
 
 class RubrikRunFinish(BaseModel):
