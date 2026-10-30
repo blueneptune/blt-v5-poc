@@ -169,18 +169,28 @@ Each a branch of its own, each releasable:
 3. **Which kinds the jobs page shows by default.** Proposed: `backup`,
    `restore`, `copy`; `maintenance` and `scan` behind a filter - Rubrik's
    index and diagnostic series would otherwise bury the backups.
-4. **Rubrik's protection (SLA domain)** is not collected per job yet; it
-   needs the SDK's object or SLA calls - see Rubrik inventory below.
-5. **Veeam's per-VM tasks**: store them as child jobs from the start, or
-   only the session? Proposed: the session first, tasks once a real
-   server shows what they hold.
+4. **Rubrik's protection (SLA domain)** is not collected per job yet.
+   The inventory now holds each object's SLA domain, so a job can take
+   it from its object's `rubrik.source_object` row - see Rubrik
+   inventory below. Proposed: that, rather than a second SLA field per
+   job.
+5. **Veeam's per-VM tasks**: sto## Rubrik inventory
 
-## Rubrik inventory
+Collected since blt 2026.10.30.1, twice daily: every object RSC lists
+(`snappableConnection`, its Object Compliance data) - VMs, hosts, file
+sets, databases, Azure workloads, M365 mailboxes, OneDrives, sites and
+teams - protected or not, into `rubrik.source_object`.
 
-The Rubrik SDK does not collect inventory yet. It has clusters, SLA
-domains and SQL Server databases (written, not run against RSC), but not
-the protected objects themselves (VMs, hosts, M365 mailboxes, sites).
-That is what would give Rubrik jobs their `protection` and feed the
-refinery's sightings, as Commvault's inventory does today
-(`commvault.source_object`). It is a separate piece of work: RSC's
-object and SLA queries in the SDK first, then a Rubrik inventory flow.
+**Every product's inventory table follows Commvault's**: named
+`<product>.source_object`, with a UUID `id`, `kind` (the type, in the
+product's words), `source_key` (unique per source), `name`, `present`,
+`first_seen_at`, `last_seen_at` and `last_seen_run_id`. What only that
+product has (Commvault's parent links and `attributes`; Rubrik's SLA
+domain, compliance, snapshot counts and sizes) stays in typed columns of
+its own. A cross-product inventory view, like `blt.job` for jobs, is
+then a union of the shared columns. Rubrik's table was first created as
+`rubrik.object` and renamed to match before anything depended on it.
+
+That gives Rubrik jobs their `protection` (question 4) and feeds the
+refinery's sightings, as Commvault's inventory does. Rubrik clusters and
+SLA domains as tables of their own are still to come.
