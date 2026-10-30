@@ -10,12 +10,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from rubrik_sdk import ActivitySeries, ServiceAccount
+from rubrik_sdk import ActivitySeries, InventoryObject, ServiceAccount
 from sdk_primer import APIClient
 
-from blt.rubrik.collect import run_rubrik_collection
-from blt.rubrik.schemas import RubrikJobIn
-from blt.rubrik.source import to_job_in
+from blt.rubrik.collect import run_rubrik_collection, run_rubrik_inventory
+from blt.rubrik.schemas import RubrikJobIn, RubrikObjectIn
+from blt.rubrik.source import to_job_in, to_object_in
 from blt.rubrik.store import RubrikStore
 
 T0 = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
@@ -48,6 +48,33 @@ class FakeRsc:
             if self.fail_after_pages is not None and number >= self.fail_after_pages:
                 raise ConnectionError("RSC went away")
             yield self.changed[start : start + 2]
+
+
+def obj(key: str, **fields: object) -> RubrikObjectIn:
+    return RubrikObjectIn(
+        **{  # type: ignore[arg-type]
+            "object_key": key,
+            "rsc_id": key,
+            "name": f"obj-{key}",
+            "object_type": "AzureNativeVm",
+            "protection_status": "Protected",
+            "compliance_status": "IN_COMPLIANCE",
+            "sla_domain_name": "Gold",
+            **fields,
+        }
+    )
+
+
+class FakeInventory:
+    def __init__(self, objects: list[RubrikObjectIn], fail_after_pages: int | None = None) -> None:
+        self.objects = objects
+        self.fail_after_pages = fail_after_pages
+
+    def iter_pages(self) -> Iterator[list[RubrikObjectIn]]:
+        for number, start in enumerate(range(0, len(self.objects), 2)):
+            if self.fail_after_pages is not None and number >= self.fail_after_pages:
+                raise ConnectionError("RSC went away")
+            yield self.objects[start : start + 2]
 
 
 @pytest.fixture
@@ -213,6 +240,107 @@ def test_the_rubrik_endpoints_need_the_key(database_url: str) -> None:
         assert anonymous.get("/v1/sources/rubrik/acme/last-run").status_code == 401
 
 
+def test_an_inventory_stores_objects_and_marks_the_ones_gone(
+    store: RubrikStore, http: TestClient
+) -> None:
+    ticks = clock(T0)
+    first = run_rubrik_inventory(
+        FakeInventory([obj("a"), obj("b"), obj("c")]), store, now=lambda: next(ticks)
+    )
+    assert first.mode == "inventory" and first.status == "succeeded"
+    assert first.jobs_collected == 3
+
+    later = clock(T0 + timedelta(hours=12))
+    run_rubrik_inventory(
+        FakeInventory([obj("a", protection_status="NoSla"), obj("c")]),
+        store,
+        now=lambda: next(later),
+    )
+
+    rows = {o["object_key"]: o for o in http.get("/v1/sources/rubrik/acme/objects").json()}
+    assert {k: o["present"] for k, o in rows.items()} == {"a": True, "b": False, "c": True}
+    assert rows["a"]["protection_status"] == "NoSla"
+    assert rows["a"]["first_seen_at"] < rows["a"]["last_seen_at"]
+    assert rows["b"]["last_seen_at"] < rows["a"]["last_seen_at"]
+
+
+def test_a_failed_inventory_keeps_what_it_got_and_marks_nothing_gone(
+    store: RubrikStore, http: TestClient
+) -> None:
+    ticks = clock(T0)
+    run_rubrik_inventory(
+        FakeInventory([obj("a"), obj("b"), obj("c")]), store, now=lambda: next(ticks)
+    )
+
+    with pytest.raises(ConnectionError):
+        run_rubrik_inventory(
+            FakeInventory([obj("c"), obj("d"), obj("a")], fail_after_pages=1),
+            store,
+            now=lambda: next(ticks),
+        )
+
+    rows = {
+        o["object_key"]: o["present"] for o in http.get("/v1/sources/rubrik/acme/objects").json()
+    }
+    assert rows == {"a": True, "b": True, "c": True, "d": True}
+
+
+def test_an_inventory_does_not_touch_the_job_watermark(
+    store: RubrikStore, http: TestClient
+) -> None:
+    ticks = clock(T0)
+    run_rubrik_collection(FakeRsc(), store, now=lambda: next(ticks))
+    run_rubrik_inventory(FakeInventory([obj("a")]), store, now=lambda: next(ticks))
+
+    last = http.get("/v1/sources/rubrik/acme/last-run").json()
+    assert last["watermark"] == T0.isoformat().replace("+00:00", "Z")
+    assert last["last_run"]["mode"] == "initial"
+
+
+def test_objects_can_be_filtered(store: RubrikStore, http: TestClient) -> None:
+    ticks = clock(T0)
+    run_rubrik_inventory(
+        FakeInventory(
+            [
+                obj("a"),
+                obj(
+                    "b",
+                    object_type="O365Mailbox",
+                    protection_status="NoSla",
+                    sla_domain_name=None,
+                    compliance_status="UNPROTECTED",
+                ),
+                obj("c", object_type="O365Onedrive", sla_domain_name="Bronze"),
+            ]
+        ),
+        store,
+        now=lambda: next(ticks),
+    )
+
+    def keys(query: str) -> list[str]:
+        return [o["object_key"] for o in http.get(f"/v1/sources/rubrik/acme/objects{query}").json()]
+
+    assert keys("") == ["a", "b", "c"]  # by type, then name
+    assert keys("?object_type=o365mailbox&object_type=O365Onedrive") == ["b", "c"]
+    assert keys("?protection_status=nosla") == ["b"]
+    assert keys("?compliance_status=unprotected") == ["b"]
+    assert keys("?sla_domain=bronze") == ["c"]
+    assert keys("?name=OBJ-A") == ["a"]
+    assert keys("?present=false") == []
+    assert keys("?limit=1&offset=1") == ["b"]
+
+
+def test_objects_need_a_known_run(http: TestClient) -> None:
+    http.post(
+        "/v1/sources/rubrik/acme/runs",
+        json={"mode": "inventory", "started_at": T0.isoformat(), "lookup_seconds": 0},
+    )
+    body = {"run_id": 999, "collected_at": T0.isoformat(), "objects": []}
+
+    assert http.post("/v1/sources/rubrik/acme/objects", json=body).status_code == 404
+    assert http.get("/v1/sources/rubrik/nobody/objects").status_code == 404
+
+
 # -- without Postgres -------------------------------------------------------
 
 
@@ -255,6 +383,35 @@ def test_an_activity_series_becomes_a_job() -> None:
     assert out.data_transferred == 52428800
 
 
+def test_an_rsc_object_becomes_an_inventory_row() -> None:
+    rsc_object = InventoryObject.model_validate(
+        {
+            "id": "local-1",
+            "fid": "f-1",
+            "name": "mailbox-1",
+            "objectType": "O365Mailbox",
+            "location": "",
+            "objectState": "ACTIVE",
+            "protectionStatus": "Protected",
+            "complianceStatus": "OUT_OF_COMPLIANCE",
+            "lastSnapshot": "2026-10-30T02:00:00.000Z",
+            "missedSnapshots": 3,
+            "logicalBytes": 1073741824,
+            "slaDomain": {"id": "sla-1", "name": "Gold"},
+            "cluster": {"id": "c-1", "name": "rubrik-east"},
+        }
+    )
+
+    out = to_object_in(rsc_object)
+
+    assert out.object_key == "f-1" and out.rsc_id == "local-1"
+    assert out.location is None
+    assert out.sla_domain_id == "sla-1" and out.sla_domain_name == "Gold"
+    assert out.cluster_name == "rubrik-east"
+    assert out.last_snapshot == datetime(2026, 10, 30, 2, 0, tzinfo=UTC)
+    assert out.missed_snapshots == 3 and out.logical_bytes == 1073741824
+
+
 def test_the_block_holds_the_service_account_and_hides_the_secret() -> None:
     from blt.flows.rubrik import RubrikAccountBlock
 
@@ -286,3 +443,17 @@ def test_no_account_blocks_means_nothing_to_do_not_the_commcells(
     monkeypatch.setattr(rubrik, "get_run_logger", lambda: logging.getLogger("test"))
 
     assert rubrik.rubrik_collect_jobs.fn() == {}
+
+
+def test_no_account_blocks_means_no_inventory_either(monkeypatch: pytest.MonkeyPatch) -> None:
+    from blt.flows import rubrik
+
+    monkeypatch.setattr(rubrik, "collectable_accounts", lambda: [])
+
+    def refuse(*args: object, **kwargs: object) -> dict[str, str]:
+        raise AssertionError("fan_out must not run with no accounts")
+
+    monkeypatch.setattr(rubrik, "fan_out", refuse)
+    monkeypatch.setattr(rubrik, "get_run_logger", lambda: logging.getLogger("test"))
+
+    assert rubrik.rubrik_collect_inventory.fn() == {}

@@ -294,7 +294,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "rubrik-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.2.0" },
+    { name = "rubrik-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.3.0" },
     { name = "sdk-primer", marker = "extra == 'collector'", git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.1.2" },
     { name = "sqlmodel", marker = "extra == 'api'", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.34" },
@@ -2442,8 +2442,8 @@ wheels = [
 
 [[package]]
 name = "rubrik-sdk"
-version = "0.2.0"
-source = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.2.0#d9eddcd2a11b33d4822259b1a9be8fe0ba242bfa" }
+version = "0.3.0"
+source = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.3.0#f32267baeae4c2c33e0234780a9a2307b4f7aa59" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },

@@ -5,10 +5,12 @@
     blt-rubrik collect <name> [--full]              one collection, from this host
     blt-rubrik collect <name> --service-account <file>
                                                     the same, without Prefect
+    blt-rubrik inventory <name> [--service-account <file>]
+                                                    every object RSC knows about
 
 `add` and `show` talk to Prefect (PREFECT_API_URL, as for
 blt-prefect-block; `source scripts/use-cluster.sh` for the cluster).
-`collect` needs blt's API: BLT_API_URL and BLT_API_KEY from the
+`collect` and `inventory` need blt's API: BLT_API_URL and BLT_API_KEY from the
 environment or config/blt.env.
 """
 
@@ -77,6 +79,18 @@ def collect(name: str, *, full: bool, service_account: Path | None) -> str:
     return collect_account(name, block, force_full=full)
 
 
+def inventory(name: str, *, service_account: Path | None) -> str:
+    from blt.flows.rubrik import RubrikAccountBlock, inventory_account
+
+    if service_account is not None:
+        block = RubrikAccountBlock.from_service_account(
+            ServiceAccount.from_json_file(service_account)
+        )
+    else:
+        block = _load(name)
+    return inventory_account(name, block)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="blt-rubrik", description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -92,6 +106,11 @@ def main() -> None:
     p_collect.add_argument(
         "--service-account", type=Path, help="use this file instead of the Prefect block"
     )
+    p_inventory = sub.add_parser("inventory", help="one inventory run, from this host")
+    p_inventory.add_argument("name")
+    p_inventory.add_argument(
+        "--service-account", type=Path, help="use this file instead of the Prefect block"
+    )
     args = parser.parse_args()
 
     configure_logging(level="INFO")
@@ -101,6 +120,8 @@ def main() -> None:
         elif args.command == "show":
             for line in show(args.names):
                 print(line)
+        elif args.command == "inventory":
+            print(inventory(args.name, service_account=args.service_account))
         else:
             print(collect(args.name, full=args.full, service_account=args.service_account))
     except (SDKError, OSError, ValueError) as exc:

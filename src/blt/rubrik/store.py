@@ -15,6 +15,8 @@ from .schemas import (
     RubrikJobBatch,
     RubrikJobIn,
     RubrikLastRun,
+    RubrikObjectBatch,
+    RubrikObjectIn,
     RubrikRunFinish,
     RubrikRunOut,
     RubrikRunStart,
@@ -44,4 +46,11 @@ class RubrikStore:
     ) -> UpsertResult:
         batch = RubrikJobBatch(run_id=run_id, collected_at=collected_at, jobs=jobs)
         response = self._client.post(f"{self._base}/jobs", json=batch.model_dump(mode="json"))
+        return UpsertResult.model_validate(response.json())
+
+    def upsert_objects(
+        self, run_id: int, collected_at: datetime, objects: list[RubrikObjectIn]
+    ) -> UpsertResult:
+        batch = RubrikObjectBatch(run_id=run_id, collected_at=collected_at, objects=objects)
+        response = self._client.post(f"{self._base}/objects", json=batch.model_dump(mode="json"))
         return UpsertResult.model_validate(response.json())

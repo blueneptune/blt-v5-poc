@@ -1212,7 +1212,7 @@
           "rubrik"
         ],
         "summary": "Where the last collection got to",
-        "description": "The account's watermark and its most recent run. An unknown\naccount is not an error: no watermark means do an initial run.",
+        "description": "The account's watermark and its most recent job run. An unknown\naccount is not an error: no watermark means do an initial run.\nInventory runs do not count.",
         "operationId": "last_run_v1_sources_rubrik__source_name__last_run_get",
         "security": [
           {
@@ -1348,7 +1348,7 @@
           "rubrik"
         ],
         "summary": "Close a collection run",
-        "description": "Records how the run went; a succeeded run becomes the new\nwatermark.",
+        "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present.",
         "operationId": "finish_run_v1_sources_rubrik__source_name__runs__run_id__finish_post",
         "security": [
           {
@@ -1668,6 +1668,302 @@
                     "$ref": "#/components/schemas/RubrikJobOut"
                   },
                   "title": "Response List Jobs V1 Sources Rubrik  Source Name  Jobs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources/rubrik/{source_name}/objects": {
+      "post": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "Store a batch of inventory",
+        "description": "Objects as RSC lists them, during an inventory run, keyed by\n`object_key`.",
+        "operationId": "upsert_objects_v1_sources_rubrik__source_name__objects_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubrikObjectBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown account or run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "List inventory",
+        "description": "What RSC says exists, by type then name.",
+        "operationId": "list_objects_v1_sources_rubrik__source_name__objects_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
+          },
+          {
+            "name": "object_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these object types, any case; repeat for several: `?object_type=O365Mailbox&object_type=O365Onedrive`.",
+              "title": "Object Type"
+            },
+            "description": "Only these object types, any case; repeat for several: `?object_type=O365Mailbox&object_type=O365Onedrive`."
+          },
+          {
+            "name": "protection_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Protected, NoSla or DoNotProtect, any case.",
+              "title": "Protection Status"
+            },
+            "description": "Protected, NoSla or DoNotProtect, any case."
+          },
+          {
+            "name": "compliance_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, ..., any case.",
+              "title": "Compliance Status"
+            },
+            "description": "IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, ..., any case."
+          },
+          {
+            "name": "sla_domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The SLA domain's name, any case.",
+              "title": "Sla Domain"
+            },
+            "description": "The SLA domain's name, any case."
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the object's name, any case.",
+              "title": "Name"
+            },
+            "description": "Part of the object's name, any case."
+          },
+          {
+            "name": "present",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "false: objects the latest inventory no longer lists.",
+              "title": "Present"
+            },
+            "description": "false: objects the latest inventory no longer lists."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RubrikObjectOut"
+                  },
+                  "title": "Response List Objects V1 Sources Rubrik  Source Name  Objects Get"
                 }
               }
             }
@@ -3823,7 +4119,7 @@
                 "type": "null"
               }
             ],
-            "description": "The most recent run, whatever its outcome."
+            "description": "The most recent job run, whatever its outcome."
           }
         },
         "type": "object",
@@ -3831,7 +4127,880 @@
           "account"
         ],
         "title": "RubrikLastRun",
-        "description": "`watermark` is when the most recent successful run started - what\na delta run reaches back to. None: never collected, do an initial\nrun."
+        "description": "`watermark` is when the most recent successful job run started -\nwhat a delta run reaches back to. None: never collected, do an\ninitial run. Inventory runs play no part in it."
+      },
+      "RubrikObjectBatch": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id",
+            "description": "The inventory run this batch belongs to."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When this was read from RSC."
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/RubrikObjectIn"
+            },
+            "type": "array",
+            "title": "Objects",
+            "description": "The objects."
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "collected_at",
+          "objects"
+        ],
+        "title": "RubrikObjectBatch",
+        "description": "Objects sent during an inventory run.",
+        "examples": [
+          {
+            "collected_at": "2026-10-30T05:47:00Z",
+            "objects": [
+              {
+                "compliance_status": "IN_COMPLIANCE",
+                "last_snapshot": "2026-10-30T02:10:00Z",
+                "name": "vm-app-01",
+                "object_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+                "object_state": "ACTIVE",
+                "object_type": "AzureNativeVm",
+                "protection_status": "Protected",
+                "rsc_id": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+                "sla_domain_name": "Gold",
+                "total_snapshots": 42
+              }
+            ],
+            "run_id": 91
+          }
+        ]
+      },
+      "RubrikObjectIn": {
+        "properties": {
+          "object_key": {
+            "type": "string",
+            "title": "Object Key",
+            "description": "blt's key for the object: RSC's fid, else its id."
+          },
+          "fid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fid",
+            "description": "RSC's global id for the object."
+          },
+          "rsc_id": {
+            "type": "string",
+            "title": "Rsc Id",
+            "description": "RSC's id for the object."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The object's name."
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type",
+            "description": "Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ..."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it is, in RSC's words (its host, vCenter, tenant, ...)."
+          },
+          "object_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object State",
+            "description": "ACTIVE; RELIC once gone from its source but still holding snapshots."
+          },
+          "protection_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection Status",
+            "description": "Protected, NoSla or DoNotProtect."
+          },
+          "compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Status",
+            "description": "Whether its backups meet its SLA domain: IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, NOT_AVAILABLE, ..."
+          },
+          "archival_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archival Compliance Status",
+            "description": "The same, for its archive copies."
+          },
+          "replication_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replication Compliance Status",
+            "description": "The same, for its replicas."
+          },
+          "sla_domain_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Id",
+            "description": "RSC's id for its SLA domain."
+          },
+          "sla_domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Name",
+            "description": "The SLA domain protecting it, if any."
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id",
+            "description": "The Rubrik cluster that protects it (a UUID)."
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name",
+            "description": "That cluster's name."
+          },
+          "org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Id",
+            "description": "The RSC organisation it belongs to, on a multi-tenant account."
+          },
+          "protected_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protected On",
+            "description": "When it was first protected."
+          },
+          "last_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Snapshot",
+            "description": "Its latest snapshot (backup)."
+          },
+          "latest_archival_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Archival Snapshot",
+            "description": "Its latest archived snapshot."
+          },
+          "latest_replication_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Replication Snapshot",
+            "description": "Its latest replicated snapshot."
+          },
+          "awaiting_first_full": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Awaiting First Full",
+            "description": "Protected, but its first full backup has not happened yet."
+          },
+          "total_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Snapshots",
+            "description": "Snapshots it has."
+          },
+          "missed_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Snapshots",
+            "description": "Snapshots its SLA domain called for and did not get."
+          },
+          "local_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Snapshots",
+            "description": "Snapshots on the cluster."
+          },
+          "archive_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Snapshots",
+            "description": "Snapshots in archive."
+          },
+          "replica_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Snapshots",
+            "description": "Snapshots replicated."
+          },
+          "logical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Bytes",
+            "description": "Its size, as the source sees it."
+          },
+          "physical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Bytes",
+            "description": "Bytes its snapshots take."
+          },
+          "local_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Storage",
+            "description": "Bytes on the cluster."
+          },
+          "archive_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Storage",
+            "description": "Bytes in archive."
+          },
+          "replica_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Storage",
+            "description": "Bytes replicated."
+          },
+          "transferred_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferred Bytes",
+            "description": "Bytes transferred."
+          },
+          "pull_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Time",
+            "description": "When RSC last refreshed this object's figures."
+          }
+        },
+        "type": "object",
+        "required": [
+          "object_key",
+          "rsc_id",
+          "name"
+        ],
+        "title": "RubrikObjectIn",
+        "description": "One object RSC knows about - a VM, host, database, file set,\nmailbox, OneDrive, site, team, ... - as of one inventory."
+      },
+      "RubrikObjectOut": {
+        "properties": {
+          "object_key": {
+            "type": "string",
+            "title": "Object Key",
+            "description": "blt's key for the object: RSC's fid, else its id."
+          },
+          "fid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fid",
+            "description": "RSC's global id for the object."
+          },
+          "rsc_id": {
+            "type": "string",
+            "title": "Rsc Id",
+            "description": "RSC's id for the object."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The object's name."
+          },
+          "object_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Type",
+            "description": "Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ..."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it is, in RSC's words (its host, vCenter, tenant, ...)."
+          },
+          "object_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object State",
+            "description": "ACTIVE; RELIC once gone from its source but still holding snapshots."
+          },
+          "protection_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection Status",
+            "description": "Protected, NoSla or DoNotProtect."
+          },
+          "compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Status",
+            "description": "Whether its backups meet its SLA domain: IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, NOT_AVAILABLE, ..."
+          },
+          "archival_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archival Compliance Status",
+            "description": "The same, for its archive copies."
+          },
+          "replication_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replication Compliance Status",
+            "description": "The same, for its replicas."
+          },
+          "sla_domain_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Id",
+            "description": "RSC's id for its SLA domain."
+          },
+          "sla_domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Name",
+            "description": "The SLA domain protecting it, if any."
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id",
+            "description": "The Rubrik cluster that protects it (a UUID)."
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name",
+            "description": "That cluster's name."
+          },
+          "org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Id",
+            "description": "The RSC organisation it belongs to, on a multi-tenant account."
+          },
+          "protected_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protected On",
+            "description": "When it was first protected."
+          },
+          "last_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Snapshot",
+            "description": "Its latest snapshot (backup)."
+          },
+          "latest_archival_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Archival Snapshot",
+            "description": "Its latest archived snapshot."
+          },
+          "latest_replication_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Replication Snapshot",
+            "description": "Its latest replicated snapshot."
+          },
+          "awaiting_first_full": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Awaiting First Full",
+            "description": "Protected, but its first full backup has not happened yet."
+          },
+          "total_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Snapshots",
+            "description": "Snapshots it has."
+          },
+          "missed_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Snapshots",
+            "description": "Snapshots its SLA domain called for and did not get."
+          },
+          "local_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Snapshots",
+            "description": "Snapshots on the cluster."
+          },
+          "archive_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Snapshots",
+            "description": "Snapshots in archive."
+          },
+          "replica_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Snapshots",
+            "description": "Snapshots replicated."
+          },
+          "logical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Bytes",
+            "description": "Its size, as the source sees it."
+          },
+          "physical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Bytes",
+            "description": "Bytes its snapshots take."
+          },
+          "local_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Storage",
+            "description": "Bytes on the cluster."
+          },
+          "archive_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Storage",
+            "description": "Bytes in archive."
+          },
+          "replica_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Storage",
+            "description": "Bytes replicated."
+          },
+          "transferred_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferred Bytes",
+            "description": "Bytes transferred."
+          },
+          "pull_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Time",
+            "description": "When RSC last refreshed this object's figures."
+          },
+          "account_id": {
+            "type": "integer",
+            "title": "Account Id",
+            "description": "blt's id for the RSC account."
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "description": "Listed by the latest inventory. False: it was known, and RSC no longer lists it."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When an inventory first listed it."
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At",
+            "description": "When an inventory last listed it."
+          },
+          "last_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Run Id",
+            "description": "The last inventory run that listed it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "object_key",
+          "rsc_id",
+          "name",
+          "account_id",
+          "present",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "RubrikObjectOut",
+        "description": "An object as blt holds it: as of the latest inventory that listed\nit, plus blt's own fields."
       },
       "RubrikRunFinish": {
         "properties": {
@@ -3853,7 +5022,7 @@
           "jobs_collected": {
             "type": "integer",
             "title": "Jobs Collected",
-            "description": "Jobs stored by the run.",
+            "description": "Jobs stored by the run; objects, for an inventory run.",
             "default": 0
           },
           "error": {
@@ -3901,7 +5070,8 @@
             "enum": [
               "initial",
               "delta",
-              "full"
+              "full",
+              "inventory"
             ],
             "title": "Mode",
             "description": "What kind of run it is (see RubrikRunStart)."
@@ -3943,7 +5113,7 @@
           "jobs_collected": {
             "type": "integer",
             "title": "Jobs Collected",
-            "description": "Jobs stored from this run."
+            "description": "Jobs stored from this run; objects, for an inventory run."
           },
           "error": {
             "anyOf": [
@@ -3978,10 +5148,11 @@
             "enum": [
               "initial",
               "delta",
-              "full"
+              "full",
+              "inventory"
             ],
             "title": "Mode",
-            "description": "initial: first ever run, a recent window. delta: changes since the watermark, less an overlap. full: changes within the whole history limit."
+            "description": "initial: first ever run, a recent window. delta: changes since the watermark, less an overlap. full: changes within the whole history limit. inventory: every object RSC knows about, not jobs."
           },
           "started_at": {
             "type": "string",

@@ -61,6 +61,22 @@ deployments:
     work_pool:
       name: blt
 
+  # Rubrik inventory: twice a day, ten minutes after Commvault's.
+  - name: twice-daily
+    description: Inventory from every Rubrik account block - what `blt-rubrik inventory <name>` does.
+    entrypoint: blt.flows.rubrik:rubrik_collect_inventory
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "47 5,17 * * *"
+        timezone: UTC
+
+  - name: per-account
+    description: Inventory from one Rubrik account. Started by blt-rubrik-collect-inventory/twice-daily.
+    entrypoint: blt.flows.rubrik:rubrik_inventory_account
+    work_pool:
+      name: blt
+
   - name: by-hand
     description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
     entrypoint: blt.flows.flows:backfill
