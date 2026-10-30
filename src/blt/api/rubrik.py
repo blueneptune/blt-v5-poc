@@ -32,7 +32,7 @@ from blt.rubrik.schemas import (
 )
 from blt.schemas import UpsertResult
 
-from .docs import UNAUTHORIZED, not_found
+from .docs import UNAUTHORIZED, RubrikAccountName, RunId, not_found
 
 SCHEMA = "rubrik"
 
@@ -154,7 +154,7 @@ def rubrik_router(
         return run
 
     @router.get("/last-run", summary="Where the last collection got to")
-    def last_run(source_name: str, session: SessionDep) -> RubrikLastRun:
+    def last_run(source_name: RubrikAccountName, session: SessionDep) -> RubrikLastRun:
         """The account's watermark and its most recent run. An unknown
         account is not an error: no watermark means do an initial run."""
         account = session.exec(
@@ -180,7 +180,9 @@ def rubrik_router(
         )
 
     @router.post("/runs", status_code=status.HTTP_201_CREATED, summary="Open a collection run")
-    def start_run(source_name: str, body: RubrikRunStart, session: SessionDep) -> RubrikRunOut:
+    def start_run(
+        source_name: RubrikAccountName, body: RubrikRunStart, session: SessionDep
+    ) -> RubrikRunOut:
         """Opens a run (status `running`); send its `id` with each batch.
         The account is created on its first run."""
         account = get_or_create_account(session, source_name)
@@ -203,7 +205,7 @@ def rubrik_router(
         responses=not_found("account or run"),
     )
     def finish_run(
-        source_name: str, run_id: int, body: RubrikRunFinish, session: SessionDep
+        source_name: RubrikAccountName, run_id: RunId, body: RubrikRunFinish, session: SessionDep
     ) -> RubrikRunOut:
         """Records how the run went; a succeeded run becomes the new
         watermark."""
@@ -218,7 +220,9 @@ def rubrik_router(
         return RubrikRunOut.model_validate(run)
 
     @router.post("/jobs", summary="Store a batch of jobs")
-    def upsert_jobs(source_name: str, body: RubrikJobBatch, session: SessionDep) -> UpsertResult:
+    def upsert_jobs(
+        source_name: RubrikAccountName, body: RubrikJobBatch, session: SessionDep
+    ) -> UpsertResult:
         """Inserts new jobs and updates known ones, keyed by `series_key`.
         A job collected earlier than what is stored is left alone."""
         account = get_or_create_account(session, source_name)
@@ -255,7 +259,7 @@ def rubrik_router(
 
     @router.get("/jobs", summary="List jobs", responses=not_found("account"))
     def list_jobs(
-        source_name: str,
+        source_name: RubrikAccountName,
         session: SessionDep,
         active: Annotated[
             bool | None, Query(description="Only jobs still running (true) or finished (false).")

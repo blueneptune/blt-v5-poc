@@ -59,6 +59,9 @@ from .docs import (
     TITLE,
     UNAUTHORIZED,
     VERSION,
+    CommCellName,
+    CommvaultJobId,
+    RunId,
     not_found,
 )
 from .models import CollectionRun, Commcell, InstanceBackupReport, Job, SourceObject
@@ -141,7 +144,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     )
 
     @router.get("/last-run", tags=[COLLECTION], summary="Where the last collection got to")
-    def last_run(source_name: str, session: SessionDep) -> LastRun:
+    def last_run(source_name: CommCellName, session: SessionDep) -> LastRun:
         """The CommCell's watermark and its most recent run. An unknown
         CommCell is not an error: it comes back with no watermark, which
         tells a collector to start with an initial run."""
@@ -170,7 +173,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         )
 
     @router.get("/backfill", tags=[COLLECTION], summary="How far back history has been collected")
-    def backfill_state(source_name: str, session: SessionDep) -> BackfillState:
+    def backfill_state(source_name: CommCellName, session: SessionDep) -> BackfillState:
         """Where the next backfill chunk should end, and whether backfill
         has reached the start of the CommCell's history."""
         commcell = session.exec(select(Commcell).where(Commcell.name == source_name)).first()
@@ -203,7 +206,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         summary="Record backfill progress",
         responses=not_found("CommCell"),
     )
-    def save_backfill(source_name: str, body: BackfillUpdate, session: SessionDep) -> BackfillState:
+    def save_backfill(
+        source_name: CommCellName, body: BackfillUpdate, session: SessionDep
+    ) -> BackfillState:
         """Called by the backfill flow after each chunk it collects."""
         commcell = find_commcell(session, source_name)
         commcell.backfilled_to = body.backfilled_to
@@ -218,7 +223,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         status_code=status.HTTP_201_CREATED,
         summary="Open a collection run",
     )
-    def start_run(source_name: str, body: RunStart, session: SessionDep) -> RunOut:
+    def start_run(source_name: CommCellName, body: RunStart, session: SessionDep) -> RunOut:
         """Opens a run (status `running`) and returns it; send its `id`
         with each batch of jobs or objects. The CommCell is created on its
         first run."""
@@ -242,7 +247,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         summary="Close a collection run",
         responses=not_found("CommCell or run"),
     )
-    def finish_run(source_name: str, run_id: int, body: RunFinish, session: SessionDep) -> RunOut:
+    def finish_run(
+        source_name: CommCellName, run_id: RunId, body: RunFinish, session: SessionDep
+    ) -> RunOut:
         """Records how the run went. A succeeded collection run (initial,
         delta or full) becomes the new watermark. A succeeded inventory
         run marks everything it did not list as no longer present, and
@@ -296,7 +303,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         return RunOut.model_validate(run)
 
     @router.post("/jobs", tags=[COLLECTION], summary="Store a batch of jobs")
-    def upsert_jobs(source_name: str, body: JobBatch, session: SessionDep) -> UpsertResult:
+    def upsert_jobs(source_name: CommCellName, body: JobBatch, session: SessionDep) -> UpsertResult:
         """Inserts new jobs and updates known ones, keyed by Commvault's
         job id. A job collected earlier than what is stored is left alone.
         `written` counts the jobs actually inserted or changed."""
@@ -340,7 +347,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 
     @router.get("/jobs", tags=[COLLECTION], summary="List jobs", responses=not_found("CommCell"))
     def list_jobs(
-        source_name: str,
+        source_name: CommCellName,
         session: SessionDep,
         active: Annotated[
             bool | None, Query(description="Only jobs still running (true) or finished (false).")
@@ -384,7 +391,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         summary="One job",
         responses=not_found("CommCell or job"),
     )
-    def get_job(source_name: str, job_id: int, session: SessionDep) -> JobOut:
+    def get_job(source_name: CommCellName, job_id: CommvaultJobId, session: SessionDep) -> JobOut:
         """One job by Commvault's job id, with its full Commvault record in
         `raw`."""
         return JobOut.model_validate(find_job(session, source_name, job_id))
@@ -395,7 +402,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         summary="Change one job's status",
         responses=not_found("CommCell or job"),
     )
-    def patch_job(source_name: str, job_id: int, body: JobPatch, session: SessionDep) -> JobOut:
+    def patch_job(
+        source_name: CommCellName, job_id: CommvaultJobId, body: JobPatch, session: SessionDep
+    ) -> JobOut:
         """Used to mark a job the CommCell no longer knows as "Not found in
         CommCell"; anything Commvault can still describe goes through
         `POST .../jobs`."""
@@ -418,7 +427,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             422: {"description": "A parent the batch names has not been sent yet"},
         },
     )
-    def upsert_objects(source_name: str, body: ObjectBatch, session: SessionDep) -> UpsertResult:
+    def upsert_objects(
+        source_name: CommCellName, body: ObjectBatch, session: SessionDep
+    ) -> UpsertResult:
         """Clients, instances and databases as the CommCell lists them,
         during an inventory run. Parents go before their children: clients,
         then instances, then databases."""
@@ -489,7 +500,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         "/objects", tags=[REPORTS], summary="List inventory", responses=not_found("CommCell")
     )
     def list_objects(
-        source_name: str,
+        source_name: CommCellName,
         session: SessionDep,
         kind: Annotated[str | None, Query(description="client, instance or database.")] = None,
         present: Annotated[
@@ -617,7 +628,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         responses=not_found("CommCell"),
     )
     def instance_report(
-        source_name: str,
+        source_name: CommCellName,
         session: SessionDep,
         history: Annotated[
             bool, Query(description="Every stored row, one per instance per full backup job.")
@@ -651,7 +662,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         responses=not_found("CommCell"),
     )
     def validation(
-        source_name: str,
+        source_name: CommCellName,
         session: SessionDep,
         max_age_hours: Annotated[
             float, Query(gt=0, description="A backup older than this is stale.")

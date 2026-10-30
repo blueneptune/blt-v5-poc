@@ -68,8 +68,13 @@ The docs are written in the code:
   its description is its docstring (`src/blt/api/app.py`,
   `src/blt/api/rubrik.py`);
 - **a field's** description is its `Field(description=...)` in
-  `src/blt/schemas.py` or `src/blt/rubrik/schemas.py`;
-- **the overview** and the groups are in `src/blt/api/docs.py`.
+  `src/blt/schemas.py` or `src/blt/rubrik/schemas.py`, and a model's is
+  its docstring;
+- **a request body's example** - what *Try it out* starts from - is its
+  model's `json_schema_extra` examples, beside the fields;
+- **the path parameters** (`source_name`, `run_id`, `job_id`) are
+  described once, in `src/blt/api/docs.py`, with the overview and the
+  groups.
 
 After changing any of them, regenerate the copy in the repository:
 
@@ -78,5 +83,7 @@ uv run blt-openapi
 ```
 
 CI fails if `docs/openapi.json` is out of date. It also fails if an
-endpoint has no summary, description or group, or if an endpoint other
-than `/healthz` doesn't ask for the key (`tests/test_api_docs.py`).
+endpoint has no summary, description or group; a parameter, model or
+field has no description; a request body has no example, or an example
+that its own model would refuse; or an endpoint other than `/healthz`
+doesn't ask for the key (`tests/test_api_docs.py`).
