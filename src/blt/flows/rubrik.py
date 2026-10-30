@@ -6,10 +6,14 @@ token address - and the few settings collection takes. Nothing in it
 changes as runs happen: an RSC service account has no tokens to renew,
 so there is no one-home rule to keep as there is for Commvault.
 
-- rubrik_collect_account - one account's jobs (blt-rubrik-collect-account
-                           /per-account).
-- rubrik_collect_jobs    - every account block, one flow run each, at the
-                           same time (blt-rubrik-collect-jobs/hourly).
+- rubrik_collect_account   - one account's jobs (blt-rubrik-collect-account
+                             /per-account).
+- rubrik_collect_jobs      - every account block, one flow run each, at the
+                             same time (blt-rubrik-collect-jobs/hourly).
+- rubrik_inventory_account - one account's objects (blt-rubrik-inventory-
+                             account/per-account).
+- rubrik_collect_inventory - every account block's objects (blt-rubrik-
+                             collect-inventory/twice-daily).
 
 They share Commvault's concurrency limit (flows.SLOTS), so the worker's
 BLT_MAX_PARALLEL caps collection runs of every product together.
@@ -34,14 +38,15 @@ from rubrik_sdk import RubrikClient, ServiceAccount
 from sdk_primer import APIClient
 
 from blt.collector.lock import run_lock
-from blt.rubrik.collect import run_rubrik_collection
-from blt.rubrik.source import RubrikJobs
+from blt.rubrik.collect import run_rubrik_collection, run_rubrik_inventory
+from blt.rubrik.source import RubrikInventory, RubrikJobs
 from blt.rubrik.store import RubrikStore
 
 from .flows import SLOTS, fan_out, logs_to_prefect
 
 BLOCK_TYPE_SLUG = "blt-rubrik-account"
 COLLECT_ONE = "blt-rubrik-collect-account/per-account"
+INVENTORY_ONE = "blt-rubrik-inventory-account/per-account"
 LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
 
 
@@ -130,6 +135,22 @@ def collect_account(name: str, block: RubrikAccountBlock, *, force_full: bool = 
     return f"run {run.id}: {run.status}, {run.jobs_collected} jobs"
 
 
+def inventory_account(name: str, block: RubrikAccountBlock) -> str:
+    """One account's inventory, with its own lock: it can run while the
+    account's jobs are being collected, not alongside another inventory."""
+    with run_lock(LOCKS, f"rubrik-{name}.inventory") as held:
+        if not held:
+            logger.warning("An inventory for Rubrik account {} is already running, skipping.", name)
+            return "skipped: already running"
+        api = BltApiSettings()  # type: ignore[call-arg]
+        with (
+            RubrikClient(block.service_account(), verify_tls=block.verify_tls) as rsc,
+            api.client() as blt,
+        ):
+            run = run_rubrik_inventory(RubrikInventory(rsc), RubrikStore(blt, name))
+    return f"inventory run {run.id}: {run.status}, {run.jobs_collected} objects"
+
+
 @flow(
     name="blt-rubrik-collect-account",
     flow_run_name="rubrik-{account}",
@@ -140,6 +161,18 @@ def rubrik_collect_account(account: str, full: bool = False) -> str:
     with logs_to_prefect(), concurrency(SLOTS, occupy=1, strict=False):
         block = cast(RubrikAccountBlock, RubrikAccountBlock.load(account))
         return collect_account(account, block, force_full=full)
+
+
+@flow(
+    name="blt-rubrik-inventory-account",
+    flow_run_name="rubrik-inventory-{account}",
+    retries=1,
+    retry_delay_seconds=300,
+)
+def rubrik_inventory_account(account: str) -> str:
+    with logs_to_prefect(), concurrency(SLOTS, occupy=1, strict=False):
+        block = cast(RubrikAccountBlock, RubrikAccountBlock.load(account))
+        return inventory_account(account, block)
 
 
 def collectable_accounts() -> list[str]:
@@ -153,12 +186,13 @@ def collectable_accounts() -> list[str]:
 
 
 def _start_run(deployment: str, account: str) -> str:
+    label = "rubrik" if deployment == COLLECT_ONE else "rubrik-inventory"
     run = cast(
         FlowRun,
         run_deployment(
             deployment,
             parameters={"account": account},
-            flow_run_name=f"rubrik-{account}",
+            flow_run_name=f"{label}-{account}",
             timeout=0,
         ),
     )
@@ -181,6 +215,25 @@ def rubrik_collect_jobs(
         names,
         COLLECT_ONE,
         "collect Rubrik jobs",
+        wait_minutes=wait_minutes,
+        start=_start_run,
+    )
+
+
+@flow(name="blt-rubrik-collect-inventory")
+def rubrik_collect_inventory(
+    accounts: list[str] | None = None, wait_minutes: float = 110
+) -> dict[str, str]:
+    """Inventory from every Rubrik account block (or the ones named), all
+    at once, each in its own flow run."""
+    names = accounts or collectable_accounts()
+    if not names:
+        get_run_logger().warning("No Rubrik account blocks to inventory - see docs/rubrik.md")
+        return {}
+    return fan_out(
+        names,
+        INVENTORY_ONE,
+        "collect Rubrik inventory",
         wait_minutes=wait_minutes,
         start=_start_run,
     )

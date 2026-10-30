@@ -15,6 +15,9 @@ result.
 
 The run is recorded as succeeded, and so moves the watermark, only if
 every page got through.
+
+An inventory run (run_rubrik_inventory) is the other kind: every object
+RSC knows about, protected or not. It never touches the watermark.
 """
 
 from __future__ import annotations
@@ -25,12 +28,23 @@ from typing import Protocol
 
 from loguru import logger
 
-from .schemas import RubrikJobIn, RubrikRunFinish, RubrikRunMode, RubrikRunOut, RubrikRunStart
+from .schemas import (
+    RubrikJobIn,
+    RubrikObjectIn,
+    RubrikRunFinish,
+    RubrikRunMode,
+    RubrikRunOut,
+    RubrikRunStart,
+)
 from .store import RubrikStore
 
 
 class RubrikJobSource(Protocol):
     def iter_pages(self, updated_after: datetime) -> Iterator[list[RubrikJobIn]]: ...
+
+
+class RubrikObjectSource(Protocol):
+    def iter_pages(self) -> Iterator[list[RubrikObjectIn]]: ...
 
 
 def _now() -> datetime:
@@ -90,4 +104,42 @@ def run_rubrik_collection(
         run.id, RubrikRunFinish(status="succeeded", finished_at=now(), jobs_collected=collected)
     )
     logger.info("Rubrik run {} succeeded: {} jobs", run.id, collected)
+    return finished
+
+
+def run_rubrik_inventory(
+    source: RubrikObjectSource,
+    store: RubrikStore,
+    *,
+    now: Callable[[], datetime] = _now,
+) -> RubrikRunOut:
+    """Every object RSC knows about, stored as an `inventory` run.
+
+    When it succeeds the API marks every object it did not list as no
+    longer present. A run that stops part way is recorded as failed and
+    marks nothing: it saw less because it stopped, not because objects
+    went away."""
+    run = store.start_run(RubrikRunStart(mode="inventory", started_at=now(), lookup_seconds=0))
+    logger.info("Rubrik inventory run {} started", run.id)
+    collected = 0
+    try:
+        for page in source.iter_pages():
+            store.upsert_objects(run.id, now(), page)
+            collected += len(page)
+    except BaseException as exc:
+        store.finish_run(
+            run.id,
+            RubrikRunFinish(
+                status="failed",
+                finished_at=now(),
+                jobs_collected=collected,
+                error=f"{type(exc).__name__}: {exc}",
+            ),
+        )
+        raise
+
+    finished = store.finish_run(
+        run.id, RubrikRunFinish(status="succeeded", finished_at=now(), jobs_collected=collected)
+    )
+    logger.info("Rubrik inventory run {} succeeded: {} objects", run.id, collected)
     return finished

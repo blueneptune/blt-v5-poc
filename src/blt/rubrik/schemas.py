@@ -15,10 +15,13 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
-# initial - first ever run: whatever changed in a recent window
-# delta   - whatever changed since the watermark (less an overlap)
-# full    - forced: whatever changed in the whole history limit
-RubrikRunMode = Literal["initial", "delta", "full"]
+# initial   - first ever run: whatever changed in a recent window
+# delta     - whatever changed since the watermark (less an overlap)
+# full      - forced: whatever changed in the whole history limit
+# inventory - not jobs at all: every object RSC knows about
+RubrikRunMode = Literal["initial", "delta", "full", "inventory"]
+# The modes that collect jobs, and so move the watermark.
+JOB_MODES = ("initial", "delta", "full")
 RubrikRunStatus = Literal["running", "succeeded", "failed"]
 
 
@@ -176,7 +179,8 @@ class RubrikRunStart(BaseModel):
     mode: RubrikRunMode = Field(
         description=(
             "initial: first ever run, a recent window. delta: changes since the watermark, less an"
-            " overlap. full: changes within the whole history limit."
+            " overlap. full: changes within the whole history limit. inventory: every object RSC "
+            "knows about, not jobs."
         )
     )
     started_at: AwareDatetime = Field(
@@ -209,7 +213,9 @@ class RubrikRunFinish(BaseModel):
         description="succeeded moves the watermark; failed does not."
     )
     finished_at: AwareDatetime = Field(description="When the run finished.")
-    jobs_collected: int = Field(default=0, description="Jobs stored by the run.")
+    jobs_collected: int = Field(
+        default=0, description="Jobs stored by the run; objects, for an inventory run."
+    )
     error: str | None = Field(default=None, description="Why a failed run failed.")
 
 
@@ -227,19 +233,149 @@ class RubrikRunOut(BaseModel):
         default=None, description="When it finished. Null while running."
     )
     lookup_seconds: int = Field(description="How far back the run asked for changes.")
-    jobs_collected: int = Field(description="Jobs stored from this run.")
+    jobs_collected: int = Field(
+        description="Jobs stored from this run; objects, for an inventory run."
+    )
     error: str | None = Field(default=None, description="Why a failed run failed.")
 
 
 class RubrikLastRun(BaseModel):
-    """`watermark` is when the most recent successful run started - what
-    a delta run reaches back to. None: never collected, do an initial
-    run."""
+    """`watermark` is when the most recent successful job run started -
+    what a delta run reaches back to. None: never collected, do an
+    initial run. Inventory runs play no part in it."""
 
     account: str = Field(description="blt's name for the RSC account.")
     watermark: AwareDatetime | None = Field(
         default=None, description="When the last successful run started. Null: never collected."
     )
     last_run: RubrikRunOut | None = Field(
-        default=None, description="The most recent run, whatever its outcome."
+        default=None, description="The most recent job run, whatever its outcome."
+    )
+
+
+class RubrikObjectIn(BaseModel):
+    """One object RSC knows about - a VM, host, database, file set,
+    mailbox, OneDrive, site, team, ... - as of one inventory."""
+
+    object_key: str = Field(description="blt's key for the object: RSC's fid, else its id.")
+    fid: str | None = Field(default=None, description="RSC's global id for the object.")
+    rsc_id: str = Field(description="RSC's id for the object.")
+    name: str = Field(description="The object's name.")
+    object_type: str | None = Field(
+        default=None,
+        description="Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ...",
+    )
+    location: str | None = Field(
+        default=None, description="Where it is, in RSC's words (its host, vCenter, tenant, ...)."
+    )
+    object_state: str | None = Field(
+        default=None,
+        description="ACTIVE; RELIC once gone from its source but still holding snapshots.",
+    )
+    protection_status: str | None = Field(
+        default=None, description="Protected, NoSla or DoNotProtect."
+    )
+    compliance_status: str | None = Field(
+        default=None,
+        description="Whether its backups meet its SLA domain: IN_COMPLIANCE, OUT_OF_COMPLIANCE, "
+        "UNPROTECTED, NOT_AVAILABLE, ...",
+    )
+    archival_compliance_status: str | None = Field(
+        default=None, description="The same, for its archive copies."
+    )
+    replication_compliance_status: str | None = Field(
+        default=None, description="The same, for its replicas."
+    )
+    sla_domain_id: str | None = Field(default=None, description="RSC's id for its SLA domain.")
+    sla_domain_name: str | None = Field(
+        default=None, description="The SLA domain protecting it, if any."
+    )
+    cluster_id: str | None = Field(
+        default=None, description="The Rubrik cluster that protects it (a UUID)."
+    )
+    cluster_name: str | None = Field(default=None, description="That cluster's name.")
+    org_id: str | None = Field(
+        default=None, description="The RSC organisation it belongs to, on a multi-tenant account."
+    )
+    protected_on: AwareDatetime | None = Field(
+        default=None, description="When it was first protected."
+    )
+    last_snapshot: AwareDatetime | None = Field(
+        default=None, description="Its latest snapshot (backup)."
+    )
+    latest_archival_snapshot: AwareDatetime | None = Field(
+        default=None, description="Its latest archived snapshot."
+    )
+    latest_replication_snapshot: AwareDatetime | None = Field(
+        default=None, description="Its latest replicated snapshot."
+    )
+    awaiting_first_full: bool | None = Field(
+        default=None, description="Protected, but its first full backup has not happened yet."
+    )
+    total_snapshots: int | None = Field(default=None, description="Snapshots it has.")
+    missed_snapshots: int | None = Field(
+        default=None, description="Snapshots its SLA domain called for and did not get."
+    )
+    local_snapshots: int | None = Field(default=None, description="Snapshots on the cluster.")
+    archive_snapshots: int | None = Field(default=None, description="Snapshots in archive.")
+    replica_snapshots: int | None = Field(default=None, description="Snapshots replicated.")
+    logical_bytes: int | None = Field(default=None, description="Its size, as the source sees it.")
+    physical_bytes: int | None = Field(default=None, description="Bytes its snapshots take.")
+    local_storage: int | None = Field(default=None, description="Bytes on the cluster.")
+    archive_storage: int | None = Field(default=None, description="Bytes in archive.")
+    replica_storage: int | None = Field(default=None, description="Bytes replicated.")
+    transferred_bytes: int | None = Field(default=None, description="Bytes transferred.")
+    pull_time: AwareDatetime | None = Field(
+        default=None, description="When RSC last refreshed this object's figures."
+    )
+
+
+class RubrikObjectBatch(BaseModel):
+    """Objects sent during an inventory run."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "run_id": 91,
+                    "collected_at": "2026-10-30T05:47:00Z",
+                    "objects": [
+                        {
+                            "object_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+                            "rsc_id": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+                            "name": "vm-app-01",
+                            "object_type": "AzureNativeVm",
+                            "object_state": "ACTIVE",
+                            "protection_status": "Protected",
+                            "compliance_status": "IN_COMPLIANCE",
+                            "sla_domain_name": "Gold",
+                            "last_snapshot": "2026-10-30T02:10:00Z",
+                            "total_snapshots": 42,
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    run_id: int = Field(description="The inventory run this batch belongs to.")
+    collected_at: AwareDatetime = Field(description="When this was read from RSC.")
+    objects: list[RubrikObjectIn] = Field(description="The objects.")
+
+
+class RubrikObjectOut(RubrikObjectIn):
+    """An object as blt holds it: as of the latest inventory that listed
+    it, plus blt's own fields."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    account_id: int = Field(description="blt's id for the RSC account.")
+    present: bool = Field(
+        description="Listed by the latest inventory. False: it was known, and RSC no longer "
+        "lists it."
+    )
+    first_seen_at: AwareDatetime = Field(description="When an inventory first listed it.")
+    last_seen_at: AwareDatetime = Field(description="When an inventory last listed it.")
+    last_seen_run_id: int | None = Field(
+        default=None, description="The last inventory run that listed it."
     )

@@ -1,14 +1,15 @@
 """Where the Rubrik collector meets the Rubrik SDK: an RSC activity
-series becomes a RubrikJobIn here and nowhere else."""
+series becomes a RubrikJobIn, and an RSC object a RubrikObjectIn, here
+and nowhere else."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime
 
-from rubrik_sdk import ActivitySeries, RubrikClient
+from rubrik_sdk import ActivitySeries, InventoryObject, RubrikClient
 
-from .schemas import RubrikJobIn
+from .schemas import RubrikJobIn, RubrikObjectIn
 
 
 def to_job_in(series: ActivitySeries) -> RubrikJobIn:
@@ -55,3 +56,52 @@ class RubrikJobs:
     def iter_pages(self, updated_after: datetime) -> Iterator[list[RubrikJobIn]]:
         for page in self._jobs.iter_pages(updated_after=updated_after):
             yield [to_job_in(series) for series in page]
+
+
+def to_object_in(obj: InventoryObject) -> RubrikObjectIn:
+    return RubrikObjectIn(
+        object_key=obj.key,
+        fid=obj.fid,
+        rsc_id=obj.id,
+        name=obj.name,
+        object_type=obj.object_type,
+        location=obj.location,
+        object_state=obj.object_state,
+        protection_status=obj.protection_status,
+        compliance_status=obj.compliance_status,
+        archival_compliance_status=obj.archival_compliance_status,
+        replication_compliance_status=obj.replication_compliance_status,
+        sla_domain_id=obj.sla_domain.id if obj.sla_domain else None,
+        sla_domain_name=obj.sla_domain.name if obj.sla_domain else None,
+        cluster_id=obj.cluster.id if obj.cluster else None,
+        cluster_name=obj.cluster.name if obj.cluster else None,
+        org_id=obj.org_id,
+        protected_on=obj.protected_on,
+        last_snapshot=obj.last_snapshot,
+        latest_archival_snapshot=obj.latest_archival_snapshot,
+        latest_replication_snapshot=obj.latest_replication_snapshot,
+        awaiting_first_full=obj.awaiting_first_full,
+        total_snapshots=obj.total_snapshots,
+        missed_snapshots=obj.missed_snapshots,
+        local_snapshots=obj.local_snapshots,
+        archive_snapshots=obj.archive_snapshots,
+        replica_snapshots=obj.replica_snapshots,
+        logical_bytes=obj.logical_bytes,
+        physical_bytes=obj.physical_bytes,
+        local_storage=obj.local_storage,
+        archive_storage=obj.archive_storage,
+        replica_storage=obj.replica_storage,
+        transferred_bytes=obj.transferred_bytes,
+        pull_time=obj.pull_time,
+    )
+
+
+class RubrikInventory:
+    """The inventory run's object source, backed by a RubrikClient."""
+
+    def __init__(self, rsc: RubrikClient) -> None:
+        self._inventory = rsc.inventory
+
+    def iter_pages(self) -> Iterator[list[RubrikObjectIn]]:
+        for page in self._inventory.iter_pages():
+            yield [to_object_in(obj) for obj in page]
