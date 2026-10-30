@@ -7,19 +7,20 @@ Nothing here touches them.
 
 One row per job (RSC activity series) per RSC account, holding the
 latest state the job was seen in - as `job` does for Commvault. One row
-per object (`object`) per account, as of the latest inventory that
-listed it - as `source_object` does for Commvault.
+per object (`source_object`) per account, as of the latest inventory
+that listed it - the same table, by the same name, as Commvault's.
 """
 
 # No `from __future__ import annotations`: see app.py - the routes are
 # defined inside a function and name closure-local dependencies.
 
+import uuid
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import BigInteger, Column, DateTime, Index
+from sqlalchemy import BigInteger, Column, DateTime, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Field, Session, SQLModel, col, func, select, update
@@ -127,21 +128,28 @@ class RubrikJob(SQLModel, table=True):
     last_seen_run_id: int | None = Field(default=None, foreign_key=f"{SCHEMA}.collection_run.id")
 
 
-class RubrikObject(SQLModel, table=True):
-    __tablename__ = "object"
+class RubrikSourceObject(SQLModel, table=True):
+    """Something RSC says exists. Named, keyed and tracked as Commvault's
+    `source_object` is (id, kind, source_key, present, first/last seen),
+    so the two can be read side by side; the rest is Rubrik's own."""
+
+    __tablename__ = "source_object"
     __table_args__ = (
-        Index("ix_rubrik_object_account_type", "account_id", "object_type"),
-        Index("ix_rubrik_object_account_protection", "account_id", "protection_status"),
+        UniqueConstraint("account_id", "source_key", name="uq_rubrik_source_object_key"),
+        Index("ix_rubrik_source_object_account_kind", "account_id", "kind"),
+        Index("ix_rubrik_source_object_account_protection", "account_id", "protection_status"),
         {"schema": SCHEMA},
     )
 
-    account_id: int = Field(foreign_key=f"{SCHEMA}.account.id", primary_key=True)
-    object_key: str = Field(primary_key=True)
+    # A UUID, so an object can be referred to from outside this database.
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    account_id: int = Field(foreign_key=f"{SCHEMA}.account.id")
+    source_key: str
 
     fid: str | None = None
     rsc_id: str
     name: str = Field(index=True)
-    object_type: str | None = None
+    kind: str | None = None
     location: str | None = None
     object_state: str | None = None
     protection_status: str | None = None
@@ -273,11 +281,11 @@ def rubrik_router(
             # Only a complete inventory may say something has gone: a
             # partial one saw less because it stopped.
             session.execute(
-                update(RubrikObject)
+                update(RubrikSourceObject)
                 .where(
-                    col(RubrikObject.account_id) == run.account_id,
-                    col(RubrikObject.present).is_(True),
-                    col(RubrikObject.last_seen_run_id).is_distinct_from(run.id),
+                    col(RubrikSourceObject.account_id) == run.account_id,
+                    col(RubrikSourceObject.present).is_(True),
+                    col(RubrikSourceObject.last_seen_run_id).is_distinct_from(run.id),
                 )
                 .values(present=False)
             )
@@ -384,13 +392,14 @@ def rubrik_router(
         source_name: RubrikAccountName, body: RubrikObjectBatch, session: SessionDep
     ) -> UpsertResult:
         """Objects as RSC lists them, during an inventory run, keyed by
-        `object_key`."""
+        `source_key`."""
         account = find_account(session, source_name)
         find_run(session, account, body.run_id)
         rows: dict[str, dict[str, object]] = {}
         for item in body.objects:
-            rows[item.object_key] = {
+            rows[item.source_key] = {
                 **item.model_dump(),
+                "id": uuid.uuid4(),
                 "account_id": account.id,
                 "present": True,
                 "first_seen_at": body.collected_at,
@@ -400,16 +409,16 @@ def rubrik_router(
         if not rows:
             return UpsertResult(received=0, written=0)
 
-        stmt = pg_insert(RubrikObject).values(list(rows.values()))
+        stmt = pg_insert(RubrikSourceObject).values(list(rows.values()))
         stmt = stmt.on_conflict_do_update(
-            index_elements=["account_id", "object_key"],
+            index_elements=["account_id", "source_key"],
             set_={
                 name: stmt.excluded[name]
                 for name in next(iter(rows.values()))
-                if name not in {"account_id", "object_key", "first_seen_at"}
+                if name not in {"id", "account_id", "source_key", "first_seen_at"}
             },
         )
-        written = len(session.execute(stmt.returning(col(RubrikObject.object_key))).all())
+        written = len(session.execute(stmt.returning(col(RubrikSourceObject.source_key))).all())
         session.commit()
         return UpsertResult(received=len(body.objects), written=written)
 
@@ -417,11 +426,11 @@ def rubrik_router(
     def list_objects(
         source_name: RubrikAccountName,
         session: SessionDep,
-        object_type: Annotated[
+        kind: Annotated[
             list[str] | None,
             Query(
                 description="Only these object types, any case; repeat for several: "
-                "`?object_type=O365Mailbox&object_type=O365Onedrive`."
+                "`?kind=O365Mailbox&kind=O365Onedrive`."
             ),
         ] = None,
         protection_status: Annotated[
@@ -446,26 +455,28 @@ def rubrik_router(
     ) -> list[RubrikObjectOut]:
         """What RSC says exists, by type then name."""
         account = find_account(session, source_name)
-        query = select(RubrikObject).where(RubrikObject.account_id == account.id)
-        if object_type:
-            wanted = [value.lower() for value in object_type]
-            query = query.where(func.lower(RubrikObject.object_type).in_(wanted))
+        query = select(RubrikSourceObject).where(RubrikSourceObject.account_id == account.id)
+        if kind:
+            wanted = [value.lower() for value in kind]
+            query = query.where(func.lower(RubrikSourceObject.kind).in_(wanted))
         if protection_status is not None:
             query = query.where(
-                func.lower(RubrikObject.protection_status) == protection_status.lower()
+                func.lower(RubrikSourceObject.protection_status) == protection_status.lower()
             )
         if compliance_status is not None:
             query = query.where(
-                func.lower(RubrikObject.compliance_status) == compliance_status.lower()
+                func.lower(RubrikSourceObject.compliance_status) == compliance_status.lower()
             )
         if sla_domain is not None:
-            query = query.where(func.lower(RubrikObject.sla_domain_name) == sla_domain.lower())
+            query = query.where(
+                func.lower(RubrikSourceObject.sla_domain_name) == sla_domain.lower()
+            )
         if name:
-            query = query.where(col(RubrikObject.name).ilike(f"%{name}%"))
+            query = query.where(col(RubrikSourceObject.name).ilike(f"%{name}%"))
         if present is not None:
-            query = query.where(col(RubrikObject.present) == present)
+            query = query.where(col(RubrikSourceObject.present) == present)
         query = (
-            query.order_by(col(RubrikObject.object_type), col(RubrikObject.name))
+            query.order_by(col(RubrikSourceObject.kind), col(RubrikSourceObject.name))
             .offset(offset)
             .limit(limit)
         )

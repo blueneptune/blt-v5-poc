@@ -11,6 +11,7 @@ for it, see rubrik_sdk.ActivitySeries.key) within one RSC account.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -257,11 +258,11 @@ class RubrikObjectIn(BaseModel):
     """One object RSC knows about - a VM, host, database, file set,
     mailbox, OneDrive, site, team, ... - as of one inventory."""
 
-    object_key: str = Field(description="blt's key for the object: RSC's fid, else its id.")
+    source_key: str = Field(description="blt's key for the object: RSC's fid, else its id.")
     fid: str | None = Field(default=None, description="RSC's global id for the object.")
     rsc_id: str = Field(description="RSC's id for the object.")
     name: str = Field(description="The object's name.")
-    object_type: str | None = Field(
+    kind: str | None = Field(
         default=None,
         description="Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ...",
     )
@@ -341,10 +342,10 @@ class RubrikObjectBatch(BaseModel):
                     "collected_at": "2026-10-30T05:47:00Z",
                     "objects": [
                         {
-                            "object_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+                            "source_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
                             "rsc_id": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
                             "name": "vm-app-01",
-                            "object_type": "AzureNativeVm",
+                            "kind": "AzureNativeVm",
                             "object_state": "ACTIVE",
                             "protection_status": "Protected",
                             "compliance_status": "IN_COMPLIANCE",
@@ -369,6 +370,7 @@ class RubrikObjectOut(RubrikObjectIn):
 
     model_config = ConfigDict(from_attributes=True)
 
+    id: uuid.UUID = Field(description="blt's id for the object.")
     account_id: int = Field(description="blt's id for the RSC account.")
     present: bool = Field(
         description="Listed by the latest inventory. False: it was known, and RSC no longer "
