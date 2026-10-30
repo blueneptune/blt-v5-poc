@@ -143,9 +143,12 @@ word, the entry says so under **Today**.
     per-client jobs under a policy run), **retry of** (a retried
     collection).
 
-**job status** *(planned for the common shape)*
-: One of `running`, `succeeded`, `partial`, `failed`, `cancelled`,
+**job state** *(planned for the common shape)*
+: One of `queued`, `running`, `waiting`, `succeeded`, `warning`,
+  `partial`, `failed`, `cancelled`, `skipped`, `missing`, `unknown`,
   translated from the product's own status, which is kept beside it.
+  Proposed in [common-jobs.md](common-jobs.md), with each product's
+  mapping.
 
 **protection** *(planned)*
 : The fact that a source backs up an asset, and how (which policy,
