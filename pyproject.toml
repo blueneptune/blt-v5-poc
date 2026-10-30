@@ -1,6 +1,6 @@
 [project]
 name = "blt"
-version = "2026.10.30.1"
+version = "2026.10.30.2"
 description = "Commvault job-history collector: per-CommCell collection script, FastAPI ingest API, Postgres store."
 requires-python = ">=3.12"
 # Only what both halves share (the API schemas in blt.schemas). Everything
