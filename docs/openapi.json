@@ -1711,7 +1711,7 @@
           "rubrik"
         ],
         "summary": "Store a batch of inventory",
-        "description": "Objects as RSC lists them, during an inventory run, keyed by\n`object_key`.",
+        "description": "Objects as RSC lists them, during an inventory run, keyed by\n`source_key`.",
         "operationId": "upsert_objects_v1_sources_rubrik__source_name__objects_post",
         "security": [
           {
@@ -1815,7 +1815,7 @@
             "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
           },
           {
-            "name": "object_type",
+            "name": "kind",
             "in": "query",
             "required": false,
             "schema": {
@@ -1830,10 +1830,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Only these object types, any case; repeat for several: `?object_type=O365Mailbox&object_type=O365Onedrive`.",
-              "title": "Object Type"
+              "description": "Only these object types, any case; repeat for several: `?kind=O365Mailbox&kind=O365Onedrive`.",
+              "title": "Kind"
             },
-            "description": "Only these object types, any case; repeat for several: `?object_type=O365Mailbox&object_type=O365Onedrive`."
+            "description": "Only these object types, any case; repeat for several: `?kind=O365Mailbox&kind=O365Onedrive`."
           },
           {
             "name": "protection_status",
@@ -4165,14 +4165,14 @@
             "objects": [
               {
                 "compliance_status": "IN_COMPLIANCE",
+                "kind": "AzureNativeVm",
                 "last_snapshot": "2026-10-30T02:10:00Z",
                 "name": "vm-app-01",
-                "object_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
                 "object_state": "ACTIVE",
-                "object_type": "AzureNativeVm",
                 "protection_status": "Protected",
                 "rsc_id": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
                 "sla_domain_name": "Gold",
+                "source_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
                 "total_snapshots": 42
               }
             ],
@@ -4182,9 +4182,9 @@
       },
       "RubrikObjectIn": {
         "properties": {
-          "object_key": {
+          "source_key": {
             "type": "string",
-            "title": "Object Key",
+            "title": "Source Key",
             "description": "blt's key for the object: RSC's fid, else its id."
           },
           "fid": {
@@ -4209,7 +4209,7 @@
             "title": "Name",
             "description": "The object's name."
           },
-          "object_type": {
+          "kind": {
             "anyOf": [
               {
                 "type": "string"
@@ -4218,7 +4218,7 @@
                 "type": "null"
               }
             ],
-            "title": "Object Type",
+            "title": "Kind",
             "description": "Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ..."
           },
           "location": {
@@ -4565,7 +4565,7 @@
         },
         "type": "object",
         "required": [
-          "object_key",
+          "source_key",
           "rsc_id",
           "name"
         ],
@@ -4574,9 +4574,9 @@
       },
       "RubrikObjectOut": {
         "properties": {
-          "object_key": {
+          "source_key": {
             "type": "string",
-            "title": "Object Key",
+            "title": "Source Key",
             "description": "blt's key for the object: RSC's fid, else its id."
           },
           "fid": {
@@ -4601,7 +4601,7 @@
             "title": "Name",
             "description": "The object's name."
           },
-          "object_type": {
+          "kind": {
             "anyOf": [
               {
                 "type": "string"
@@ -4610,7 +4610,7 @@
                 "type": "null"
               }
             ],
-            "title": "Object Type",
+            "title": "Kind",
             "description": "Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ..."
           },
           "location": {
@@ -4953,6 +4953,12 @@
             ],
             "title": "Pull Time",
             "description": "When RSC last refreshed this object's figures."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "blt's id for the object."
           },
           "account_id": {
             "type": "integer",
@@ -4991,9 +4997,10 @@
         },
         "type": "object",
         "required": [
-          "object_key",
+          "source_key",
           "rsc_id",
           "name",
+          "id",
           "account_id",
           "present",
           "first_seen_at",

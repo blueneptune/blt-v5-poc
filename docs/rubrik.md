@@ -44,7 +44,7 @@ protected or not.
 | `rubrik.account` | one row per RSC account blt collects |
 | `rubrik.collection_run` | one row per run: mode, status, how many jobs, any error |
 | `rubrik.job` | one row per job: object, type, status, `is_active`, start, last update, SLA, cluster |
-| `rubrik.object` | one row per object, as of the latest inventory: type, protection, compliance, SLA domain, cluster, last snapshot, sizes, `present` |
+| `rubrik.source_object` | one row per object, as of the latest inventory: `kind`, protection, compliance, SLA domain, cluster, last snapshot, sizes, `present` - named and keyed as `commvault.source_object` (`id`, `kind`, `source_key`, `present`, first/last seen) |
 
 ### Inventory
 
@@ -143,10 +143,10 @@ repeatable), `status` (any case),
 ```
 curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/objects?protection_status=NoSla"
 curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/objects?compliance_status=OUT_OF_COMPLIANCE"
-curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/objects?object_type=O365Mailbox&object_type=O365Onedrive"
+curl -H "X-API-Key: $BLT_API_KEY" "$BLT_API_URL/v1/sources/rubrik/acme/objects?kind=O365Mailbox&kind=O365Onedrive"
 ```
 
-`/v1/sources/rubrik/{name}/objects` takes `object_type` (any case,
+`/v1/sources/rubrik/{name}/objects` takes `kind` (RSC's object type, any case,
 repeatable), `protection_status`, `compliance_status`, `sla_domain`
 (all any case), `name` (part of it, any case), `present`, `limit` (up
 to 5000), `offset`; by type, then name.

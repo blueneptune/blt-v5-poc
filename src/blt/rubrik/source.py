@@ -60,11 +60,11 @@ class RubrikJobs:
 
 def to_object_in(obj: InventoryObject) -> RubrikObjectIn:
     return RubrikObjectIn(
-        object_key=obj.key,
+        source_key=obj.key,
         fid=obj.fid,
         rsc_id=obj.id,
         name=obj.name,
-        object_type=obj.object_type,
+        kind=obj.object_type,
         location=obj.location,
         object_state=obj.object_state,
         protection_status=obj.protection_status,

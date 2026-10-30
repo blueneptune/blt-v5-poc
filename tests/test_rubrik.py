@@ -53,10 +53,10 @@ class FakeRsc:
 def obj(key: str, **fields: object) -> RubrikObjectIn:
     return RubrikObjectIn(
         **{  # type: ignore[arg-type]
-            "object_key": key,
+            "source_key": key,
             "rsc_id": key,
             "name": f"obj-{key}",
-            "object_type": "AzureNativeVm",
+            "kind": "AzureNativeVm",
             "protection_status": "Protected",
             "compliance_status": "IN_COMPLIANCE",
             "sla_domain_name": "Gold",
@@ -257,7 +257,7 @@ def test_an_inventory_stores_objects_and_marks_the_ones_gone(
         now=lambda: next(later),
     )
 
-    rows = {o["object_key"]: o for o in http.get("/v1/sources/rubrik/acme/objects").json()}
+    rows = {o["source_key"]: o for o in http.get("/v1/sources/rubrik/acme/objects").json()}
     assert {k: o["present"] for k, o in rows.items()} == {"a": True, "b": False, "c": True}
     assert rows["a"]["protection_status"] == "NoSla"
     assert rows["a"]["first_seen_at"] < rows["a"]["last_seen_at"]
@@ -280,7 +280,7 @@ def test_a_failed_inventory_keeps_what_it_got_and_marks_nothing_gone(
         )
 
     rows = {
-        o["object_key"]: o["present"] for o in http.get("/v1/sources/rubrik/acme/objects").json()
+        o["source_key"]: o["present"] for o in http.get("/v1/sources/rubrik/acme/objects").json()
     }
     assert rows == {"a": True, "b": True, "c": True, "d": True}
 
@@ -305,12 +305,12 @@ def test_objects_can_be_filtered(store: RubrikStore, http: TestClient) -> None:
                 obj("a"),
                 obj(
                     "b",
-                    object_type="O365Mailbox",
+                    kind="O365Mailbox",
                     protection_status="NoSla",
                     sla_domain_name=None,
                     compliance_status="UNPROTECTED",
                 ),
-                obj("c", object_type="O365Onedrive", sla_domain_name="Bronze"),
+                obj("c", kind="O365Onedrive", sla_domain_name="Bronze"),
             ]
         ),
         store,
@@ -318,10 +318,10 @@ def test_objects_can_be_filtered(store: RubrikStore, http: TestClient) -> None:
     )
 
     def keys(query: str) -> list[str]:
-        return [o["object_key"] for o in http.get(f"/v1/sources/rubrik/acme/objects{query}").json()]
+        return [o["source_key"] for o in http.get(f"/v1/sources/rubrik/acme/objects{query}").json()]
 
     assert keys("") == ["a", "b", "c"]  # by type, then name
-    assert keys("?object_type=o365mailbox&object_type=O365Onedrive") == ["b", "c"]
+    assert keys("?kind=o365mailbox&kind=O365Onedrive") == ["b", "c"]
     assert keys("?protection_status=nosla") == ["b"]
     assert keys("?compliance_status=unprotected") == ["b"]
     assert keys("?sla_domain=bronze") == ["c"]
@@ -404,7 +404,7 @@ def test_an_rsc_object_becomes_an_inventory_row() -> None:
 
     out = to_object_in(rsc_object)
 
-    assert out.object_key == "f-1" and out.rsc_id == "local-1"
+    assert out.source_key == "f-1" and out.rsc_id == "local-1"
     assert out.location is None
     assert out.sla_domain_id == "sla-1" and out.sla_domain_name == "Gold"
     assert out.cluster_name == "rubrik-east"
