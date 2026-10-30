@@ -229,3 +229,9 @@ current work.
     carries `Deprecation: true`; the API log shows the paths called).
     Scripts outside this repository that use curl are the likely
     stragglers.
+
+22. **Ready-made imports for API tools** (asked for 2026-10-30, later):
+    collections for Bruno, Postman and Insomnia generated from
+    `docs/openapi.json`, an environment per install (lab, work, a
+    customer's) with the key left blank, and example requests for the
+    common tasks. Generated like the spec, so they cannot drift.
