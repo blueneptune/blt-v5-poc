@@ -174,7 +174,11 @@ Each a branch of its own, each releasable:
    it from its object's `rubrik.source_object` row - see Rubrik
    inventory below. Proposed: that, rather than a second SLA field per
    job.
-5. **Veeam's per-VM tasks**: sto## Rubrik inventory
+5. **Veeam's per-VM tasks**: store them as child jobs from the start, or
+   only the session? Proposed: the session first, tasks once a real
+   server shows what they hold.
+
+## Rubrik inventory
 
 Collected since blt 2026.10.30.1, twice daily: every object RSC lists
 (`snappableConnection`, its Object Compliance data) - VMs, hosts, file
