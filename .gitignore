@@ -17,3 +17,10 @@ config/.*.token.lock
 # copies left on disk here (media is several GB) are deleted by hand.
 lab/.state/
 lab/media/
+
+# Database dumps hold real job data: never commit them. Better kept
+# outside the checkout altogether (git clean -x would delete them).
+backup/
+backups/
+*.dump
+*.sql.gz
