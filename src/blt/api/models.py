@@ -1,4 +1,5 @@
-"""Postgres tables.
+"""Commvault's Postgres tables, in their own `commvault` schema (as
+Rubrik's are in `rubrik`; docs/vision.md section 3).
 
 `job` holds exactly one row per (CommCell, job id): the latest state that
 job was seen in. Collections overwrite it rather than appending, so the
@@ -16,6 +17,8 @@ from sqlalchemy import BigInteger, Column, DateTime, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
+SCHEMA = "commvault"
+
 
 def _ts(*, nullable: bool = True, index: bool = False) -> Any:
     """A timezone-aware timestamp column. Every time in this schema is
@@ -32,6 +35,7 @@ def _big() -> Any:
 
 class Commcell(SQLModel, table=True):
     __tablename__ = "commcell"
+    __table_args__ = {"schema": SCHEMA}
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
@@ -46,10 +50,11 @@ class CollectionRun(SQLModel, table=True):
     __tablename__ = "collection_run"
     __table_args__ = (
         Index("ix_run_commcell_status_started", "commcell_id", "status", "started_at"),
+        {"schema": SCHEMA},
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    commcell_id: int = Field(foreign_key="commcell.id")
+    commcell_id: int = Field(foreign_key=f"{SCHEMA}.commcell.id")
     mode: str
     status: str
     started_at: datetime = _ts(nullable=False)
@@ -66,10 +71,11 @@ class Job(SQLModel, table=True):
     __table_args__ = (
         Index("ix_job_commcell_active", "commcell_id", "is_active"),
         Index("ix_job_commcell_start", "commcell_id", "start_time"),
+        {"schema": SCHEMA},
     )
 
     # Job ids are only unique inside one CommCell, hence the composite key.
-    commcell_id: int = Field(foreign_key="commcell.id", primary_key=True)
+    commcell_id: int = Field(foreign_key=f"{SCHEMA}.commcell.id", primary_key=True)
     job_id: int = Field(sa_column=Column(BigInteger, primary_key=True, autoincrement=False))
 
     status: str
@@ -101,7 +107,7 @@ class Job(SQLModel, table=True):
 
     first_seen_at: datetime = _ts(nullable=False)
     last_collected_at: datetime = _ts(nullable=False)
-    last_seen_run_id: int | None = Field(default=None, foreign_key="collection_run.id")
+    last_seen_run_id: int | None = Field(default=None, foreign_key=f"{SCHEMA}.collection_run.id")
 
 
 class SourceObject(SQLModel, table=True):
@@ -118,17 +124,20 @@ class SourceObject(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("commcell_id", "kind", "source_key", name="uq_source_object_key"),
         Index("ix_source_object_kind_present", "commcell_id", "kind", "present"),
+        {"schema": SCHEMA},
     )
 
     # A UUID, so an object can be referred to from outside this database.
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     # The source. Still called commcell until sources are generalised
     # (TODO item 12); nothing else here is Commvault-specific.
-    commcell_id: int = Field(foreign_key="commcell.id")
+    commcell_id: int = Field(foreign_key=f"{SCHEMA}.commcell.id")
     kind: str
     source_key: str
     name: str = Field(index=True)
-    parent_id: uuid.UUID | None = Field(default=None, foreign_key="source_object.id", index=True)
+    parent_id: uuid.UUID | None = Field(
+        default=None, foreign_key=f"{SCHEMA}.source_object.id", index=True
+    )
     app_type: str | None = None
     last_backup_at: datetime | None = _ts()
     last_backup_job_id: int | None = _big()
@@ -141,7 +150,7 @@ class SourceObject(SQLModel, table=True):
     present: bool = True
     first_seen_at: datetime = _ts(nullable=False)
     last_seen_at: datetime = _ts(nullable=False)
-    last_seen_run_id: int | None = Field(default=None, foreign_key="collection_run.id")
+    last_seen_run_id: int | None = Field(default=None, foreign_key=f"{SCHEMA}.collection_run.id")
 
 
 class InstanceBackupReport(SQLModel, table=True):
@@ -157,11 +166,12 @@ class InstanceBackupReport(SQLModel, table=True):
     __tablename__ = "instance_backup_report"
     __table_args__ = (
         UniqueConstraint("commcell_id", "instance_id", "job_id", name="uq_instance_backup_report"),
+        {"schema": SCHEMA},
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    commcell_id: int = Field(foreign_key="commcell.id")
-    instance_id: uuid.UUID = Field(foreign_key="source_object.id", index=True)
+    commcell_id: int = Field(foreign_key=f"{SCHEMA}.commcell.id")
+    instance_id: uuid.UUID = Field(foreign_key=f"{SCHEMA}.source_object.id", index=True)
     client: str | None = None
     instance: str
     app_type: str | None = None

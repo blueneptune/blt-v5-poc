@@ -1,9 +1,9 @@
 """Rubrik in the API: its tables, in their own `rubrik` schema, and the
 endpoints its collector talks to, under /v1/sources/rubrik/{name}.
 
-The first product in a schema of its own, as docs/vision.md section 3.5
-plans for every product: Commvault's tables move to a `commvault` schema
-later. Nothing here touches them.
+The first product in a schema of its own, as docs/vision.md section 3
+plans for every product; Commvault's are in `commvault` (blt.api.models).
+Nothing here touches them.
 
 One row per job (RSC activity series) per RSC account, holding the
 latest state the job was seen in - as `job` does for Commvault.

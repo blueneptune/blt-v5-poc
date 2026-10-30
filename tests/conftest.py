@@ -1,9 +1,9 @@
 """Fixtures for the tests that need a real Postgres (the upsert is
 Postgres-specific, so there is no SQLite stand-in).
 
-Point BLT_TEST_DATABASE_URL at a scratch database - its public schema is
-dropped and rebuilt from the migrations for every test (with the
-rubrik schema):
+Point BLT_TEST_DATABASE_URL at a scratch database - its schemas (public,
+commvault, rubrik) are dropped and rebuilt from the migrations for every
+test:
 
     BLT_TEST_DATABASE_URL=postgresql+psycopg://blt:<pw>@127.0.0.1:5433/blt_test uv run pytest
 """
@@ -35,7 +35,8 @@ def database_url(monkeypatch: pytest.MonkeyPatch) -> str:
 
     engine = create_engine(url)
     with engine.begin() as connection:
-        connection.execute(text("DROP SCHEMA IF EXISTS rubrik CASCADE"))
+        for schema in ("commvault", "rubrik"):
+            connection.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         connection.execute(text("DROP SCHEMA public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))
     engine.dispose()

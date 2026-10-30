@@ -5,8 +5,8 @@ from alembic import context
 from sqlalchemy import create_engine
 from sqlmodel import SQLModel
 
-import blt.api.models  # noqa: F401  (registers the tables on SQLModel.metadata)
-import blt.api.rubrik  # noqa: F401  (and Rubrik's, in their own schema)
+import blt.api.models  # noqa: F401  (registers Commvault's tables on SQLModel.metadata)
+import blt.api.rubrik  # noqa: F401  (and Rubrik's)
 from blt.api.settings import ApiSettings
 
 target_metadata = SQLModel.metadata
@@ -15,7 +15,11 @@ target_metadata = SQLModel.metadata
 def run_migrations_online() -> None:
     engine = create_engine(ApiSettings().database_url.get_secret_value())  # type: ignore[call-arg]
     with engine.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # Each product has its own schema, so autogenerate must look
+        # beyond public.
+        context.configure(
+            connection=connection, target_metadata=target_metadata, include_schemas=True
+        )
         with context.begin_transaction():
             context.run_migrations()
     engine.dispose()
