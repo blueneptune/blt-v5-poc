@@ -361,5 +361,5 @@ Each phase is usable on its own and builds on the one before.
   cert-manager, Longhorn, CloudNativePG, Harbor plan), waiting for
   servers; a home-lab rehearsal at `*.blt.ethos.home` with a smallstep
   CA.
-- **Next:** Commvault's tables into a `commvault` schema (2026.11.W01),
-  then the `blt` schema.
+- **Next:** the `blt` schema. (Commvault's tables moved into their
+  `commvault` schema on 2026-10-29, beside `rubrik`.)

@@ -114,7 +114,11 @@ where to find it, signing in, and keeping it current.
 
 ## Database
 
-`job` (one row per job, latest state; `raw` JSONB holds Commvault's whole
+Each product has its own schema in the `blt` database: Commvault's tables
+are in `commvault`, Rubrik's in `rubrik` ([docs/rubrik.md](docs/rubrik.md)).
+`public` holds only Alembic's version table.
+
+Commvault: `job` (one row per job, latest state; `raw` JSONB holds Commvault's whole
 `jobSummary`), `collection_run` (one row per run), `commcell`,
 `source_object` (one row per client / instance / database a source says
 exists, with its last backup time where the source reports one),
@@ -127,15 +131,20 @@ as `unknown` and treated as still active.
 
 ```
 podman exec -it blt-postgres psql -U blt
+blt=> set search_path = commvault;      -- or name them: commvault.job
 ```
 
-Schema changes: edit `src/blt/api/models.py`, then
+Schema changes: edit `src/blt/api/models.py` (or a product's own models,
+such as `src/blt/api/rubrik.py`), then
 
 ```
 BLT_DATABASE_URL=postgresql+psycopg://blt:<pw>@127.0.0.1:5433/blt BLT_API_KEY=x \
     uv run blt-migrate revision -m "what changed"
 ./deploy/up.sh        # the API container applies migrations on start
 ```
+
+`tests/test_migrations.py` fails if the migrations and the models
+disagree.
 
 ## Development
 

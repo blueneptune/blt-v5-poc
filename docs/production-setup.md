@@ -155,13 +155,13 @@ Look at what arrived:
 
 ```
 podman exec -it blt-postgres psql -U blt -c \
-  "select state, count(*) from job group by 1 order by 2 desc"
+  "select state, count(*) from commvault.job group by 1 order by 2 desc"
 ```
 
 A state of `unknown` means Commvault reported a status blt's table does
 not have. It is harmless - the raw status is stored, and the job is
 treated as still active - but tell me the status text
-(`select distinct status from job where state='unknown'`) so it can be
+(`select distinct status from commvault.job where state='unknown'`) so it can be
 added to `src/blt/schemas.py`.
 
 ## 6. Schedule it
@@ -197,11 +197,11 @@ history in one query.
 ```
 -- the last few runs for each CommCell
 select c.name, r.mode, r.status, r.started_at, r.jobs_collected, r.error
-from collection_run r join commcell c on c.id = r.commcell_id
+from commvault.collection_run r join commvault.commcell c on c.id = r.commcell_id
 order by r.id desc limit 20;
 
 -- how far back history reaches
-select name, backfilled_to, backfill_complete from commcell;
+select name, backfilled_to, backfill_complete from commvault.commcell;
 ```
 
 - A `failed` run is recorded with its error and does not move the
@@ -252,8 +252,9 @@ backup job's status.
 | Password | `POSTGRES_PASSWORD` from `config/blt.env` |
 
 JDBC URL: `jdbc:postgresql://localhost:5433/blt`. No SSL. Tables are in
-the `public` schema. The `blt` user owns them, so mark the data source
-read-only in DataGrip unless you mean to edit.
+a schema per product, `commvault` and `rubrik` - in DataGrip, tick both
+under the data source's *Schemas*. The `blt` user owns them, so mark the
+data source read-only in DataGrip unless you mean to edit.
 
 **With podman inside WSL and DataGrip on Windows** the same values
 should work: WSL2 forwards Windows' `localhost` to ports listening
