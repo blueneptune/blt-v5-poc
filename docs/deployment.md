@@ -98,7 +98,8 @@ What `deploy/up.sh` does today, made into a proper install:
   release bundle (`podman load`) where the host cannot reach one.
 - **Updates**: change the tag in one file, `systemctl restart blt`; the
   migration container runs first.
-- **Backups**: a systemd timer runs `pg_dump` nightly, keeps 14.
+- **Backups**: a systemd timer runs `pg_dump` nightly, keeps 14 -
+  `deploy/backup.sh install-timer`, in place since 2026.10.31.
 - Works in WSL with systemd turned on (`/etc/wsl.conf`).
 
 ### 4.2 Core cluster - Kubernetes
