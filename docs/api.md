@@ -53,12 +53,9 @@ collection run.
 Everything but `/healthz` is under `/v1`. Additions - an endpoint, a
 field, an optional parameter - go into `/v1`. A change that would break
 a client goes into `/v2` beside it; `/v1` stays until every collector
-has moved, then goes.
-
-The paths from before `/v1` (`/commcells/{name}/...`,
-`/rubrik/{name}/...`) still work so a collector on the previous release
-keeps going during an upgrade. They answer with `Deprecation: true` and
-are not in the docs. They go once nothing calls them (TODO.md).
+has moved, then goes. The paths from before `/v1`
+(`/commcells/{name}/...`, `/rubrik/{name}/...`) were removed in
+2026.10.31; they answer 404.
 
 ## Keeping it current
 
