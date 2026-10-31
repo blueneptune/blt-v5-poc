@@ -67,11 +67,6 @@ client (a new endpoint, field or optional parameter) are made in `/v1`
 as it stands. A change that would break one goes into a `/v2` beside
 it, and `/v1` stays until every collector has moved over.
 
-The paths from before versioning (`/commcells/{name}/...`,
-`/rubrik/{name}/...`) still work, for collectors on an older release.
-They answer with a `Deprecation: true` header, are not listed here, and
-will be removed.
-
 ## One collection run
 
 1. `GET .../last-run` - the watermark: where the last successful run

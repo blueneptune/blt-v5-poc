@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response, Security, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Security, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy import Engine, create_engine, func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -786,22 +786,4 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     v1.include_router(router, prefix="/sources/commvault/{source_name}")
     v1.include_router(rubrik, prefix="/sources/rubrik/{source_name}")
     app.include_router(v1)
-
-    # The paths from before /v1, for collectors and scripts still on an
-    # older release: they work, say so in a Deprecation header, and are
-    # left out of the docs. Remove once nothing calls them (TODO.md).
-    def deprecated(response: Response) -> None:
-        response.headers["Deprecation"] = "true"
-
-    for routes, old_prefix in (
-        (router, "/commcells/{source_name}"),
-        (rubrik, "/rubrik/{source_name}"),
-    ):
-        app.include_router(
-            routes,
-            prefix=old_prefix,
-            deprecated=True,
-            include_in_schema=False,
-            dependencies=[Depends(deprecated)],
-        )
     return app
