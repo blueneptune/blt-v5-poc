@@ -222,7 +222,7 @@ current work.
     once deploy/kube/up.sh has proven itself. See docs/prefect.md.
 
 21. ~~**Remove the API paths from before /v1** (`/commcells/{name}/...`,
-    `/rubrik/{name}/...`)~~ **Done 2026-10-30**, for 2026.10.31: the lab
+    `/rubrik/{name}/...`)~~ **Done 2026-10-30**, for 2026.10.30.3: the lab
     and the work desktop both ran /v1 releases, nothing in the repository
     or the lab API log called the old paths. Added 2026-10-29 with `/v1/sources/...`. They
     are kept so a collector on the previous release keeps working

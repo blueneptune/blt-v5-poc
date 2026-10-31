@@ -99,7 +99,7 @@ What `deploy/up.sh` does today, made into a proper install:
 - **Updates**: change the tag in one file, `systemctl restart blt`; the
   migration container runs first.
 - **Backups**: a systemd timer runs `pg_dump` nightly, keeps 14 -
-  `deploy/backup.sh install-timer`, in place since 2026.10.31.
+  `deploy/backup.sh install-timer`, in place since 2026.10.30.3.
 - Works in WSL with systemd turned on (`/etc/wsl.conf`).
 
 ### 4.2 Core cluster - Kubernetes
