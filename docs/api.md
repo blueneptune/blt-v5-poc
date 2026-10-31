@@ -55,7 +55,7 @@ field, an optional parameter - go into `/v1`. A change that would break
 a client goes into `/v2` beside it; `/v1` stays until every collector
 has moved, then goes. The paths from before `/v1`
 (`/commcells/{name}/...`, `/rubrik/{name}/...`) were removed in
-2026.10.31; they answer 404.
+2026.10.30.3; they answer 404.
 
 ## Keeping it current
 
