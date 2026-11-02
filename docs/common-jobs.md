@@ -1,7 +1,7 @@
-# Common jobs: the `blt` schema (design)
+# Common jobs: the `common` schema (design)
 
 **Status: written 2026-10-29, reviewed 2026-11-02 (decisions below).
-Nothing here is built yet.** It is Phase 2's data foundation ([vision.md](vision.md) section
+Step 1, `common.source`, built 2026-11-02; the rest is not built yet.** It is Phase 2's data foundation ([vision.md](vision.md) section
 3 and 4.4): one shape for a job from any product, so the jobs page and
 reports read one table instead of learning each product. Commvault and
 Rubrik are collected today; Veeam and NetBackup have SDKs not yet run
@@ -15,27 +15,33 @@ blt database
 ├── commvault   commcell, collection_run, job, ...     (as today)
 ├── rubrik      account, collection_run, job           (as today)
 ├── veeam, netbackup                                   (when collected)
-└── blt         source   - every source, any product, with a UUID
+└── common      source   - every source, any product, with a UUID
                 job      - every job, any product, in the common shape
 ```
 
 - **Product tables stay the record.** Each product's `job` keeps
   everything in its own words; nothing is taken out of them.
-- **`blt.job` is a projection:** one row per product job, written in the
+- **`common.job` is a projection:** one row per product job, written in the
   same transaction as the product row, from a mapping function per
   product. Rewriting the mapping and re-projecting from the product
   tables is always possible, so a wrong first guess costs a re-run, not
   data.
-- **Product tables point up** to `blt` (`commvault.commcell.source_id`,
-  `rubrik.account.source_id`); `blt` never points down, except by the
+- **Product tables point up** to `common` (`commvault.commcell.source_id`,
+  `rubrik.account.source_id`); `common` never points down, except by the
   product job's key, which it holds as text.
+
+Why `common` and not `blt`, as earlier drafts had it: blt's database
+login is called `blt`, and Postgres looks first in the schema named
+after the login (`search_path` is `"$user", public`). A `blt` schema
+would quietly take every table created or named without a schema -
+Alembic's own `alembic_version` included - away from `public`.
 
 Why a table and not a view across the product tables: a blt job id must
 be stable for links (triggered, resolves, retry of) and for anything
 outside blt that refers to a job; a view cannot own an id. It also lets
 the jobs page use one set of indexes.
 
-## `blt.source`
+## `common.source`
 
 | Column | |
 |---|---|
@@ -45,14 +51,20 @@ the jobs page use one set of indexes.
 | `created_at` | |
 
 The API paths keep using the name (`/v1/sources/rubrik/work`); the id is
-for links and for outside systems.
+for links and for outside systems. `GET /v1/sources` lists them all.
+`commvault.commcell` and `rubrik.account` each carry the `source_id`;
+a source is made the first time a run starts for it, and the migration
+made one for every CommCell and account collected before it, keeping its
+`created_at`. The UUIDs are random (v4), as `source_object`'s are - the
+v7 of TODO item 12 is left for when Python 3.14's `uuid.uuid7` is the
+floor.
 
-## `blt.job`
+## `common.job`
 
 | Column | Meaning | Commvault | Rubrik | Veeam | NetBackup |
 |---|---|---|---|---|---|
 | `id` | blt job id (UUID) | | | | |
-| `source_id` | → `blt.source` | | | | |
+| `source_id` | → `common.source` | | | | |
 | `product_job_key` | the product's own id, as text; unique per source | job id | series id (`series_key`) | session id | job id |
 | `kind` | see **Kinds** | job type / operation | activity type | session type | job type |
 | `state` | see **States** | status | last activity status | state + result | state + status code |
@@ -65,7 +77,7 @@ for links and for outside systems.
 | `bytes_transferred` | written to backup storage | size of media | data transferred | transferred | kilobytes × 1024 |
 | `bytes_protected` | the data it covered | size of application | logical size | processed size | (none) |
 | `message` | why it failed or warned, one line | pending reason / failure | failure reason / last message | result message | status text |
-| `parent_id` | → `blt.job`: child of | (none) | (none) | task under session | parent job id |
+| `parent_id` | → `common.job`: child of | (none) | (none) | task under session | parent job id |
 | `source_object_id` | → the product's `source_object` it ran on, where found | client / instance | object (`rubrik.source_object`) | | client |
 | `attempt` | | attempts | attempt number | | try count |
 | `first_seen_at`, `last_collected_at` | blt's own | | | | |
@@ -156,9 +168,9 @@ They sit beside `/v1/sources`, as [api.md](api.md) planned.
 
 Each a branch of its own, each releasable:
 
-1. **`blt.source`**, backfilled from `commvault.commcell` and
+1. ~~**`common.source`**~~ **done 2026-11-02**, backfilled from `commvault.commcell` and
    `rubrik.account`; product tables gain `source_id`.
-2. **`blt.job`** with the Commvault and Rubrik mappings, written on
+2. **`common.job`** with the Commvault and Rubrik mappings, written on
    every upsert, backfilled from what is collected; a test per mapping
    row in this document.
    2a. **Status lists made complete** (see "Where the status lists come
@@ -179,7 +191,7 @@ statuses** mapped into them are not yet complete:
 | Veeam | its REST API documentation only - not yet run against a server |
 | NetBackup | its API documentation; first server (10.2) reached 2026-11-02, no jobs on it yet |
 
-So before `blt.job` is relied on (step 2a below): each product's full
+So before `common.job` is relied on (step 2a below): each product's full
 list from its own source - RSC's schema by introspection, the OpenAPI
 specs NetBackup and Veeam servers publish, Commvault's documentation,
 and the vendors themselves (the user is asking each for their default
@@ -224,7 +236,7 @@ product's words), `source_key` (unique per source), `name`, `present`,
 `first_seen_at`, `last_seen_at` and `last_seen_run_id`. What only that
 product has (Commvault's parent links and `attributes`; Rubrik's SLA
 domain, compliance, snapshot counts and sizes) stays in typed columns of
-its own. A cross-product inventory view, like `blt.job` for jobs, is
+its own. A cross-product inventory view, like `common.job` for jobs, is
 then a union of the shared columns. Rubrik's table was first created as
 `rubrik.object` and renamed to match before anything depended on it.
 

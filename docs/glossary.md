@@ -133,7 +133,7 @@ word, the entry says so under **Today**.
   - **product job** - the job as the source reports it, in the source
     type's own schema and words.
   - **blt job** *(planned)* - the same job in blt's common shape, with
-    its **blt job id**, in the `blt` schema; what the jobs page and
+    its **blt job id**, in the `common` schema; what the jobs page and
     reports use.
   - **job kind** *(planned)* - `backup`, `restore`, `collection`,
     `vmware_task`, `event`, ...
@@ -201,9 +201,11 @@ word, the entry says so under **Today**.
 
 **schema**
 : A Postgres namespace. One per source type (`commvault`, `netbackup`,
-  ...) for that type's own data, and `blt` for the common layer:
+  ...) for that type's own data, and `common` for the common layer:
   sources, sightings, assets, links, history, blt jobs. Product tables
-  point up to `blt`; `blt` never points into a product schema.
+  point up to `common`; `common` never points into a product schema.
+  (Not named `blt`: that is the database login's name, and Postgres
+  would put unqualified tables there - see docs/common-jobs.md.)
 
 ## Releases
 

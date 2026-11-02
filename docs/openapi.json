@@ -32,6 +32,80 @@
         }
       }
     },
+    "/v1/sources": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Every source blt collects from",
+        "description": "Every CommCell and RSC account blt has collected from, of any\nproduct, with the id that stands for it everywhere. A source\nappears the first time a run is started for it.",
+        "operationId": "list_sources_v1_sources_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this product's sources.",
+              "examples": [
+                "rubrik"
+              ],
+              "title": "Type"
+            },
+            "description": "Only this product's sources."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceOut"
+                  },
+                  "title": "Response List Sources V1 Sources Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/commvault/{source_name}/last-run": {
       "get": {
         "tags": [
@@ -5397,6 +5471,47 @@
           }
         ]
       },
+      "SourceOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The source's id, the same in every table."
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "The product.",
+            "examples": [
+              "commvault"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "blt's name for it - the name in its `/v1/sources/{type}/{name}` paths.",
+            "examples": [
+              "cv-toaster"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When blt first collected from it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "name",
+          "created_at"
+        ],
+        "title": "SourceOut",
+        "description": "A source blt collects from."
+      },
       "UpsertResult": {
         "properties": {
           "received": {
@@ -5658,6 +5773,10 @@
     {
       "name": "health",
       "description": "Is the API up, and can it reach its database."
+    },
+    {
+      "name": "sources",
+      "description": "Every source blt collects from, of any product, with its id. See docs/common-jobs.md."
     },
     {
       "name": "commvault: collection",

@@ -118,7 +118,8 @@ service**, each with its own login:
 | `grafana`, `superset` | dashboards and reports, when added |
 
 Inside `blt`, **one schema per data source type** for that product's own
-data, and a common **`blt` schema** that ties them together:
+data, and a **`common` schema** that ties them together (not `blt`, the
+database login's name - see [common-jobs.md](common-jobs.md)):
 
 ```
 blt database
@@ -128,12 +129,12 @@ blt database
 ├── rubrik
 ├── vmware
 ├── servicenow
-└── blt           sources, blt job ids, assets, sightings, links,
+└── common        sources, blt job ids, assets, sightings, links,
                   history, rules and findings - what the UI reads
 ```
 
-Product tables point up to `blt`; `blt` never points into a product
-schema. Words are defined in [glossary.md](glossary.md).
+Product tables point up to `common`; `common` never points into a
+product schema. Words are defined in [glossary.md](glossary.md).
 
 ---
 
@@ -361,5 +362,6 @@ Each phase is usable on its own and builds on the one before.
   cert-manager, Longhorn, CloudNativePG, Harbor plan), waiting for
   servers; a home-lab rehearsal at `*.blt.ethos.home` with a smallstep
   CA.
-- **Next:** the `blt` schema. (Commvault's tables moved into their
+- **Next:** the `common` schema - `common.source` built 2026-11-02,
+  `common.job` next. (Commvault's tables moved into their
   `commvault` schema on 2026-10-29, beside `rubrik`.)

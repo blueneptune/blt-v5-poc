@@ -291,8 +291,9 @@ backup job's status.
 | Password | `POSTGRES_PASSWORD` from `config/blt.env` |
 
 JDBC URL: `jdbc:postgresql://localhost:5433/blt`. No SSL. Tables are in
-a schema per product, `commvault` and `rubrik` - in DataGrip, tick both
-under the data source's *Schemas*. The `blt` user owns them, so mark the
+a schema per product, `commvault` and `rubrik`, plus `common` for what
+they share (`common.source`) - in DataGrip, tick all three under the data
+source's *Schemas*. The `blt` user owns them, so mark the
 data source read-only in DataGrip unless you mean to edit.
 
 **With podman inside WSL and DataGrip on Windows** the same values
