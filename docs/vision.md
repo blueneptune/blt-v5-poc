@@ -362,6 +362,7 @@ Each phase is usable on its own and builds on the one before.
   cert-manager, Longhorn, CloudNativePG, Harbor plan), waiting for
   servers; a home-lab rehearsal at `*.blt.ethos.home` with a smallstep
   CA.
-- **Next:** the `common` schema - `common.source` and `common.job` built
-  2026-11-02, `/v1/jobs` next. (Commvault's tables moved into their
+- **Next:** the `common` schema - `common.source`, `common.job` and
+  `/v1/jobs` built 2026-11-02 - and the web UI, started the same day in
+  `ui/` ([ui.md](ui.md)). (Commvault's tables moved into their
   `commvault` schema on 2026-10-29, beside `rubrik`.)
