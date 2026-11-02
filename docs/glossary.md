@@ -132,11 +132,11 @@ word, the entry says so under **Today**.
   state it passed through.
   - **product job** - the job as the source reports it, in the source
     type's own schema and words.
-  - **blt job** *(planned)* - the same job in blt's common shape, with
+  - **blt job** - the same job in blt's common shape, with
     its **blt job id**, in the `common` schema; what the jobs page and
     reports use.
-  - **job kind** *(planned)* - `backup`, `restore`, `collection`,
-    `vmware_task`, `event`, ...
+  - **job kind** - `backup`, `restore`, `copy`, `maintenance`,
+    `scan`, `other`; later `collection`, `vmware_task`, `event`, ...
   - **job link** *(planned)* - a relation from one job to another:
     **triggered** (a failed backup triggered an event job), **resolves**
     (a later success resolved a failure), **child of** (NetBackup's

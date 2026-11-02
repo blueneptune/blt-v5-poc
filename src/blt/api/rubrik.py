@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Field, Session, SQLModel, col, func, select, update
 
+from blt.common.mapping import rubrik_job
 from blt.rubrik.schemas import (
     JOB_MODES,
     RubrikJobBatch,
@@ -38,6 +39,7 @@ from blt.rubrik.schemas import (
 )
 from blt.schemas import UpsertResult
 
+from . import jobs as common_jobs
 from .docs import UNAUTHORIZED, RubrikAccountName, RunId, not_found
 from .sources import SCHEMA as BLT_SCHEMA
 from .sources import ensure_source
@@ -283,8 +285,10 @@ def rubrik_router(
     ) -> RubrikRunOut:
         """Records how the run went. A succeeded job run becomes the new
         watermark; a succeeded inventory run marks every object it did not
-        list as no longer present."""
-        run = find_run(session, find_account(session, source_name), run_id)
+        list as no longer present, and points jobs at the objects they ran
+        on (common.job.source_object_id)."""
+        account = find_account(session, source_name)
+        run = find_run(session, account, run_id)
         if run.mode == "inventory" and body.status == "succeeded":
             # Only a complete inventory may say something has gone: a
             # partial one saw less because it stopped.
@@ -297,6 +301,7 @@ def rubrik_router(
                 )
                 .values(present=False)
             )
+            common_jobs.link(session, "rubrik", account.source_id)
         run.status = body.status
         run.finished_at = body.finished_at
         run.jobs_collected = body.jobs_collected
@@ -340,9 +345,11 @@ def rubrik_router(
             # back to an older state.
             where=col(RubrikJob.last_collected_at) <= stmt.excluded.last_collected_at,
         )
-        written = len(session.execute(stmt.returning(col(RubrikJob.series_key))).all())
+        written = [r[0] for r in session.execute(stmt.returning(col(RubrikJob.series_key)))]
+        common_jobs.project(session, account.source_id, [rows[k] for k in written], rubrik_job)
+        common_jobs.link(session, "rubrik", account.source_id, written)
         session.commit()
-        return UpsertResult(received=len(body.jobs), written=written)
+        return UpsertResult(received=len(body.jobs), written=len(written))
 
     @router.get("/jobs", summary="List jobs", responses=not_found("account"))
     def list_jobs(

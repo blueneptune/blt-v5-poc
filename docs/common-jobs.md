@@ -1,7 +1,8 @@
 # Common jobs: the `common` schema (design)
 
 **Status: written 2026-10-29, reviewed 2026-11-02 (decisions below).
-Step 1, `common.source`, built 2026-11-02; the rest is not built yet.** It is Phase 2's data foundation ([vision.md](vision.md) section
+Steps 1 and 2 (`common.source`, `common.job`) built 2026-11-02; the API
+(step 3) is not built yet.** It is Phase 2's data foundation ([vision.md](vision.md) section
 3 and 4.4): one shape for a job from any product, so the jobs page and
 reports read one table instead of learning each product. Commvault and
 Rubrik are collected today; Veeam and NetBackup have SDKs not yet run
@@ -85,6 +86,29 @@ floor.
 Asset columns are names, not links: linking a job to an asset in the
 refinery ([asset-refinery.md](asset-refinery.md)) is a later column
 (`asset_id`), filled once assets exist.
+
+**As built** (`src/blt/common/mapping.py`, one function per product;
+`tests/test_common_jobs.py` has a test per row of the tables here):
+
+- Written in the same transaction as the product rows, by
+  `POST .../jobs` (and Commvault's `PATCH .../jobs/{id}`), only for the
+  rows that upsert actually wrote. An older batch never rolls a
+  `common.job` row back, as for the product rows.
+- The first `blt-migrate` after the upgrade fills `common.job` from
+  everything already collected (it does so whenever `common.job` is
+  empty and a product table is not). After a mapping changes,
+  `blt-migrate reproject` projects every job again - same blt job ids,
+  new kinds and states. Tried on a copy of the lab's data: 1,107 jobs,
+  none `unknown`.
+- `source_object_id`: Commvault jobs link to their **client**
+  (`client_id` = the client's `source_key`; jobSummary has no instance
+  id, so instances are not told apart yet); Rubrik jobs to their
+  **object** (`object_id` = its RSC id or global id). Done as jobs are
+  stored and again for every job of the source when an inventory run
+  succeeds, so jobs collected before their object was are linked then.
+- Commvault `protection` is the storage policy (the plan); Commvault
+  `attempt` is not collected yet. Rubrik `ended_at` is the series' last
+  update once it is no longer active - RSC gives no end time.
 
 ### Kinds
 
@@ -170,11 +194,13 @@ Each a branch of its own, each releasable:
 
 1. ~~**`common.source`**~~ **done 2026-11-02**, backfilled from `commvault.commcell` and
    `rubrik.account`; product tables gain `source_id`.
-2. **`common.job`** with the Commvault and Rubrik mappings, written on
-   every upsert, backfilled from what is collected; a test per mapping
-   row in this document.
+2. ~~**`common.job`**~~ **done 2026-11-02**, with the Commvault and
+   Rubrik mappings, written on every upsert, backfilled from what is
+   collected; a test per mapping row in this document.
    2a. **Status lists made complete** (see "Where the status lists come
    from"): every product value mapped and tested, `unknown` reported.
+   **Rubrik done** (all 11 statuses, all 74 activity types); Commvault,
+   Veeam and NetBackup to come.
 3. **`/v1/jobs`**, `/v1/jobs/{id}`, `/v1/jobs/summary`.
 4. Veeam and NetBackup mappings when their collectors exist - checked
    against real servers, and this document corrected.
@@ -187,7 +213,7 @@ statuses** mapped into them are not yet complete:
 | Product | Source so far |
 |---|---|
 | Commvault | its documented status words, and what the lab and work CommCells have shown (7 so far) |
-| Rubrik | RSC's schema, and what the work account returned (`Running` where the enum says `RUNNING`) |
+| Rubrik | **complete:** RSC's `ActivityStatusEnum` (11) and `ActivityTypeEnum` (74), read from its GraphQL schema 2026-10-28; a test checks every value maps |
 | Veeam | its REST API documentation only - not yet run against a server |
 | NetBackup | its API documentation; first server (10.2) reached 2026-11-02, no jobs on it yet |
 
