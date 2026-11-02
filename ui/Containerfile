@@ -1,0 +1,20 @@
+# The UI image: SvelteKit's Node server (adapter-node). Built from ui/:
+#   podman build -t blt-ui -f ui/Containerfile ui
+FROM docker.io/library/node:24-alpine AS build
+WORKDIR /ui
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+RUN npm run build && npm prune --omit=dev
+
+FROM docker.io/library/node:24-alpine
+WORKDIR /ui
+ENV NODE_ENV=production PORT=3000
+COPY --from=build /ui/package.json ./
+COPY --from=build /ui/node_modules ./node_modules
+COPY --from=build /ui/build ./build
+USER node
+EXPOSE 3000
+# Needs BLT_API_URL and BLT_API_KEY; ORIGIN when behind a proxy, so form
+# posts are allowed (https://svelte.dev/docs/kit/adapter-node).
+CMD ["node", "build"]
