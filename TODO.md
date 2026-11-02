@@ -237,3 +237,17 @@ current work.
     `docs/openapi.json`, an environment per install (lab, work, a
     customer's) with the key left blank, and example requests for the
     common tasks. Generated like the spec, so they cannot drift.
+
+23. **Proof jobs: a heartbeat per backup domain** (asked for 2026-11-02,
+    later). A small, known backup that blt sets up in each domain it
+    collects from (a CommCell, an RSC account, a NetBackup primary, a
+    Veeam server) - a tiny file or folder on a schedule - and expects to
+    see succeed within its window. If it does not appear, something in
+    the chain is broken: the product, its scheduling, or blt's own
+    collection. It proves the whole path end to end, which no single
+    job can. To decide: what it backs up and where in each product,
+    how blt tells its own proof jobs apart (a naming convention or a
+    dedicated plan / SLA / policy), and alerting when one is late. Shown
+    as kind `proof` or similar, in the engineering view (see
+    docs/common-jobs.md, decision 3). Each domain's setup shown and agreed
+    before anything is created on it.

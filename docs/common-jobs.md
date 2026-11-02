@@ -1,7 +1,7 @@
-# Common jobs: the `blt` schema (design, for review)
+# Common jobs: the `blt` schema (design)
 
-**Status: a design for review, written 2026-10-29. Nothing here is
-built.** It is Phase 2's data foundation ([vision.md](vision.md) section
+**Status: written 2026-10-29, reviewed 2026-11-02 (decisions below).
+Nothing here is built yet.** It is Phase 2's data foundation ([vision.md](vision.md) section
 3 and 4.4): one shape for a job from any product, so the jobs page and
 reports read one table instead of learning each product. Commvault and
 Rubrik are collected today; Veeam and NetBackup have SDKs not yet run
@@ -66,6 +66,7 @@ for links and for outside systems.
 | `bytes_protected` | the data it covered | size of application | logical size | processed size | (none) |
 | `message` | why it failed or warned, one line | pending reason / failure | failure reason / last message | result message | status text |
 | `parent_id` | → `blt.job`: child of | (none) | (none) | task under session | parent job id |
+| `source_object_id` | → the product's `source_object` it ran on, where found | client / instance | object (`rubrik.source_object`) | | client |
 | `attempt` | | attempts | attempt number | | try count |
 | `first_seen_at`, `last_collected_at` | blt's own | | | | |
 
@@ -103,12 +104,16 @@ calling a live job finished means it is never refreshed.
 | `waiting` | yes | Waiting, Pending, Suspended | | Pausing, Paused | SUSPENDED, INCOMPLETE, WAITING_FOR_RETRY |
 | `succeeded` | no | Completed, Committed | Success, TaskSuccess | Stopped + Success | DONE + 0 |
 | `warning` | no | Completed w/ warnings | Warning | Stopped + Warning | |
+| `info` | no | | Info | | |
 | `partial` | no | Completed w/ errors | PARTIAL_SUCCESS | | DONE + 1 |
 | `failed` | no | Failed, Failed to Start | Failure, TaskFailure | Stopped + Failed | DONE + any other code |
 | `cancelled` | no | Killed | Canceled | Stopped + None *(to check)* | DONE + 150 |
 | `skipped` | no | No Run | | | |
 | `missing` | no | Not found in CommCell (blt's) | | | |
 | `unknown` | yes | anything else | anything else | anything else | anything else |
+
+`info` is for activity that is neither a success nor a failure -
+Rubrik's `Info` today; there for other products as they show it.
 
 `warning` is apart from `partial` because they mean different things to
 the person on call: everything was protected but something was odd,
@@ -156,27 +161,55 @@ Each a branch of its own, each releasable:
 2. **`blt.job`** with the Commvault and Rubrik mappings, written on
    every upsert, backfilled from what is collected; a test per mapping
    row in this document.
+   2a. **Status lists made complete** (see "Where the status lists come
+   from"): every product value mapped and tested, `unknown` reported.
 3. **`/v1/jobs`**, `/v1/jobs/{id}`, `/v1/jobs/summary`.
 4. Veeam and NetBackup mappings when their collectors exist - checked
    against real servers, and this document corrected.
 
-## Open questions
+## Where the status lists come from
 
-1. **`warning` as its own state** - or folded into `succeeded` with a
-   flag? Proposed: its own state.
-2. **Rubrik's `Info` status** - informational activity, neither success
-   nor failure. Proposed: `succeeded`, and check what kinds carry it.
-3. **Which kinds the jobs page shows by default.** Proposed: `backup`,
-   `restore`, `copy`; `maintenance` and `scan` behind a filter - Rubrik's
-   index and diagnostic series would otherwise bury the backups.
-4. **Rubrik's protection (SLA domain)** is not collected per job yet.
-   The inventory now holds each object's SLA domain, so a job can take
-   it from its object's `rubrik.source_object` row - see Rubrik
-   inventory below. Proposed: that, rather than a second SLA field per
-   job.
-5. **Veeam's per-VM tasks**: store them as child jobs from the start, or
-   only the session? Proposed: the session first, tasks once a real
-   server shows what they hold.
+The **states** above are blt's own, few on purpose. The **product
+statuses** mapped into them are not yet complete:
+
+| Product | Source so far |
+|---|---|
+| Commvault | its documented status words, and what the lab and work CommCells have shown (7 so far) |
+| Rubrik | RSC's schema, and what the work account returned (`Running` where the enum says `RUNNING`) |
+| Veeam | its REST API documentation only - not yet run against a server |
+| NetBackup | its API documentation; first server (10.2) reached 2026-11-02, no jobs on it yet |
+
+So before `blt.job` is relied on (step 2a below): each product's full
+list from its own source - RSC's schema by introspection, the OpenAPI
+specs NetBackup and Veeam servers publish, Commvault's documentation,
+and the vendors themselves (the user is asking each for their default
+enums); a test that every listed value maps; and a report of the raw
+statuses that landed on `unknown`, so gaps show instead of hiding.
+
+## Decisions (review, 2026-11-02)
+
+1. **`warning` is its own state.**
+2. **`info` is a state** (not active, neither success nor failure),
+   mapped from Rubrik's `Info` now and open to other products.
+3. **The jobs page** has a row of built-in filters at the top -
+   **Backup** selected by default - that switch the view. A user with
+   the right role can save filters of their own, visible only to them.
+   **Some kinds are role-scoped**: blt's own `collection` runs (and
+   similar internal tasks) are for engineering, not shown to operations.
+   Every filter is a set of `/v1/jobs` parameters, so a saved filter is
+   stored parameters; saved filters and roles come with the web UI and
+   its sign-in (Zitadel).
+4. **Jobs map to inventory through blt's own mapping**: within a product,
+   each job gets `source_object_id`, worked out when it is stored, and
+   Rubrik's SLA domain (`protection`) comes from that object. Matching
+   across products is the asset refinery ([asset-refinery.md](asset-refinery.md)), later.
+5. **Veeam**: the session first; per-VM tasks once a real server shows
+   what they hold.
+
+**One product job is one blt job**, confirmed; grouping is a view. The
+same holds for VMware-based backups: a parent job with child jobs per VM
+(Veeam's session and tasks, NetBackup's parent and children, Commvault's
+VM jobs), joined by `parent_id`.
 
 ## Rubrik inventory
 
@@ -195,6 +228,6 @@ its own. A cross-product inventory view, like `blt.job` for jobs, is
 then a union of the shared columns. Rubrik's table was first created as
 `rubrik.object` and renamed to match before anything depended on it.
 
-That gives Rubrik jobs their `protection` (question 4) and feeds the
+That gives Rubrik jobs their `protection` (decision 4) and feeds the
 refinery's sightings, as Commvault's inventory does. Rubrik clusters and
 SLA domains as tables of their own are still to come.

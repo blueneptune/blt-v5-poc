@@ -9,6 +9,8 @@ __pycache__/
 
 # Real credentials live here; only the *.example files are tracked.
 config/*.env
+# Per-server CA certificates (e.g. a NetBackup primary's): not secret, but per install.
+config/*.pem
 config/.*.renewed.json
 config/.*.tmp
 config/.*.token.lock
