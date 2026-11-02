@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build the images and (re)start the "blt" pod: Postgres + the API, and
-# with BLT_PREFECT=true in config/blt.env the Prefect server and worker.
+# Build the images and (re)start the "blt" pod: Postgres, the API and the
+# web UI, and with BLT_PREFECT=true in config/blt.env the Prefect server
+# and worker.
 # Safe to re-run; job data lives in the blt-pgdata volume and survives it.
 #
 # deploy/kube/up.sh starts the same pod from a Kubernetes manifest; this
@@ -20,6 +21,7 @@ if ! podman pod exists blt; then
     else
         POD_ARGS=(-p "${BIND}:${API_PORT}:8000" -p "${BIND}:${PG_PORT}:5432")
         [[ "$PREFECT_ENABLED" == true ]] && POD_ARGS+=(-p "${PREFECT_BIND}:${PREFECT_PORT}:4200")
+        [[ "$UI_ENABLED" == true ]] && POD_ARGS+=(-p "${UI_BIND}:${UI_PORT}:3000")
         [[ -n "${BLT_POD_NETWORK:-}" ]] && POD_ARGS+=(--network "$BLT_POD_NETWORK")
     fi
     podman pod create --name blt "${POD_ARGS[@]}"
@@ -27,6 +29,11 @@ elif [[ "$PREFECT_ENABLED" == true && "$HOST_NETWORK" != true ]] \
     && ! podman pod inspect blt --format '{{json .InfraConfig.PortBindings}}' | grep -q '"4200/tcp"'; then
     echo "The blt pod was created before Prefect was turned on, so it does not publish the" >&2
     echo "Prefect port. Run ./deploy/down.sh (the data is kept), then this again." >&2
+    exit 1
+elif [[ "$UI_ENABLED" == true && "$HOST_NETWORK" != true ]] \
+    && ! podman pod inspect blt --format '{{json .InfraConfig.PortBindings}}' | grep -q '"3000/tcp"'; then
+    echo "The blt pod was created before the web UI was added, so it does not publish the" >&2
+    echo "UI's port. Run ./deploy/down.sh (the data is kept), then this again." >&2
     exit 1
 fi
 
@@ -65,6 +72,18 @@ if [[ "$PREFECT_ENABLED" == true ]]; then
         localhost/blt-prefect-worker
 else
     podman rm -f --ignore blt-prefect-server blt-prefect-worker >/dev/null
+fi
+
+if [[ "$UI_ENABLED" == true ]]; then
+    # It calls the API inside the pod, from its own server side: the key
+    # never reaches a browser.
+    podman run -d --replace --pod blt --name blt-ui \
+        -e "HOST=${UI_LISTEN_HOST}" -e "PORT=${UI_LISTEN_PORT}" \
+        -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
+        -e BLT_API_KEY \
+        localhost/blt-ui
+else
+    podman rm -f --ignore blt-ui >/dev/null
 fi
 
 wait_until_up

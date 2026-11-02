@@ -19,6 +19,9 @@ render() {
     text="$(cat deploy/kube/blt.yaml)"
     [[ "$PREFECT_ENABLED" == true ]] && fragment="$(cat deploy/kube/prefect-containers.yaml)"
     text="${text//"# @PREFECT_CONTAINERS@"/$fragment}"
+    fragment=""
+    [[ "$UI_ENABLED" == true ]] && fragment="$(cat deploy/kube/ui-container.yaml)"
+    text="${text//"# @UI_CONTAINER@"/$fragment}"
 
     local -A values=(
         [HOST_NETWORK]="$HOST_NETWORK" [BIND]="$BIND"
@@ -30,6 +33,8 @@ render() {
         [PREFECT_LISTEN_HOST]="${PREFECT_LISTEN_HOST:-}"
         [PREFECT_LISTEN_PORT]="${PREFECT_LISTEN_PORT:-}" [PREFECT_LOCAL]="${PREFECT_LOCAL:-}"
         [MAX_PARALLEL]="${MAX_PARALLEL:-4}"
+        [UI_BIND]="${UI_BIND:-}" [UI_PORT]="${UI_PORT:-}"
+        [UI_LISTEN_HOST]="${UI_LISTEN_HOST:-}" [UI_LISTEN_PORT]="${UI_LISTEN_PORT:-}"
     )
     local -A secrets=(
         [BLT_API_KEY]="$BLT_API_KEY" [POSTGRES_PASSWORD]="$POSTGRES_PASSWORD"

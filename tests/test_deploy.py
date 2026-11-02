@@ -89,7 +89,7 @@ def test_the_manifest_publishes_each_service_on_its_own_address(tmp_path: Path) 
     documents = render(tmp_path)
     assert [d["kind"] for d in documents] == ["Secret", "PersistentVolumeClaim", "Pod"]
     found = containers(documents)
-    assert list(found) == ["postgres", "api", "prefect-server", "prefect-worker"]
+    assert list(found) == ["postgres", "api", "ui", "prefect-server", "prefect-worker"]
     ports = {name: c.get("ports") for name, c in found.items()}
     assert ports["api"] == [{"containerPort": 8000, "hostPort": 8188, "hostIP": "127.0.0.1"}]
     assert ports["postgres"] == [{"containerPort": 5432, "hostPort": 5544, "hostIP": "127.0.0.1"}]
@@ -97,6 +97,10 @@ def test_the_manifest_publishes_each_service_on_its_own_address(tmp_path: Path) 
     assert ports["prefect-server"] == [
         {"containerPort": 4200, "hostPort": 4200, "hostIP": "0.0.0.0"}
     ]
+    # The web UI has no sign-in: on this machine only, whatever else is open.
+    assert ports["ui"] == [{"containerPort": 3000, "hostPort": 8090, "hostIP": "127.0.0.1"}]
+    ui_env = {e["name"]: e.get("value") for e in found["ui"]["env"]}
+    assert ui_env["BLT_API_URL"] == "http://127.0.0.1:8000"
     worker_env = {e["name"]: e.get("value") for e in found["prefect-worker"]["env"]}
     assert worker_env["PREFECT_API_URL"] == "http://127.0.0.1:4200/api"
     assert worker_env["BLT_API_URL"] == "http://127.0.0.1:8000"
@@ -126,11 +130,30 @@ def test_on_the_host_network_nothing_is_published_and_services_listen_themselves
     )
     api_env = {e["name"]: e.get("value") for e in found["api"]["env"]}
     assert (api_env["BLT_LISTEN_HOST"], api_env["BLT_LISTEN_PORT"]) == ("127.0.0.1", "8188")
+    ui_env = {e["name"]: e.get("value") for e in found["ui"]["env"]}
+    assert (ui_env["HOST"], ui_env["PORT"]) == ("127.0.0.1", "8090")
+    assert ui_env["BLT_API_URL"] == "http://127.0.0.1:8188"
 
 
-def test_with_prefect_off_the_pod_has_only_postgres_and_the_api(tmp_path: Path) -> None:
+def test_with_prefect_off_the_pod_has_only_postgres_the_api_and_the_ui(tmp_path: Path) -> None:
     found = containers(render(tmp_path, "BLT_PREFECT=false\n"))
+    assert list(found) == ["postgres", "api", "ui"]
+    found = containers(render(tmp_path, "BLT_PREFECT=false\nBLT_UI=false\n"))
     assert list(found) == ["postgres", "api"]
+
+
+def test_the_ui_stays_local_when_the_rest_is_opened(tmp_path: Path) -> None:
+    found = containers(render(tmp_path, "BLT_BIND_ADDRESS=0.0.0.0\n"))
+    assert found["api"]["ports"][0]["hostIP"] == "0.0.0.0"
+    assert found["ui"]["ports"][0]["hostIP"] == "127.0.0.1"
+    # ... unless it is asked for, on its own setting.
+    found = containers(render(tmp_path, "BLT_UI_BIND_ADDRESS=0.0.0.0\nBLT_UI_PORT=9000\n"))
+    assert found["ui"]["ports"] == [{"containerPort": 3000, "hostPort": 9000, "hostIP": "0.0.0.0"}]
+
+
+def test_a_bad_ui_address_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(AssertionError):
+        render(tmp_path, "BLT_UI_BIND_ADDRESS=everywhere\n")
 
 
 @pytest.mark.parametrize(

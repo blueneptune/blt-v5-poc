@@ -5,7 +5,8 @@
 # Sets: BIND API_PORT PG_PORT HOST_NETWORK API_LISTEN_HOST API_LISTEN_PORT
 # PG_LISTEN_PORT PG_LISTEN_ADDRESSES LOCAL API_IN_POD PREFECT_ENABLED and, when it
 # is on, PREFECT_BIND PREFECT_PORT PREFECT_LISTEN_HOST PREFECT_LISTEN_PORT
-# PREFECT_LOCAL MAX_PARALLEL.
+# PREFECT_LOCAL MAX_PARALLEL, and UI_ENABLED with, when it is on, UI_BIND
+# UI_PORT UI_LISTEN_HOST UI_LISTEN_PORT.
 
 # Git Bash on Windows rewrites any argument that looks like a Unix path
 # into a Windows one before running a command - so podman was being told
@@ -109,8 +110,29 @@ if [[ "${BLT_PREFECT:-false}" == "true" ]]; then
     fi
 fi
 
+# The web UI (ui/). On unless BLT_UI=false. It has no sign-in yet, so
+# it gets its own bind address that does NOT follow BLT_BIND_ADDRESS: it
+# stays on this machine (127.0.0.1) unless BLT_UI_BIND_ADDRESS says
+# otherwise - anyone who can reach it sees every job.
+UI_ENABLED=true
+[[ "${BLT_UI:-true}" == "false" ]] && UI_ENABLED=false
+if [[ "$UI_ENABLED" == true ]]; then
+    UI_BIND="${BLT_UI_BIND_ADDRESS:-127.0.0.1}"
+    if ! is_ip "$UI_BIND"; then
+        echo "BLT_UI_BIND_ADDRESS in config/blt.env is not an IP address." >&2
+        exit 1
+    fi
+    UI_PORT="${BLT_UI_PORT:-8090}"
+    if [[ "$HOST_NETWORK" == true ]]; then
+        UI_LISTEN_HOST="$UI_BIND" UI_LISTEN_PORT="$UI_PORT"
+    else
+        UI_LISTEN_HOST="0.0.0.0" UI_LISTEN_PORT=3000
+    fi
+fi
+
 build_images() {
     podman build -t blt-api -f Containerfile .
+    [[ "$UI_ENABLED" == true ]] && podman build -t blt-ui -f ui/Containerfile ui
     if [[ "$PREFECT_ENABLED" == true ]]; then
         podman build -t blt-prefect-server -f deploy/prefect/server/Containerfile .
         podman build -t blt-prefect-worker -f deploy/prefect/worker/Containerfile .
@@ -119,27 +141,32 @@ build_images() {
 
 # Wait for the API (and Prefect, if on) to answer; on failure, show why.
 wait_until_up() {
-    local api="http://${LOCAL}:${API_PORT}/healthz" prefect="" ok
+    local api="http://${LOCAL}:${API_PORT}/healthz" prefect="" ui="" ok
     [[ "$PREFECT_ENABLED" == true ]] && \
         prefect="http://$(local_address "$PREFECT_BIND"):${PREFECT_PORT}/api/health"
+    [[ "$UI_ENABLED" == true ]] && ui="http://$(local_address "$UI_BIND"):${UI_PORT}/healthz"
     for _ in $(seq 1 90); do
         ok=true
         curl -fsS -m 3 "$api" 2>/dev/null | grep -q '"ok"' || ok=false
         if [[ -n "$prefect" ]]; then
             curl -fsS -m 3 -u "$PREFECT_AUTH" "$prefect" >/dev/null 2>&1 || ok=false
         fi
+        if [[ -n "$ui" ]]; then
+            curl -fsS -m 3 "$ui" 2>/dev/null | grep -q '"ok"' || ok=false
+        fi
         if [[ "$ok" == true ]]; then
             echo "blt pod is up: API on http://${BIND}:${API_PORT}, Postgres on ${BIND}:${PG_PORT}"
             [[ -n "$prefect" ]] && echo "Prefect UI on http://${PREFECT_BIND}:${PREFECT_PORT}"
+            [[ -n "$ui" ]] && echo "blt UI on http://${UI_BIND}:${UI_PORT}"
             return 0
         fi
         sleep 2
     done
-    echo "The pod did not become healthy within 3 minutes (${api}${prefect:+, ${prefect}})." >&2
+    echo "The pod did not become healthy within 3 minutes (${api}${prefect:+, ${prefect}}${ui:+, ${ui}})." >&2
     echo "--- podman ps" >&2
     podman ps -a --filter pod=blt --format '{{.Names}}  {{.Status}}' >&2
     local name
-    for name in blt-api blt-postgres blt-prefect-server blt-prefect-worker; do
+    for name in blt-api blt-postgres blt-prefect-server blt-prefect-worker blt-ui; do
         if podman container exists "$name"; then
             echo "--- last lines from ${name}" >&2
             podman logs --tail 15 "$name" >&2 2>&1 || true
