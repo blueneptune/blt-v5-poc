@@ -57,6 +57,25 @@ Both listen on `127.0.0.1` only. Data lives in the podman volume
 `blt-pgdata` and survives `up.sh` being re-run (which is also how you
 upgrade: `git pull && ./deploy/up.sh` applies any new migrations).
 
+### The web UI
+
+Since 2026.11.02.1 the pod also runs blt's web UI (`ui/`,
+[docs/ui.md](ui.md)):
+
+```
+curl http://127.0.0.1:8090/healthz          # {"status":"ok"}
+```
+
+Open **http://localhost:8090** - under WSL, from Windows as well (WSL
+forwards localhost). It has **no sign-in yet**: anyone who can reach it
+sees every job. So it listens on `127.0.0.1` only, even when
+`BLT_BIND_ADDRESS` opens the API wider; `BLT_UI_BIND_ADDRESS` opens it
+deliberately, `BLT_UI_PORT` moves it, `BLT_UI=false` leaves it out.
+
+An older pod on published ports (not `BLT_POD_NETWORK=host`) has no UI
+port: `up.sh` says so - run `./deploy/down.sh` (the data is kept), then
+`./deploy/up.sh`.
+
 The pod does not start by itself after a reboot; re-run `./deploy/up.sh`.
 To have that happen unattended, let the collecting user's services run
 without a login session and start the pod from cron (not yet tried

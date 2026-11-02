@@ -35,9 +35,10 @@ Planned, each when a page needs it - not before:
 ## Order of work
 
 1. ~~Shell, overview, jobs, job page, sources~~ - done 2026-11-02.
-2. **In the lab**: `blt-ui` image through Harbor, a Deployment beside
-   `blt-api` in yoki-blt-infra, an ingress host with a step-ca
-   certificate. Lab only, no sign-in, as decided.
+2. ~~**In the lab**~~ - done in 2026.11.02: https://ui.blt.lab.ethos.home
+   (`blt-ui` beside `blt-api`, step-ca certificate). **On the desktop**
+   (deploy/up.sh) from 2026.11.02.1, on localhost only - see
+   production-setup.md, "The web UI".
 3. **Jobs page, richer**: column chooser and product-specific columns
    (vision 4.4), sorting, the inventory row a job ran on, a "last run"
    per source on the overview (collection health).
