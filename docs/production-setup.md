@@ -68,6 +68,45 @@ loginctl enable-linger "$USER"
 @reboot /path/to/blt/deploy/up.sh >> /var/log/blt/pod.log 2>&1
 ```
 
+### Nightly backups
+
+`deploy/backup.sh` dumps the `blt` database, and with Prefect on the
+`prefect` one, from the running pod into `~/blt-backups`. It checks each
+dump reads back and keeps the newest 14 of each. Run it once by hand,
+then install the timer:
+
+```
+./deploy/backup.sh                  # one now: prints each dump and its size
+./deploy/backup.sh install-timer    # every night at 02:30 (systemd user timer)
+systemctl --user list-timers blt-backup.timer
+journalctl --user -u blt-backup.service     # what the last runs said
+```
+
+| Setting in `config/blt.env` | Default |
+|---|---|
+| `BLT_BACKUP_DIR` | `~/blt-backups` |
+| `BLT_BACKUP_KEEP` | `14` nightly dumps per database |
+| `BLT_BACKUP_AT` | `02:30` (systemd `OnCalendar`; re-run `install-timer` after changing it) |
+
+- Only `blt-nightly-*` and `prefect-nightly-*` files are pruned. Dumps
+  you take by hand before an upgrade (`blt-before-<tag>.dump`) stay.
+- **The `prefect` dump holds Prefect's blocks**: CommCell tokens and RSC
+  service accounts. The folder is made `700` and each dump `600`. Copy
+  them somewhere just as private, or not at all.
+- **Under WSL** the timer needs systemd: `[boot]` / `systemd=true` in
+  `/etc/wsl.conf`, then `wsl --shutdown` and reopen. `install-timer`
+  says so if it is off, and prints a cron line to use instead. A night
+  missed because WSL was not running is made up when it next starts.
+- The dumps are on the same disk as the database. That covers a bad
+  upgrade or a mistaken delete, not a lost machine. Copy
+  `~/blt-backups` off the machine if that matters.
+
+To restore one (the API and Prefect reconnect by themselves):
+
+```
+podman exec -i blt-postgres pg_restore --clean --if-exists -U blt -d blt < ~/blt-backups/blt-nightly-<stamp>.dump
+```
+
 ## 3. A Commvault user and token, per CommCell
 
 For each CommServe, in Command Center:

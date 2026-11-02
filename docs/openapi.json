@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "blt API",
-    "description": "\nblt collects backup jobs and inventory from backup products (Commvault,\nRubrik) into one database. **This API is the only thing that reads or\nwrites that database.** Collectors never touch Postgres: they ask the API\nwhere they left off, post what they collected, and report how the run\nwent. Reports and other readers use the same API.\n\n## Signing in\n\nEvery endpoint except `/healthz` needs the API key in an `X-API-Key`\nheader. In these docs: **Authorize** (top right), paste the key, and the\n*Try it out* buttons send it.\n\n```\ncurl -H \"X-API-Key: $BLT_API_KEY\" \\\n    https://api.blt.lab.ethos.home/v1/sources/commvault/cv-toaster/last-run\n```\n\n## Conventions\n\n- **Sources are named in the path**:\n  `/v1/sources/{source type}/{source name}/...` - a CommCell is\n  `/v1/sources/commvault/cv-toaster`, an RSC account\n  `/v1/sources/rubrik/work`. The name is blt's own (its Prefect\n  block's), not the product's. Each source type has its own endpoints\n  below that, in its product's own terms.\n- **Times** are ISO 8601 with a time zone (`2026-10-29T14:00:00Z`). A\n  time in a request body without one is refused.\n- **Lists** page with `limit` and `offset`.\n- **Errors** come back as `{\"detail\": \"...\"}`: 401 for a missing or wrong\n  key, 404 for an unknown source, run or job, 422 for a body or\n  parameter that does not validate.\n- **Writes are upserts**, keyed by the source's own ids. Posting the same\n  batch twice changes nothing; a batch collected *before* what is\n  already stored is ignored, so a slow run cannot roll a job back.\n\n## Versions\n\nEverything except `/healthz` is under `/v1`. Changes that don't break a\nclient (a new endpoint, field or optional parameter) are made in `/v1`\nas it stands. A change that would break one goes into a `/v2` beside\nit, and `/v1` stays until every collector has moved over.\n\nThe paths from before versioning (`/commcells/{name}/...`,\n`/rubrik/{name}/...`) still work, for collectors on an older release.\nThey answer with a `Deprecation: true` header, are not listed here, and\nwill be removed.\n\n## One collection run\n\n1. `GET .../last-run` - the watermark: where the last successful run\n   started. None means never collected.\n2. `POST .../runs` - open a run; keep its `id`.\n3. `POST .../jobs` - the jobs collected, in batches, each with the run id.\n4. `POST .../runs/{run_id}/finish` - succeeded or failed. Only a\n   succeeded run moves the watermark.\n\nCommvault runs also check on jobs still active (`GET .../jobs?active=true`)\nand reconcile ones the CommCell no longer knows (`PATCH .../jobs/{job_id}`).\nRubrik runs need neither: RSC reports every change, so one pass covers it.\n",
-    "version": "2026.10.29"
+    "description": "\nblt collects backup jobs and inventory from backup products (Commvault,\nRubrik) into one database. **This API is the only thing that reads or\nwrites that database.** Collectors never touch Postgres: they ask the API\nwhere they left off, post what they collected, and report how the run\nwent. Reports and other readers use the same API.\n\n## Signing in\n\nEvery endpoint except `/healthz` needs the API key in an `X-API-Key`\nheader. In these docs: **Authorize** (top right), paste the key, and the\n*Try it out* buttons send it.\n\n```\ncurl -H \"X-API-Key: $BLT_API_KEY\" \\\n    https://api.blt.lab.ethos.home/v1/sources/commvault/cv-toaster/last-run\n```\n\n## Conventions\n\n- **Sources are named in the path**:\n  `/v1/sources/{source type}/{source name}/...` - a CommCell is\n  `/v1/sources/commvault/cv-toaster`, an RSC account\n  `/v1/sources/rubrik/work`. The name is blt's own (its Prefect\n  block's), not the product's. Each source type has its own endpoints\n  below that, in its product's own terms.\n- **Times** are ISO 8601 with a time zone (`2026-10-29T14:00:00Z`). A\n  time in a request body without one is refused.\n- **Lists** page with `limit` and `offset`.\n- **Errors** come back as `{\"detail\": \"...\"}`: 401 for a missing or wrong\n  key, 404 for an unknown source, run or job, 422 for a body or\n  parameter that does not validate.\n- **Writes are upserts**, keyed by the source's own ids. Posting the same\n  batch twice changes nothing; a batch collected *before* what is\n  already stored is ignored, so a slow run cannot roll a job back.\n\n## Versions\n\nEverything except `/healthz` is under `/v1`. Changes that don't break a\nclient (a new endpoint, field or optional parameter) are made in `/v1`\nas it stands. A change that would break one goes into a `/v2` beside\nit, and `/v1` stays until every collector has moved over.\n\n## One collection run\n\n1. `GET .../last-run` - the watermark: where the last successful run\n   started. None means never collected.\n2. `POST .../runs` - open a run; keep its `id`.\n3. `POST .../jobs` - the jobs collected, in batches, each with the run id.\n4. `POST .../runs/{run_id}/finish` - succeeded or failed. Only a\n   succeeded run moves the watermark.\n\nCommvault runs also check on jobs still active (`GET .../jobs?active=true`)\nand reconcile ones the CommCell no longer knows (`PATCH .../jobs/{job_id}`).\nRubrik runs need neither: RSC reports every change, so one pass covers it.\n",
+    "version": "2026.10.30.3"
   },
   "paths": {
     "/healthz": {
@@ -52,8 +52,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           }
         ],
         "responses": {
@@ -110,8 +115,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           }
         ],
         "responses": {
@@ -166,8 +176,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           }
         ],
         "requestBody": {
@@ -244,8 +259,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           }
         ],
         "requestBody": {
@@ -312,8 +332,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           },
           {
             "name": "run_id",
@@ -321,8 +346,10 @@
             "required": true,
             "schema": {
               "type": "integer",
+              "description": "The run's `id`, as `POST .../runs` returned it.",
               "title": "Run Id"
-            }
+            },
+            "description": "The run's `id`, as `POST .../runs` returned it."
           }
         ],
         "requestBody": {
@@ -399,8 +426,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           }
         ],
         "requestBody": {
@@ -465,8 +497,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           },
           {
             "name": "active",
@@ -618,8 +655,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           },
           {
             "name": "job_id",
@@ -627,8 +669,13 @@
             "required": true,
             "schema": {
               "type": "integer",
+              "description": "Commvault's job id.",
+              "examples": [
+                4711
+              ],
               "title": "Job Id"
-            }
+            },
+            "description": "Commvault's job id."
           }
         ],
         "responses": {
@@ -693,8 +740,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           },
           {
             "name": "job_id",
@@ -702,8 +754,13 @@
             "required": true,
             "schema": {
               "type": "integer",
+              "description": "Commvault's job id.",
+              "examples": [
+                4711
+              ],
               "title": "Job Id"
-            }
+            },
+            "description": "Commvault's job id."
           }
         ],
         "requestBody": {
@@ -780,8 +837,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           }
         ],
         "requestBody": {
@@ -849,8 +911,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           },
           {
             "name": "kind",
@@ -984,8 +1051,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           },
           {
             "name": "history",
@@ -1068,8 +1140,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it.",
+              "examples": [
+                "cv-toaster"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the CommCell - its Prefect block's name, not necessarily the CommServe's host name. Made the first time a run is started for it."
           },
           {
             "name": "max_age_hours",
@@ -1135,7 +1212,7 @@
           "rubrik"
         ],
         "summary": "Where the last collection got to",
-        "description": "The account's watermark and its most recent run. An unknown\naccount is not an error: no watermark means do an initial run.",
+        "description": "The account's watermark and its most recent job run. An unknown\naccount is not an error: no watermark means do an initial run.\nInventory runs do not count.",
         "operationId": "last_run_v1_sources_rubrik__source_name__last_run_get",
         "security": [
           {
@@ -1149,8 +1226,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
           }
         ],
         "responses": {
@@ -1207,8 +1289,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
           }
         ],
         "requestBody": {
@@ -1261,7 +1348,7 @@
           "rubrik"
         ],
         "summary": "Close a collection run",
-        "description": "Records how the run went; a succeeded run becomes the new\nwatermark.",
+        "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present.",
         "operationId": "finish_run_v1_sources_rubrik__source_name__runs__run_id__finish_post",
         "security": [
           {
@@ -1275,8 +1362,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
           },
           {
             "name": "run_id",
@@ -1284,8 +1376,10 @@
             "required": true,
             "schema": {
               "type": "integer",
+              "description": "The run's `id`, as `POST .../runs` returned it.",
               "title": "Run Id"
-            }
+            },
+            "description": "The run's `id`, as `POST .../runs` returned it."
           }
         ],
         "requestBody": {
@@ -1362,8 +1456,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
           }
         ],
         "requestBody": {
@@ -1428,8 +1527,13 @@
             "required": true,
             "schema": {
               "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
               "title": "Source Name"
-            }
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
           },
           {
             "name": "active",
@@ -1600,6 +1704,302 @@
           }
         }
       }
+    },
+    "/v1/sources/rubrik/{source_name}/objects": {
+      "post": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "Store a batch of inventory",
+        "description": "Objects as RSC lists them, during an inventory run, keyed by\n`source_key`.",
+        "operationId": "upsert_objects_v1_sources_rubrik__source_name__objects_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubrikObjectBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown account or run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "List inventory",
+        "description": "What RSC says exists, by type then name.",
+        "operationId": "list_objects_v1_sources_rubrik__source_name__objects_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these object types, any case; repeat for several: `?kind=O365Mailbox&kind=O365Onedrive`.",
+              "title": "Kind"
+            },
+            "description": "Only these object types, any case; repeat for several: `?kind=O365Mailbox&kind=O365Onedrive`."
+          },
+          {
+            "name": "protection_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Protected, NoSla or DoNotProtect, any case.",
+              "title": "Protection Status"
+            },
+            "description": "Protected, NoSla or DoNotProtect, any case."
+          },
+          {
+            "name": "compliance_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, ..., any case.",
+              "title": "Compliance Status"
+            },
+            "description": "IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, ..., any case."
+          },
+          {
+            "name": "sla_domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The SLA domain's name, any case.",
+              "title": "Sla Domain"
+            },
+            "description": "The SLA domain's name, any case."
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the object's name, any case.",
+              "title": "Name"
+            },
+            "description": "Part of the object's name, any case."
+          },
+          {
+            "name": "present",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "false: objects the latest inventory no longer lists.",
+              "title": "Present"
+            },
+            "description": "false: objects the latest inventory no longer lists."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RubrikObjectOut"
+                  },
+                  "title": "Response List Objects V1 Sources Rubrik  Source Name  Objects Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1608,7 +2008,8 @@
         "properties": {
           "commcell": {
             "type": "string",
-            "title": "Commcell"
+            "title": "Commcell",
+            "description": "blt's name for the CommCell."
           },
           "resume_from": {
             "anyOf": [
@@ -1620,7 +2021,8 @@
                 "type": "null"
               }
             ],
-            "title": "Resume From"
+            "title": "Resume From",
+            "description": "Where the next backfill chunk should end: the oldest point already covered. Null: nothing collected yet."
           },
           "backfilled_to": {
             "anyOf": [
@@ -1632,11 +2034,13 @@
                 "type": "null"
               }
             ],
-            "title": "Backfilled To"
+            "title": "Backfilled To",
+            "description": "How far back a backfill has reached. Null: no backfill has run."
           },
           "complete": {
             "type": "boolean",
             "title": "Complete",
+            "description": "The start of the CommCell's history has been reached.",
             "default": false
           }
         },
@@ -1666,7 +2070,14 @@
         "required": [
           "backfilled_to"
         ],
-        "title": "BackfillUpdate"
+        "title": "BackfillUpdate",
+        "description": "How far back a backfill has now collected.",
+        "examples": [
+          {
+            "backfilled_to": "2026-09-01T00:00:00Z",
+            "complete": false
+          }
+        ]
       },
       "HTTPValidationError": {
         "properties": {
@@ -1692,11 +2103,13 @@
                 "type": "null"
               }
             ],
-            "title": "Client"
+            "title": "Client",
+            "description": "The client the instance is on."
           },
           "instance": {
             "type": "string",
-            "title": "Instance"
+            "title": "Instance",
+            "description": "The instance (a SQL Server instance)."
           },
           "app_type": {
             "anyOf": [
@@ -1707,7 +2120,8 @@
                 "type": "null"
               }
             ],
-            "title": "App Type"
+            "title": "App Type",
+            "description": "The agent, e.g. SQL Server."
           },
           "job_id": {
             "anyOf": [
@@ -1718,7 +2132,8 @@
                 "type": "null"
               }
             ],
-            "title": "Job Id"
+            "title": "Job Id",
+            "description": "Its most recent full backup job. Null or 0: never backed up."
           },
           "job_status": {
             "anyOf": [
@@ -1729,7 +2144,8 @@
                 "type": "null"
               }
             ],
-            "title": "Job Status"
+            "title": "Job Status",
+            "description": "That job's Commvault status."
           },
           "job_ended_at": {
             "anyOf": [
@@ -1741,15 +2157,18 @@
                 "type": "null"
               }
             ],
-            "title": "Job Ended At"
+            "title": "Job Ended At",
+            "description": "When that job ended."
           },
           "discovered": {
             "type": "integer",
-            "title": "Discovered"
+            "title": "Discovered",
+            "description": "Databases the source knows on the instance."
           },
           "backed_up": {
             "type": "integer",
-            "title": "Backed Up"
+            "title": "Backed Up",
+            "description": "Of those, how many this job backed up (matched by name)."
           },
           "reported_backed_up": {
             "anyOf": [
@@ -1760,7 +2179,8 @@
                 "type": "null"
               }
             ],
-            "title": "Reported Backed Up"
+            "title": "Reported Backed Up",
+            "description": "Commvault's own count of databases the job backed up."
           },
           "reported_skipped": {
             "anyOf": [
@@ -1771,25 +2191,29 @@
                 "type": "null"
               }
             ],
-            "title": "Reported Skipped"
+            "title": "Reported Skipped",
+            "description": "Commvault's own count of databases the job skipped."
           },
           "missed": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Missed"
+            "title": "Missed",
+            "description": "Databases known on the instance that this job did not back up."
           },
           "unconfirmed": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Unconfirmed"
+            "title": "Unconfirmed",
+            "description": "Databases that cannot be checked by name (system databases)."
           },
           "notes": {
             "type": "string",
             "title": "Notes",
+            "description": "Anything else worth knowing about this row, in words.",
             "default": ""
           },
           "observed_at": {
@@ -1802,7 +2226,8 @@
                 "type": "null"
               }
             ],
-            "title": "Observed At"
+            "title": "Observed At",
+            "description": "When the inventory run that produced this row finished."
           }
         },
         "type": "object",
@@ -1839,7 +2264,8 @@
               "$ref": "#/components/schemas/JobIn"
             },
             "type": "array",
-            "title": "Jobs"
+            "title": "Jobs",
+            "description": "The jobs, each as it was at collected_at."
           }
         },
         "type": "object",
@@ -1847,7 +2273,31 @@
           "collected_at",
           "jobs"
         ],
-        "title": "JobBatch"
+        "title": "JobBatch",
+        "description": "Jobs collected in one go, sent during a run.",
+        "examples": [
+          {
+            "collected_at": "2026-10-29T14:01:00Z",
+            "jobs": [
+              {
+                "app_type": "File System",
+                "backup_level": "Incremental",
+                "client_name": "fs-01",
+                "end_time": "2026-10-29T13:12:30Z",
+                "job_id": 4711,
+                "job_type": "Backup",
+                "percent_complete": 100,
+                "size_of_application": 52428800,
+                "size_of_media": 10485760,
+                "start_time": "2026-10-29T13:00:00Z",
+                "status": "Completed",
+                "storage_policy": "Server Plan",
+                "subclient_name": "default"
+              }
+            ],
+            "run_id": 1234
+          }
+        ]
       },
       "JobIn": {
         "properties": {
@@ -1870,7 +2320,8 @@
                 "type": "null"
               }
             ],
-            "title": "Job Type"
+            "title": "Job Type",
+            "description": "Commvault's job type: Backup, Restore, Data Aging, Auxiliary Copy, ..."
           },
           "operation": {
             "anyOf": [
@@ -1881,7 +2332,8 @@
                 "type": "null"
               }
             ],
-            "title": "Operation"
+            "title": "Operation",
+            "description": "What the job did, as Command Center shows it (localizedOperationName)."
           },
           "backup_level": {
             "anyOf": [
@@ -1892,7 +2344,8 @@
                 "type": "null"
               }
             ],
-            "title": "Backup Level"
+            "title": "Backup Level",
+            "description": "Full, Incremental, Differential, Synthetic Full, ... Backups only."
           },
           "app_type": {
             "anyOf": [
@@ -1903,7 +2356,8 @@
                 "type": "null"
               }
             ],
-            "title": "App Type"
+            "title": "App Type",
+            "description": "The agent: File System, SQL Server, Virtual Server, ..."
           },
           "client_id": {
             "anyOf": [
@@ -1914,7 +2368,8 @@
                 "type": "null"
               }
             ],
-            "title": "Client Id"
+            "title": "Client Id",
+            "description": "Commvault's id for the client."
           },
           "client_name": {
             "anyOf": [
@@ -1925,7 +2380,8 @@
                 "type": "null"
               }
             ],
-            "title": "Client Name"
+            "title": "Client Name",
+            "description": "The client the job ran for."
           },
           "subclient_name": {
             "anyOf": [
@@ -1936,7 +2392,8 @@
                 "type": "null"
               }
             ],
-            "title": "Subclient Name"
+            "title": "Subclient Name",
+            "description": "The subclient: what was backed up, and how."
           },
           "backupset_name": {
             "anyOf": [
@@ -1947,7 +2404,8 @@
                 "type": "null"
               }
             ],
-            "title": "Backupset Name"
+            "title": "Backupset Name",
+            "description": "The backup set the subclient is in."
           },
           "instance_name": {
             "anyOf": [
@@ -1958,7 +2416,8 @@
                 "type": "null"
               }
             ],
-            "title": "Instance Name"
+            "title": "Instance Name",
+            "description": "The agent instance (a SQL Server instance, a hypervisor, ...)."
           },
           "storage_policy": {
             "anyOf": [
@@ -1969,7 +2428,8 @@
                 "type": "null"
               }
             ],
-            "title": "Storage Policy"
+            "title": "Storage Policy",
+            "description": "The storage policy (plan) the job wrote to."
           },
           "percent_complete": {
             "anyOf": [
@@ -1980,7 +2440,8 @@
                 "type": "null"
               }
             ],
-            "title": "Percent Complete"
+            "title": "Percent Complete",
+            "description": "0 to 100, as Commvault reports it."
           },
           "start_time": {
             "anyOf": [
@@ -1992,7 +2453,8 @@
                 "type": "null"
               }
             ],
-            "title": "Start Time"
+            "title": "Start Time",
+            "description": "When the job started."
           },
           "end_time": {
             "anyOf": [
@@ -2004,7 +2466,8 @@
                 "type": "null"
               }
             ],
-            "title": "End Time"
+            "title": "End Time",
+            "description": "When it ended. Null while it runs."
           },
           "last_update_time": {
             "anyOf": [
@@ -2016,7 +2479,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Update Time"
+            "title": "Last Update Time",
+            "description": "When Commvault last changed the job."
           },
           "elapsed_seconds": {
             "anyOf": [
@@ -2027,7 +2491,8 @@
                 "type": "null"
               }
             ],
-            "title": "Elapsed Seconds"
+            "title": "Elapsed Seconds",
+            "description": "Run time so far, or in total once finished."
           },
           "size_of_application": {
             "anyOf": [
@@ -2038,7 +2503,8 @@
                 "type": "null"
               }
             ],
-            "title": "Size Of Application"
+            "title": "Size Of Application",
+            "description": "Bytes of source data the job covered (application size)."
           },
           "size_of_media": {
             "anyOf": [
@@ -2049,7 +2515,8 @@
                 "type": "null"
               }
             ],
-            "title": "Size Of Media"
+            "title": "Size Of Media",
+            "description": "Bytes the job wrote to backup storage, after compression and deduplication."
           },
           "total_files": {
             "anyOf": [
@@ -2060,7 +2527,8 @@
                 "type": "null"
               }
             ],
-            "title": "Total Files"
+            "title": "Total Files",
+            "description": "Files the job processed."
           },
           "failed_files": {
             "anyOf": [
@@ -2071,7 +2539,8 @@
                 "type": "null"
               }
             ],
-            "title": "Failed Files"
+            "title": "Failed Files",
+            "description": "Files it could not back up."
           },
           "pending_reason": {
             "anyOf": [
@@ -2082,7 +2551,8 @@
                 "type": "null"
               }
             ],
-            "title": "Pending Reason"
+            "title": "Pending Reason",
+            "description": "Why the job is waiting or failed, in Commvault's words."
           },
           "is_aged": {
             "anyOf": [
@@ -2093,7 +2563,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Aged"
+            "title": "Is Aged",
+            "description": "Its data has been aged off (deleted by retention)."
           },
           "raw": {
             "additionalProperties": true,
@@ -2131,7 +2602,8 @@
                 "type": "null"
               }
             ],
-            "title": "Job Type"
+            "title": "Job Type",
+            "description": "Commvault's job type: Backup, Restore, Data Aging, Auxiliary Copy, ..."
           },
           "operation": {
             "anyOf": [
@@ -2142,7 +2614,8 @@
                 "type": "null"
               }
             ],
-            "title": "Operation"
+            "title": "Operation",
+            "description": "What the job did, as Command Center shows it (localizedOperationName)."
           },
           "backup_level": {
             "anyOf": [
@@ -2153,7 +2626,8 @@
                 "type": "null"
               }
             ],
-            "title": "Backup Level"
+            "title": "Backup Level",
+            "description": "Full, Incremental, Differential, Synthetic Full, ... Backups only."
           },
           "app_type": {
             "anyOf": [
@@ -2164,7 +2638,8 @@
                 "type": "null"
               }
             ],
-            "title": "App Type"
+            "title": "App Type",
+            "description": "The agent: File System, SQL Server, Virtual Server, ..."
           },
           "client_id": {
             "anyOf": [
@@ -2175,7 +2650,8 @@
                 "type": "null"
               }
             ],
-            "title": "Client Id"
+            "title": "Client Id",
+            "description": "Commvault's id for the client."
           },
           "client_name": {
             "anyOf": [
@@ -2186,7 +2662,8 @@
                 "type": "null"
               }
             ],
-            "title": "Client Name"
+            "title": "Client Name",
+            "description": "The client the job ran for."
           },
           "subclient_name": {
             "anyOf": [
@@ -2197,7 +2674,8 @@
                 "type": "null"
               }
             ],
-            "title": "Subclient Name"
+            "title": "Subclient Name",
+            "description": "The subclient: what was backed up, and how."
           },
           "backupset_name": {
             "anyOf": [
@@ -2208,7 +2686,8 @@
                 "type": "null"
               }
             ],
-            "title": "Backupset Name"
+            "title": "Backupset Name",
+            "description": "The backup set the subclient is in."
           },
           "instance_name": {
             "anyOf": [
@@ -2219,7 +2698,8 @@
                 "type": "null"
               }
             ],
-            "title": "Instance Name"
+            "title": "Instance Name",
+            "description": "The agent instance (a SQL Server instance, a hypervisor, ...)."
           },
           "storage_policy": {
             "anyOf": [
@@ -2230,7 +2710,8 @@
                 "type": "null"
               }
             ],
-            "title": "Storage Policy"
+            "title": "Storage Policy",
+            "description": "The storage policy (plan) the job wrote to."
           },
           "percent_complete": {
             "anyOf": [
@@ -2241,7 +2722,8 @@
                 "type": "null"
               }
             ],
-            "title": "Percent Complete"
+            "title": "Percent Complete",
+            "description": "0 to 100, as Commvault reports it."
           },
           "start_time": {
             "anyOf": [
@@ -2253,7 +2735,8 @@
                 "type": "null"
               }
             ],
-            "title": "Start Time"
+            "title": "Start Time",
+            "description": "When the job started."
           },
           "end_time": {
             "anyOf": [
@@ -2265,7 +2748,8 @@
                 "type": "null"
               }
             ],
-            "title": "End Time"
+            "title": "End Time",
+            "description": "When it ended. Null while it runs."
           },
           "last_update_time": {
             "anyOf": [
@@ -2277,7 +2761,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Update Time"
+            "title": "Last Update Time",
+            "description": "When Commvault last changed the job."
           },
           "elapsed_seconds": {
             "anyOf": [
@@ -2288,7 +2773,8 @@
                 "type": "null"
               }
             ],
-            "title": "Elapsed Seconds"
+            "title": "Elapsed Seconds",
+            "description": "Run time so far, or in total once finished."
           },
           "size_of_application": {
             "anyOf": [
@@ -2299,7 +2785,8 @@
                 "type": "null"
               }
             ],
-            "title": "Size Of Application"
+            "title": "Size Of Application",
+            "description": "Bytes of source data the job covered (application size)."
           },
           "size_of_media": {
             "anyOf": [
@@ -2310,7 +2797,8 @@
                 "type": "null"
               }
             ],
-            "title": "Size Of Media"
+            "title": "Size Of Media",
+            "description": "Bytes the job wrote to backup storage, after compression and deduplication."
           },
           "total_files": {
             "anyOf": [
@@ -2321,7 +2809,8 @@
                 "type": "null"
               }
             ],
-            "title": "Total Files"
+            "title": "Total Files",
+            "description": "Files the job processed."
           },
           "failed_files": {
             "anyOf": [
@@ -2332,7 +2821,8 @@
                 "type": "null"
               }
             ],
-            "title": "Failed Files"
+            "title": "Failed Files",
+            "description": "Files it could not back up."
           },
           "pending_reason": {
             "anyOf": [
@@ -2343,7 +2833,8 @@
                 "type": "null"
               }
             ],
-            "title": "Pending Reason"
+            "title": "Pending Reason",
+            "description": "Why the job is waiting or failed, in Commvault's words."
           },
           "is_aged": {
             "anyOf": [
@@ -2354,7 +2845,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Aged"
+            "title": "Is Aged",
+            "description": "Its data has been aged off (deleted by retention)."
           },
           "raw": {
             "additionalProperties": true,
@@ -2364,7 +2856,8 @@
           },
           "commcell_id": {
             "type": "integer",
-            "title": "Commcell Id"
+            "title": "Commcell Id",
+            "description": "blt's id for the CommCell."
           },
           "state": {
             "type": "string",
@@ -2411,18 +2904,21 @@
           "first_seen_at",
           "last_collected_at"
         ],
-        "title": "JobOut"
+        "title": "JobOut",
+        "description": "A job as blt holds it: the latest state it was seen in, plus blt's own fields."
       },
       "JobPatch": {
         "properties": {
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "The new status - today only \"Not found in CommCell\"."
           },
           "collected_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Collected At"
+            "title": "Collected At",
+            "description": "When the collector found this out."
           },
           "run_id": {
             "anyOf": [
@@ -2433,7 +2929,8 @@
                 "type": "null"
               }
             ],
-            "title": "Run Id"
+            "title": "Run Id",
+            "description": "The run that found it."
           }
         },
         "type": "object",
@@ -2442,13 +2939,21 @@
           "collected_at"
         ],
         "title": "JobPatch",
-        "description": "A change to one already-known job - today only used to mark a job\nMISSING_STATUS, since anything Commvault can still describe goes\nthrough the batch upsert instead."
+        "description": "A change to one already-known job - today only used to mark a job\nMISSING_STATUS, since anything Commvault can still describe goes\nthrough the batch upsert instead.",
+        "examples": [
+          {
+            "collected_at": "2026-10-29T14:01:30Z",
+            "run_id": 1234,
+            "status": "Not found in CommCell"
+          }
+        ]
       },
       "LastRun": {
         "properties": {
           "commcell": {
             "type": "string",
-            "title": "Commcell"
+            "title": "Commcell",
+            "description": "blt's name for the CommCell."
           },
           "watermark": {
             "anyOf": [
@@ -2460,7 +2965,8 @@
                 "type": "null"
               }
             ],
-            "title": "Watermark"
+            "title": "Watermark",
+            "description": "When the last successful collection run started. Null: never collected."
           },
           "last_run": {
             "anyOf": [
@@ -2470,7 +2976,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The most recent run of any kind, whatever its outcome."
           }
         },
         "type": "object",
@@ -2498,7 +3005,8 @@
               "$ref": "#/components/schemas/ObjectIn"
             },
             "type": "array",
-            "title": "Objects"
+            "title": "Objects",
+            "description": "Clients, then instances, then databases: a parent before its children."
           }
         },
         "type": "object",
@@ -2507,7 +3015,37 @@
           "collected_at",
           "objects"
         ],
-        "title": "ObjectBatch"
+        "title": "ObjectBatch",
+        "description": "Inventory sent during an inventory run.",
+        "examples": [
+          {
+            "collected_at": "2026-10-29T14:05:00Z",
+            "objects": [
+              {
+                "kind": "client",
+                "name": "sql-01",
+                "source_key": "12"
+              },
+              {
+                "app_type": "SQL Server",
+                "kind": "instance",
+                "name": "sql-01\\MSSQLSERVER",
+                "parent_key": "12",
+                "parent_kind": "client",
+                "source_key": "34"
+              },
+              {
+                "app_type": "SQL Server",
+                "kind": "database",
+                "name": "sales",
+                "parent_key": "34",
+                "parent_kind": "instance",
+                "source_key": "34/sales"
+              }
+            ],
+            "run_id": 1235
+          }
+        ]
       },
       "ObjectIn": {
         "properties": {
@@ -2518,7 +3056,8 @@
               "instance",
               "database"
             ],
-            "title": "Kind"
+            "title": "Kind",
+            "description": "client, instance or database."
           },
           "source_key": {
             "type": "string",
@@ -2527,7 +3066,8 @@
           },
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Its name, as the source shows it."
           },
           "parent_kind": {
             "anyOf": [
@@ -2627,7 +3167,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "title": "Id"
+            "title": "Id",
+            "description": "blt's id for the object (a UUID)."
           },
           "kind": {
             "type": "string",
@@ -2636,15 +3177,18 @@
               "instance",
               "database"
             ],
-            "title": "Kind"
+            "title": "Kind",
+            "description": "client, instance or database."
           },
           "source_key": {
             "type": "string",
-            "title": "Source Key"
+            "title": "Source Key",
+            "description": "The source's own stable id for it, unique per kind."
           },
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Its name, as the source shows it."
           },
           "parent_id": {
             "anyOf": [
@@ -2655,7 +3199,8 @@
                 "type": "null"
               }
             ],
-            "title": "Parent Id"
+            "title": "Parent Id",
+            "description": "blt's id for its parent: a database's instance, an instance's client."
           },
           "app_type": {
             "anyOf": [
@@ -2666,7 +3211,8 @@
                 "type": "null"
               }
             ],
-            "title": "App Type"
+            "title": "App Type",
+            "description": "What sort of thing within its kind: \"SQL Server\", \"File System\", ..."
           },
           "last_backup_at": {
             "anyOf": [
@@ -2678,7 +3224,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Backup At"
+            "title": "Last Backup At",
+            "description": "Its last backup, where the source reports one per object."
           },
           "last_backup_job_id": {
             "anyOf": [
@@ -2689,7 +3236,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Backup Job Id"
+            "title": "Last Backup Job Id",
+            "description": "The job that took that backup."
           },
           "present": {
             "type": "boolean",
@@ -2699,17 +3247,20 @@
           "first_seen_at": {
             "type": "string",
             "format": "date-time",
-            "title": "First Seen At"
+            "title": "First Seen At",
+            "description": "When an inventory first listed it."
           },
           "last_seen_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Last Seen At"
+            "title": "Last Seen At",
+            "description": "When an inventory last listed it."
           },
           "attributes": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Attributes"
+            "title": "Attributes",
+            "description": "Anything else the source says about it."
           }
         },
         "type": "object",
@@ -2722,13 +3273,18 @@
           "first_seen_at",
           "last_seen_at"
         ],
-        "title": "ObjectOut"
+        "title": "ObjectOut",
+        "description": "Something the CommCell says exists, as of its latest inventory."
       },
       "Problem": {
         "properties": {
           "detail": {
             "type": "string",
-            "title": "Detail"
+            "title": "Detail",
+            "description": "What went wrong.",
+            "examples": [
+              "Unknown commcell 'cv-nope'"
+            ]
           }
         },
         "type": "object",
@@ -2763,7 +3319,8 @@
               "$ref": "#/components/schemas/RubrikJobIn"
             },
             "type": "array",
-            "title": "Jobs"
+            "title": "Jobs",
+            "description": "The jobs, each as it was at collected_at."
           }
         },
         "type": "object",
@@ -2771,7 +3328,29 @@
           "collected_at",
           "jobs"
         ],
-        "title": "RubrikJobBatch"
+        "title": "RubrikJobBatch",
+        "description": "Jobs collected in one go, sent during a run.",
+        "examples": [
+          {
+            "collected_at": "2026-10-29T14:01:00Z",
+            "jobs": [
+              {
+                "activity_type": "Backup",
+                "data_transferred": 1073741824,
+                "is_active": false,
+                "last_updated": "2026-10-29T13:20:00Z",
+                "logical_size": 42949672960,
+                "object_name": "vm-app-01",
+                "object_type": "VmwareVm",
+                "series_key": "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b",
+                "sla_domain_name": "Gold",
+                "start_time": "2026-10-29T13:00:00Z",
+                "status": "Success"
+              }
+            ],
+            "run_id": 88
+          }
+        ]
       },
       "RubrikJobIn": {
         "properties": {
@@ -2789,7 +3368,8 @@
                 "type": "null"
               }
             ],
-            "title": "Fid"
+            "title": "Fid",
+            "description": "RSC's global id for the series, where it has one."
           },
           "activity_series_id": {
             "anyOf": [
@@ -2800,7 +3380,8 @@
                 "type": "null"
               }
             ],
-            "title": "Activity Series Id"
+            "title": "Activity Series Id",
+            "description": "The series' id on its cluster."
           },
           "cluster_id": {
             "anyOf": [
@@ -2811,7 +3392,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cluster Id"
+            "title": "Cluster Id",
+            "description": "The Rubrik cluster that ran it (a UUID)."
           },
           "cluster_name": {
             "anyOf": [
@@ -2822,7 +3404,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cluster Name"
+            "title": "Cluster Name",
+            "description": "That cluster's name."
           },
           "object_id": {
             "anyOf": [
@@ -2833,7 +3416,8 @@
                 "type": "null"
               }
             ],
-            "title": "Object Id"
+            "title": "Object Id",
+            "description": "RSC's id for the protected object."
           },
           "object_name": {
             "anyOf": [
@@ -2844,7 +3428,8 @@
                 "type": "null"
               }
             ],
-            "title": "Object Name"
+            "title": "Object Name",
+            "description": "The protected object: a VM, host, database, mailbox, site, ..."
           },
           "object_type": {
             "anyOf": [
@@ -2855,7 +3440,8 @@
                 "type": "null"
               }
             ],
-            "title": "Object Type"
+            "title": "Object Type",
+            "description": "Its type, in RSC's words: VmwareVm, LinuxHost, O365Mailbox, O365Site, ..."
           },
           "location": {
             "anyOf": [
@@ -2866,7 +3452,8 @@
                 "type": "null"
               }
             ],
-            "title": "Location"
+            "title": "Location",
+            "description": "Where the object is, in RSC's words (its host, vCenter, tenant, ...)."
           },
           "activity_type": {
             "anyOf": [
@@ -2877,7 +3464,8 @@
                 "type": "null"
               }
             ],
-            "title": "Activity Type"
+            "title": "Activity Type",
+            "description": "What sort of work: Backup, Recovery, Replication, Archive, Index, Diagnostic, Classification, THREAT_MONITORING, ..."
           },
           "status": {
             "anyOf": [
@@ -2906,7 +3494,8 @@
                 "type": "null"
               }
             ],
-            "title": "Severity"
+            "title": "Severity",
+            "description": "RSC's severity for the latest activity: Info, Warning, ..."
           },
           "progress": {
             "anyOf": [
@@ -2917,7 +3506,8 @@
                 "type": "null"
               }
             ],
-            "title": "Progress"
+            "title": "Progress",
+            "description": "Progress as RSC words it, e.g. \"45%\"."
           },
           "percent_complete": {
             "anyOf": [
@@ -2940,7 +3530,8 @@
                 "type": "null"
               }
             ],
-            "title": "Sla Domain Name"
+            "title": "Sla Domain Name",
+            "description": "The SLA domain protecting the object, where RSC gives it."
           },
           "last_activity_message": {
             "anyOf": [
@@ -2975,7 +3566,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Code"
+            "title": "Cause Error Code",
+            "description": "RSC's error code for the failure."
           },
           "cause_error_message": {
             "anyOf": [
@@ -2986,7 +3578,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Message"
+            "title": "Cause Error Message",
+            "description": "The error, in RSC's words."
           },
           "cause_error_reason": {
             "anyOf": [
@@ -2997,7 +3590,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Reason"
+            "title": "Cause Error Reason",
+            "description": "Why it happened, in RSC's words."
           },
           "cause_error_remedy": {
             "anyOf": [
@@ -3008,7 +3602,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Remedy"
+            "title": "Cause Error Remedy",
+            "description": "What RSC suggests doing about it."
           },
           "attempt_number": {
             "anyOf": [
@@ -3019,7 +3614,8 @@
                 "type": "null"
               }
             ],
-            "title": "Attempt Number"
+            "title": "Attempt Number",
+            "description": "Which attempt this is: above 1 for a retry."
           },
           "is_on_demand": {
             "anyOf": [
@@ -3079,7 +3675,8 @@
                 "type": "null"
               }
             ],
-            "title": "Start Time"
+            "title": "Start Time",
+            "description": "When the job started."
           },
           "last_updated": {
             "anyOf": [
@@ -3105,7 +3702,8 @@
         "required": [
           "series_key"
         ],
-        "title": "RubrikJobIn"
+        "title": "RubrikJobIn",
+        "description": "One Rubrik job (an RSC activity series) as of one collection."
       },
       "RubrikJobOut": {
         "properties": {
@@ -3123,7 +3721,8 @@
                 "type": "null"
               }
             ],
-            "title": "Fid"
+            "title": "Fid",
+            "description": "RSC's global id for the series, where it has one."
           },
           "activity_series_id": {
             "anyOf": [
@@ -3134,7 +3733,8 @@
                 "type": "null"
               }
             ],
-            "title": "Activity Series Id"
+            "title": "Activity Series Id",
+            "description": "The series' id on its cluster."
           },
           "cluster_id": {
             "anyOf": [
@@ -3145,7 +3745,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cluster Id"
+            "title": "Cluster Id",
+            "description": "The Rubrik cluster that ran it (a UUID)."
           },
           "cluster_name": {
             "anyOf": [
@@ -3156,7 +3757,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cluster Name"
+            "title": "Cluster Name",
+            "description": "That cluster's name."
           },
           "object_id": {
             "anyOf": [
@@ -3167,7 +3769,8 @@
                 "type": "null"
               }
             ],
-            "title": "Object Id"
+            "title": "Object Id",
+            "description": "RSC's id for the protected object."
           },
           "object_name": {
             "anyOf": [
@@ -3178,7 +3781,8 @@
                 "type": "null"
               }
             ],
-            "title": "Object Name"
+            "title": "Object Name",
+            "description": "The protected object: a VM, host, database, mailbox, site, ..."
           },
           "object_type": {
             "anyOf": [
@@ -3189,7 +3793,8 @@
                 "type": "null"
               }
             ],
-            "title": "Object Type"
+            "title": "Object Type",
+            "description": "Its type, in RSC's words: VmwareVm, LinuxHost, O365Mailbox, O365Site, ..."
           },
           "location": {
             "anyOf": [
@@ -3200,7 +3805,8 @@
                 "type": "null"
               }
             ],
-            "title": "Location"
+            "title": "Location",
+            "description": "Where the object is, in RSC's words (its host, vCenter, tenant, ...)."
           },
           "activity_type": {
             "anyOf": [
@@ -3211,7 +3817,8 @@
                 "type": "null"
               }
             ],
-            "title": "Activity Type"
+            "title": "Activity Type",
+            "description": "What sort of work: Backup, Recovery, Replication, Archive, Index, Diagnostic, Classification, THREAT_MONITORING, ..."
           },
           "status": {
             "anyOf": [
@@ -3240,7 +3847,8 @@
                 "type": "null"
               }
             ],
-            "title": "Severity"
+            "title": "Severity",
+            "description": "RSC's severity for the latest activity: Info, Warning, ..."
           },
           "progress": {
             "anyOf": [
@@ -3251,7 +3859,8 @@
                 "type": "null"
               }
             ],
-            "title": "Progress"
+            "title": "Progress",
+            "description": "Progress as RSC words it, e.g. \"45%\"."
           },
           "percent_complete": {
             "anyOf": [
@@ -3274,7 +3883,8 @@
                 "type": "null"
               }
             ],
-            "title": "Sla Domain Name"
+            "title": "Sla Domain Name",
+            "description": "The SLA domain protecting the object, where RSC gives it."
           },
           "last_activity_message": {
             "anyOf": [
@@ -3309,7 +3919,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Code"
+            "title": "Cause Error Code",
+            "description": "RSC's error code for the failure."
           },
           "cause_error_message": {
             "anyOf": [
@@ -3320,7 +3931,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Message"
+            "title": "Cause Error Message",
+            "description": "The error, in RSC's words."
           },
           "cause_error_reason": {
             "anyOf": [
@@ -3331,7 +3943,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Reason"
+            "title": "Cause Error Reason",
+            "description": "Why it happened, in RSC's words."
           },
           "cause_error_remedy": {
             "anyOf": [
@@ -3342,7 +3955,8 @@
                 "type": "null"
               }
             ],
-            "title": "Cause Error Remedy"
+            "title": "Cause Error Remedy",
+            "description": "What RSC suggests doing about it."
           },
           "attempt_number": {
             "anyOf": [
@@ -3353,7 +3967,8 @@
                 "type": "null"
               }
             ],
-            "title": "Attempt Number"
+            "title": "Attempt Number",
+            "description": "Which attempt this is: above 1 for a retry."
           },
           "is_on_demand": {
             "anyOf": [
@@ -3413,7 +4028,8 @@
                 "type": "null"
               }
             ],
-            "title": "Start Time"
+            "title": "Start Time",
+            "description": "When the job started."
           },
           "last_updated": {
             "anyOf": [
@@ -3436,17 +4052,20 @@
           },
           "account_id": {
             "type": "integer",
-            "title": "Account Id"
+            "title": "Account Id",
+            "description": "blt's id for the RSC account."
           },
           "first_seen_at": {
             "type": "string",
             "format": "date-time",
-            "title": "First Seen At"
+            "title": "First Seen At",
+            "description": "When blt first collected the job."
           },
           "last_collected_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Last Collected At"
+            "title": "Last Collected At",
+            "description": "When this state of the job was read from RSC."
           },
           "last_seen_run_id": {
             "anyOf": [
@@ -3457,7 +4076,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Seen Run Id"
+            "title": "Last Seen Run Id",
+            "description": "The last run that collected the job."
           }
         },
         "type": "object",
@@ -3467,13 +4087,15 @@
           "first_seen_at",
           "last_collected_at"
         ],
-        "title": "RubrikJobOut"
+        "title": "RubrikJobOut",
+        "description": "A Rubrik job as blt holds it: the latest state it was seen in, plus blt's own fields."
       },
       "RubrikLastRun": {
         "properties": {
           "account": {
             "type": "string",
-            "title": "Account"
+            "title": "Account",
+            "description": "blt's name for the RSC account."
           },
           "watermark": {
             "anyOf": [
@@ -3485,7 +4107,8 @@
                 "type": "null"
               }
             ],
-            "title": "Watermark"
+            "title": "Watermark",
+            "description": "When the last successful run started. Null: never collected."
           },
           "last_run": {
             "anyOf": [
@@ -3495,7 +4118,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The most recent job run, whatever its outcome."
           }
         },
         "type": "object",
@@ -3503,7 +4127,887 @@
           "account"
         ],
         "title": "RubrikLastRun",
-        "description": "`watermark` is when the most recent successful run started - what\na delta run reaches back to. None: never collected, do an initial\nrun."
+        "description": "`watermark` is when the most recent successful job run started -\nwhat a delta run reaches back to. None: never collected, do an\ninitial run. Inventory runs play no part in it."
+      },
+      "RubrikObjectBatch": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id",
+            "description": "The inventory run this batch belongs to."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When this was read from RSC."
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/RubrikObjectIn"
+            },
+            "type": "array",
+            "title": "Objects",
+            "description": "The objects."
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "collected_at",
+          "objects"
+        ],
+        "title": "RubrikObjectBatch",
+        "description": "Objects sent during an inventory run.",
+        "examples": [
+          {
+            "collected_at": "2026-10-30T05:47:00Z",
+            "objects": [
+              {
+                "compliance_status": "IN_COMPLIANCE",
+                "kind": "AzureNativeVm",
+                "last_snapshot": "2026-10-30T02:10:00Z",
+                "name": "vm-app-01",
+                "object_state": "ACTIVE",
+                "protection_status": "Protected",
+                "rsc_id": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+                "sla_domain_name": "Gold",
+                "source_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+                "total_snapshots": 42
+              }
+            ],
+            "run_id": 91
+          }
+        ]
+      },
+      "RubrikObjectIn": {
+        "properties": {
+          "source_key": {
+            "type": "string",
+            "title": "Source Key",
+            "description": "blt's key for the object: RSC's fid, else its id."
+          },
+          "fid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fid",
+            "description": "RSC's global id for the object."
+          },
+          "rsc_id": {
+            "type": "string",
+            "title": "Rsc Id",
+            "description": "RSC's id for the object."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The object's name."
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ..."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it is, in RSC's words (its host, vCenter, tenant, ...)."
+          },
+          "object_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object State",
+            "description": "ACTIVE; RELIC once gone from its source but still holding snapshots."
+          },
+          "protection_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection Status",
+            "description": "Protected, NoSla or DoNotProtect."
+          },
+          "compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Status",
+            "description": "Whether its backups meet its SLA domain: IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, NOT_AVAILABLE, ..."
+          },
+          "archival_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archival Compliance Status",
+            "description": "The same, for its archive copies."
+          },
+          "replication_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replication Compliance Status",
+            "description": "The same, for its replicas."
+          },
+          "sla_domain_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Id",
+            "description": "RSC's id for its SLA domain."
+          },
+          "sla_domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Name",
+            "description": "The SLA domain protecting it, if any."
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id",
+            "description": "The Rubrik cluster that protects it (a UUID)."
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name",
+            "description": "That cluster's name."
+          },
+          "org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Id",
+            "description": "The RSC organisation it belongs to, on a multi-tenant account."
+          },
+          "protected_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protected On",
+            "description": "When it was first protected."
+          },
+          "last_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Snapshot",
+            "description": "Its latest snapshot (backup)."
+          },
+          "latest_archival_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Archival Snapshot",
+            "description": "Its latest archived snapshot."
+          },
+          "latest_replication_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Replication Snapshot",
+            "description": "Its latest replicated snapshot."
+          },
+          "awaiting_first_full": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Awaiting First Full",
+            "description": "Protected, but its first full backup has not happened yet."
+          },
+          "total_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Snapshots",
+            "description": "Snapshots it has."
+          },
+          "missed_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Snapshots",
+            "description": "Snapshots its SLA domain called for and did not get."
+          },
+          "local_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Snapshots",
+            "description": "Snapshots on the cluster."
+          },
+          "archive_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Snapshots",
+            "description": "Snapshots in archive."
+          },
+          "replica_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Snapshots",
+            "description": "Snapshots replicated."
+          },
+          "logical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Bytes",
+            "description": "Its size, as the source sees it."
+          },
+          "physical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Bytes",
+            "description": "Bytes its snapshots take."
+          },
+          "local_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Storage",
+            "description": "Bytes on the cluster."
+          },
+          "archive_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Storage",
+            "description": "Bytes in archive."
+          },
+          "replica_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Storage",
+            "description": "Bytes replicated."
+          },
+          "transferred_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferred Bytes",
+            "description": "Bytes transferred."
+          },
+          "pull_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Time",
+            "description": "When RSC last refreshed this object's figures."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_key",
+          "rsc_id",
+          "name"
+        ],
+        "title": "RubrikObjectIn",
+        "description": "One object RSC knows about - a VM, host, database, file set,\nmailbox, OneDrive, site, team, ... - as of one inventory."
+      },
+      "RubrikObjectOut": {
+        "properties": {
+          "source_key": {
+            "type": "string",
+            "title": "Source Key",
+            "description": "blt's key for the object: RSC's fid, else its id."
+          },
+          "fid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fid",
+            "description": "RSC's global id for the object."
+          },
+          "rsc_id": {
+            "type": "string",
+            "title": "Rsc Id",
+            "description": "RSC's id for the object."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The object's name."
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "Its type, in RSC's words: AzureNativeVm, O365Mailbox, NAS_FILESET, ..."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it is, in RSC's words (its host, vCenter, tenant, ...)."
+          },
+          "object_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object State",
+            "description": "ACTIVE; RELIC once gone from its source but still holding snapshots."
+          },
+          "protection_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection Status",
+            "description": "Protected, NoSla or DoNotProtect."
+          },
+          "compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Status",
+            "description": "Whether its backups meet its SLA domain: IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, NOT_AVAILABLE, ..."
+          },
+          "archival_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archival Compliance Status",
+            "description": "The same, for its archive copies."
+          },
+          "replication_compliance_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replication Compliance Status",
+            "description": "The same, for its replicas."
+          },
+          "sla_domain_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Id",
+            "description": "RSC's id for its SLA domain."
+          },
+          "sla_domain_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Domain Name",
+            "description": "The SLA domain protecting it, if any."
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id",
+            "description": "The Rubrik cluster that protects it (a UUID)."
+          },
+          "cluster_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Name",
+            "description": "That cluster's name."
+          },
+          "org_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Id",
+            "description": "The RSC organisation it belongs to, on a multi-tenant account."
+          },
+          "protected_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protected On",
+            "description": "When it was first protected."
+          },
+          "last_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Snapshot",
+            "description": "Its latest snapshot (backup)."
+          },
+          "latest_archival_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Archival Snapshot",
+            "description": "Its latest archived snapshot."
+          },
+          "latest_replication_snapshot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Replication Snapshot",
+            "description": "Its latest replicated snapshot."
+          },
+          "awaiting_first_full": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Awaiting First Full",
+            "description": "Protected, but its first full backup has not happened yet."
+          },
+          "total_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Snapshots",
+            "description": "Snapshots it has."
+          },
+          "missed_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed Snapshots",
+            "description": "Snapshots its SLA domain called for and did not get."
+          },
+          "local_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Snapshots",
+            "description": "Snapshots on the cluster."
+          },
+          "archive_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Snapshots",
+            "description": "Snapshots in archive."
+          },
+          "replica_snapshots": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Snapshots",
+            "description": "Snapshots replicated."
+          },
+          "logical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Bytes",
+            "description": "Its size, as the source sees it."
+          },
+          "physical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Bytes",
+            "description": "Bytes its snapshots take."
+          },
+          "local_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Storage",
+            "description": "Bytes on the cluster."
+          },
+          "archive_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Storage",
+            "description": "Bytes in archive."
+          },
+          "replica_storage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replica Storage",
+            "description": "Bytes replicated."
+          },
+          "transferred_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferred Bytes",
+            "description": "Bytes transferred."
+          },
+          "pull_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Time",
+            "description": "When RSC last refreshed this object's figures."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "blt's id for the object."
+          },
+          "account_id": {
+            "type": "integer",
+            "title": "Account Id",
+            "description": "blt's id for the RSC account."
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "description": "Listed by the latest inventory. False: it was known, and RSC no longer lists it."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When an inventory first listed it."
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At",
+            "description": "When an inventory last listed it."
+          },
+          "last_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Run Id",
+            "description": "The last inventory run that listed it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_key",
+          "rsc_id",
+          "name",
+          "id",
+          "account_id",
+          "present",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "RubrikObjectOut",
+        "description": "An object as blt holds it: as of the latest inventory that listed\nit, plus blt's own fields."
       },
       "RubrikRunFinish": {
         "properties": {
@@ -3513,16 +5017,19 @@
               "succeeded",
               "failed"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "succeeded moves the watermark; failed does not."
           },
           "finished_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Finished At"
+            "title": "Finished At",
+            "description": "When the run finished."
           },
           "jobs_collected": {
             "type": "integer",
             "title": "Jobs Collected",
+            "description": "Jobs stored by the run; objects, for an inventory run.",
             "default": 0
           },
           "error": {
@@ -3534,7 +5041,8 @@
                 "type": "null"
               }
             ],
-            "title": "Error"
+            "title": "Error",
+            "description": "Why a failed run failed."
           }
         },
         "type": "object",
@@ -3542,26 +5050,38 @@
           "status",
           "finished_at"
         ],
-        "title": "RubrikRunFinish"
+        "title": "RubrikRunFinish",
+        "description": "How a run ended.",
+        "examples": [
+          {
+            "finished_at": "2026-10-29T14:01:40Z",
+            "jobs_collected": 180,
+            "status": "succeeded"
+          }
+        ]
       },
       "RubrikRunOut": {
         "properties": {
           "id": {
             "type": "integer",
-            "title": "Id"
+            "title": "Id",
+            "description": "The run's id: send it with each batch, and to finish the run."
           },
           "account_id": {
             "type": "integer",
-            "title": "Account Id"
+            "title": "Account Id",
+            "description": "blt's id for the RSC account."
           },
           "mode": {
             "type": "string",
             "enum": [
               "initial",
               "delta",
-              "full"
+              "full",
+              "inventory"
             ],
-            "title": "Mode"
+            "title": "Mode",
+            "description": "What kind of run it is (see RubrikRunStart)."
           },
           "status": {
             "type": "string",
@@ -3570,12 +5090,14 @@
               "succeeded",
               "failed"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "running until finished; then succeeded or failed."
           },
           "started_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Started At"
+            "title": "Started At",
+            "description": "When the collector started the run."
           },
           "finished_at": {
             "anyOf": [
@@ -3587,15 +5109,18 @@
                 "type": "null"
               }
             ],
-            "title": "Finished At"
+            "title": "Finished At",
+            "description": "When it finished. Null while running."
           },
           "lookup_seconds": {
             "type": "integer",
-            "title": "Lookup Seconds"
+            "title": "Lookup Seconds",
+            "description": "How far back the run asked for changes."
           },
           "jobs_collected": {
             "type": "integer",
-            "title": "Jobs Collected"
+            "title": "Jobs Collected",
+            "description": "Jobs stored from this run; objects, for an inventory run."
           },
           "error": {
             "anyOf": [
@@ -3606,7 +5131,8 @@
                 "type": "null"
               }
             ],
-            "title": "Error"
+            "title": "Error",
+            "description": "Why a failed run failed."
           }
         },
         "type": "object",
@@ -3619,7 +5145,8 @@
           "lookup_seconds",
           "jobs_collected"
         ],
-        "title": "RubrikRunOut"
+        "title": "RubrikRunOut",
+        "description": "One Rubrik collection run."
       },
       "RubrikRunStart": {
         "properties": {
@@ -3628,15 +5155,17 @@
             "enum": [
               "initial",
               "delta",
-              "full"
+              "full",
+              "inventory"
             ],
             "title": "Mode",
-            "description": "initial: first ever run, a recent window. delta: changes since the watermark, less an overlap. full: changes within the whole history limit."
+            "description": "initial: first ever run, a recent window. delta: changes since the watermark, less an overlap. full: changes within the whole history limit. inventory: every object RSC knows about, not jobs."
           },
           "started_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Started At"
+            "title": "Started At",
+            "description": "When the run started. A succeeded run's start becomes the watermark."
           },
           "lookup_seconds": {
             "type": "integer",
@@ -3650,7 +5179,15 @@
           "started_at",
           "lookup_seconds"
         ],
-        "title": "RubrikRunStart"
+        "title": "RubrikRunStart",
+        "description": "Opens a run.",
+        "examples": [
+          {
+            "lookup_seconds": 3900,
+            "mode": "delta",
+            "started_at": "2026-10-29T14:00:00Z"
+          }
+        ]
       },
       "RunFinish": {
         "properties": {
@@ -3660,16 +5197,19 @@
               "succeeded",
               "failed"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "succeeded moves the watermark (collection runs) or settles the inventory; failed changes neither."
           },
           "finished_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Finished At"
+            "title": "Finished At",
+            "description": "When the run finished."
           },
           "jobs_collected": {
             "type": "integer",
             "title": "Jobs Collected",
+            "description": "Jobs stored by the run.",
             "default": 0
           },
           "jobs_reconciled": {
@@ -3702,17 +5242,29 @@
           "status",
           "finished_at"
         ],
-        "title": "RunFinish"
+        "title": "RunFinish",
+        "description": "How a run ended.",
+        "examples": [
+          {
+            "finished_at": "2026-10-29T14:02:10Z",
+            "jobs_collected": 42,
+            "jobs_missing": 0,
+            "jobs_reconciled": 3,
+            "status": "succeeded"
+          }
+        ]
       },
       "RunOut": {
         "properties": {
           "id": {
             "type": "integer",
-            "title": "Id"
+            "title": "Id",
+            "description": "The run's id: send it with each batch, and to finish the run."
           },
           "commcell_id": {
             "type": "integer",
-            "title": "Commcell Id"
+            "title": "Commcell Id",
+            "description": "blt's id for the CommCell."
           },
           "mode": {
             "type": "string",
@@ -3723,7 +5275,8 @@
               "backfill",
               "inventory"
             ],
-            "title": "Mode"
+            "title": "Mode",
+            "description": "What kind of run it is (see RunStart)."
           },
           "status": {
             "type": "string",
@@ -3732,12 +5285,14 @@
               "succeeded",
               "failed"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "running until finished; then succeeded or failed."
           },
           "started_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Started At"
+            "title": "Started At",
+            "description": "When the collector started the run."
           },
           "finished_at": {
             "anyOf": [
@@ -3749,23 +5304,28 @@
                 "type": "null"
               }
             ],
-            "title": "Finished At"
+            "title": "Finished At",
+            "description": "When it finished. Null while running."
           },
           "lookup_seconds": {
             "type": "integer",
-            "title": "Lookup Seconds"
+            "title": "Lookup Seconds",
+            "description": "How far before started_at the run looked for jobs."
           },
           "jobs_collected": {
             "type": "integer",
-            "title": "Jobs Collected"
+            "title": "Jobs Collected",
+            "description": "Jobs stored from this run."
           },
           "jobs_reconciled": {
             "type": "integer",
-            "title": "Jobs Reconciled"
+            "title": "Jobs Reconciled",
+            "description": "Active jobs checked on one by one."
           },
           "jobs_missing": {
             "type": "integer",
-            "title": "Jobs Missing"
+            "title": "Jobs Missing",
+            "description": "Jobs marked as no longer known to the CommCell."
           },
           "error": {
             "anyOf": [
@@ -3776,7 +5336,8 @@
                 "type": "null"
               }
             ],
-            "title": "Error"
+            "title": "Error",
+            "description": "Why a failed run failed."
           }
         },
         "type": "object",
@@ -3791,7 +5352,8 @@
           "jobs_reconciled",
           "jobs_missing"
         ],
-        "title": "RunOut"
+        "title": "RunOut",
+        "description": "One collection or inventory run."
       },
       "RunStart": {
         "properties": {
@@ -3825,7 +5387,15 @@
           "started_at",
           "lookup_seconds"
         ],
-        "title": "RunStart"
+        "title": "RunStart",
+        "description": "Opens a run.",
+        "examples": [
+          {
+            "lookup_seconds": 3900,
+            "mode": "delta",
+            "started_at": "2026-10-29T14:00:00Z"
+          }
+        ]
       },
       "UpsertResult": {
         "properties": {
@@ -3845,7 +5415,8 @@
           "received",
           "written"
         ],
-        "title": "UpsertResult"
+        "title": "UpsertResult",
+        "description": "What a batch did."
       },
       "ValidationError": {
         "properties": {
@@ -3891,14 +5462,16 @@
         "properties": {
           "commcell": {
             "type": "string",
-            "title": "Commcell"
+            "title": "Commcell",
+            "description": "blt's name for the CommCell."
           },
           "sources": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Sources"
+            "title": "Sources",
+            "description": "What the verdicts rest on: today only the CommCell's own inventory."
           },
           "inventory_at": {
             "anyOf": [
@@ -3910,11 +5483,13 @@
                 "type": "null"
               }
             ],
-            "title": "Inventory At"
+            "title": "Inventory At",
+            "description": "When the latest inventory run finished. Null: never inventoried."
           },
           "max_age_hours": {
             "type": "number",
-            "title": "Max Age Hours"
+            "title": "Max Age Hours",
+            "description": "The age past which a backup counted as stale."
           },
           "counts": {
             "additionalProperties": {
@@ -3934,7 +5509,8 @@
               "$ref": "#/components/schemas/ValidationRow"
             },
             "type": "array",
-            "title": "Rows"
+            "title": "Rows",
+            "description": "One row per object judged, by client, instance, kind and name."
           }
         },
         "type": "object",
@@ -3960,7 +5536,8 @@
                 "type": "null"
               }
             ],
-            "title": "Client"
+            "title": "Client",
+            "description": "The client."
           },
           "instance": {
             "anyOf": [
@@ -3971,7 +5548,8 @@
                 "type": "null"
               }
             ],
-            "title": "Instance"
+            "title": "Instance",
+            "description": "The instance, for instances and databases."
           },
           "kind": {
             "type": "string",
@@ -3980,11 +5558,13 @@
               "instance",
               "database"
             ],
-            "title": "Kind"
+            "title": "Kind",
+            "description": "client, instance or database."
           },
           "name": {
             "type": "string",
-            "title": "Name"
+            "title": "Name",
+            "description": "Its name, as the source shows it."
           },
           "app_type": {
             "anyOf": [
@@ -3995,7 +5575,8 @@
                 "type": "null"
               }
             ],
-            "title": "App Type"
+            "title": "App Type",
+            "description": "What sort of thing within its kind: \"SQL Server\", \"File System\", ..."
           },
           "verdict": {
             "type": "string",
@@ -4012,7 +5593,8 @@
           },
           "detail": {
             "type": "string",
-            "title": "Detail"
+            "title": "Detail",
+            "description": "The verdict, explained in words."
           },
           "last_backup_at": {
             "anyOf": [
@@ -4024,7 +5606,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Backup At"
+            "title": "Last Backup At",
+            "description": "Its last backup, where known."
           },
           "last_backup_job_id": {
             "anyOf": [
@@ -4035,7 +5618,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Backup Job Id"
+            "title": "Last Backup Job Id",
+            "description": "The job that took that backup."
           },
           "last_backup_job_status": {
             "anyOf": [
@@ -4046,7 +5630,8 @@
                 "type": "null"
               }
             ],
-            "title": "Last Backup Job Status"
+            "title": "Last Backup Job Status",
+            "description": "That job's Commvault status."
           }
         },
         "type": "object",
@@ -4056,7 +5641,8 @@
           "verdict",
           "detail"
         ],
-        "title": "ValidationRow"
+        "title": "ValidationRow",
+        "description": "One object and the verdict on its protection."
       }
     },
     "securitySchemes": {

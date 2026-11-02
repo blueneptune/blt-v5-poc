@@ -53,12 +53,9 @@ collection run.
 Everything but `/healthz` is under `/v1`. Additions - an endpoint, a
 field, an optional parameter - go into `/v1`. A change that would break
 a client goes into `/v2` beside it; `/v1` stays until every collector
-has moved, then goes.
-
-The paths from before `/v1` (`/commcells/{name}/...`,
-`/rubrik/{name}/...`) still work so a collector on the previous release
-keeps going during an upgrade. They answer with `Deprecation: true` and
-are not in the docs. They go once nothing calls them (TODO.md).
+has moved, then goes. The paths from before `/v1`
+(`/commcells/{name}/...`, `/rubrik/{name}/...`) were removed in
+2026.10.30.3; they answer 404.
 
 ## Keeping it current
 
@@ -68,8 +65,13 @@ The docs are written in the code:
   its description is its docstring (`src/blt/api/app.py`,
   `src/blt/api/rubrik.py`);
 - **a field's** description is its `Field(description=...)` in
-  `src/blt/schemas.py` or `src/blt/rubrik/schemas.py`;
-- **the overview** and the groups are in `src/blt/api/docs.py`.
+  `src/blt/schemas.py` or `src/blt/rubrik/schemas.py`, and a model's is
+  its docstring;
+- **a request body's example** - what *Try it out* starts from - is its
+  model's `json_schema_extra` examples, beside the fields;
+- **the path parameters** (`source_name`, `run_id`, `job_id`) are
+  described once, in `src/blt/api/docs.py`, with the overview and the
+  groups.
 
 After changing any of them, regenerate the copy in the repository:
 
@@ -78,5 +80,7 @@ uv run blt-openapi
 ```
 
 CI fails if `docs/openapi.json` is out of date. It also fails if an
-endpoint has no summary, description or group, or if an endpoint other
-than `/healthz` doesn't ask for the key (`tests/test_api_docs.py`).
+endpoint has no summary, description or group; a parameter, model or
+field has no description; a request body has no example, or an example
+that its own model would refuse; or an endpoint other than `/healthz`
+doesn't ask for the key (`tests/test_api_docs.py`).

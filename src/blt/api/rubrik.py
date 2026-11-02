@@ -6,33 +6,39 @@ plans for every product; Commvault's are in `commvault` (blt.api.models).
 Nothing here touches them.
 
 One row per job (RSC activity series) per RSC account, holding the
-latest state the job was seen in - as `job` does for Commvault.
+latest state the job was seen in - as `job` does for Commvault. One row
+per object (`source_object`) per account, as of the latest inventory
+that listed it - the same table, by the same name, as Commvault's.
 """
 
 # No `from __future__ import annotations`: see app.py - the routes are
 # defined inside a function and name closure-local dependencies.
 
+import uuid
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import BigInteger, Column, DateTime, Index
+from sqlalchemy import BigInteger, Column, DateTime, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlmodel import Field, Session, SQLModel, col, func, select
+from sqlmodel import Field, Session, SQLModel, col, func, select, update
 
 from blt.rubrik.schemas import (
+    JOB_MODES,
     RubrikJobBatch,
     RubrikJobOut,
     RubrikLastRun,
+    RubrikObjectBatch,
+    RubrikObjectOut,
     RubrikRunFinish,
     RubrikRunOut,
     RubrikRunStart,
 )
 from blt.schemas import UpsertResult
 
-from .docs import UNAUTHORIZED, not_found
+from .docs import UNAUTHORIZED, RubrikAccountName, RunId, not_found
 
 SCHEMA = "rubrik"
 
@@ -122,6 +128,63 @@ class RubrikJob(SQLModel, table=True):
     last_seen_run_id: int | None = Field(default=None, foreign_key=f"{SCHEMA}.collection_run.id")
 
 
+class RubrikSourceObject(SQLModel, table=True):
+    """Something RSC says exists. Named, keyed and tracked as Commvault's
+    `source_object` is (id, kind, source_key, present, first/last seen),
+    so the two can be read side by side; the rest is Rubrik's own."""
+
+    __tablename__ = "source_object"
+    __table_args__ = (
+        UniqueConstraint("account_id", "source_key", name="uq_rubrik_source_object_key"),
+        Index("ix_rubrik_source_object_account_kind", "account_id", "kind"),
+        Index("ix_rubrik_source_object_account_protection", "account_id", "protection_status"),
+        {"schema": SCHEMA},
+    )
+
+    # A UUID, so an object can be referred to from outside this database.
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    account_id: int = Field(foreign_key=f"{SCHEMA}.account.id")
+    source_key: str
+
+    fid: str | None = None
+    rsc_id: str
+    name: str = Field(index=True)
+    kind: str | None = None
+    location: str | None = None
+    object_state: str | None = None
+    protection_status: str | None = None
+    compliance_status: str | None = None
+    archival_compliance_status: str | None = None
+    replication_compliance_status: str | None = None
+    sla_domain_id: str | None = None
+    sla_domain_name: str | None = None
+    cluster_id: str | None = None
+    cluster_name: str | None = None
+    org_id: str | None = None
+    protected_on: datetime | None = _ts()
+    last_snapshot: datetime | None = _ts()
+    latest_archival_snapshot: datetime | None = _ts()
+    latest_replication_snapshot: datetime | None = _ts()
+    awaiting_first_full: bool | None = None
+    total_snapshots: int | None = None
+    missed_snapshots: int | None = None
+    local_snapshots: int | None = None
+    archive_snapshots: int | None = None
+    replica_snapshots: int | None = None
+    logical_bytes: int | None = Field(default=None, sa_column=Column(BigInteger))
+    physical_bytes: int | None = Field(default=None, sa_column=Column(BigInteger))
+    local_storage: int | None = Field(default=None, sa_column=Column(BigInteger))
+    archive_storage: int | None = Field(default=None, sa_column=Column(BigInteger))
+    replica_storage: int | None = Field(default=None, sa_column=Column(BigInteger))
+    transferred_bytes: int | None = Field(default=None, sa_column=Column(BigInteger))
+    pull_time: datetime | None = _ts()
+
+    present: bool = True
+    first_seen_at: datetime = _ts(nullable=False)
+    last_seen_at: datetime = _ts(nullable=False)
+    last_seen_run_id: int | None = Field(default=None, foreign_key=f"{SCHEMA}.collection_run.id")
+
+
 def rubrik_router(
     get_session: Callable[[], Iterator[Session]], require_api_key: Callable[..., None]
 ) -> APIRouter:
@@ -154,9 +217,10 @@ def rubrik_router(
         return run
 
     @router.get("/last-run", summary="Where the last collection got to")
-    def last_run(source_name: str, session: SessionDep) -> RubrikLastRun:
-        """The account's watermark and its most recent run. An unknown
-        account is not an error: no watermark means do an initial run."""
+    def last_run(source_name: RubrikAccountName, session: SessionDep) -> RubrikLastRun:
+        """The account's watermark and its most recent job run. An unknown
+        account is not an error: no watermark means do an initial run.
+        Inventory runs do not count."""
         account = session.exec(
             select(RubrikAccount).where(RubrikAccount.name == source_name)
         ).first()
@@ -164,12 +228,14 @@ def rubrik_router(
             return RubrikLastRun(account=source_name)
         watermark = session.exec(
             select(func.max(RubrikRun.started_at)).where(
-                RubrikRun.account_id == account.id, RubrikRun.status == "succeeded"
+                RubrikRun.account_id == account.id,
+                RubrikRun.status == "succeeded",
+                col(RubrikRun.mode).in_(JOB_MODES),
             )
         ).one()
         latest = session.exec(
             select(RubrikRun)
-            .where(RubrikRun.account_id == account.id)
+            .where(RubrikRun.account_id == account.id, col(RubrikRun.mode).in_(JOB_MODES))
             .order_by(col(RubrikRun.started_at).desc())
             .limit(1)
         ).first()
@@ -180,7 +246,9 @@ def rubrik_router(
         )
 
     @router.post("/runs", status_code=status.HTTP_201_CREATED, summary="Open a collection run")
-    def start_run(source_name: str, body: RubrikRunStart, session: SessionDep) -> RubrikRunOut:
+    def start_run(
+        source_name: RubrikAccountName, body: RubrikRunStart, session: SessionDep
+    ) -> RubrikRunOut:
         """Opens a run (status `running`); send its `id` with each batch.
         The account is created on its first run."""
         account = get_or_create_account(session, source_name)
@@ -203,11 +271,24 @@ def rubrik_router(
         responses=not_found("account or run"),
     )
     def finish_run(
-        source_name: str, run_id: int, body: RubrikRunFinish, session: SessionDep
+        source_name: RubrikAccountName, run_id: RunId, body: RubrikRunFinish, session: SessionDep
     ) -> RubrikRunOut:
-        """Records how the run went; a succeeded run becomes the new
-        watermark."""
+        """Records how the run went. A succeeded job run becomes the new
+        watermark; a succeeded inventory run marks every object it did not
+        list as no longer present."""
         run = find_run(session, find_account(session, source_name), run_id)
+        if run.mode == "inventory" and body.status == "succeeded":
+            # Only a complete inventory may say something has gone: a
+            # partial one saw less because it stopped.
+            session.execute(
+                update(RubrikSourceObject)
+                .where(
+                    col(RubrikSourceObject.account_id) == run.account_id,
+                    col(RubrikSourceObject.present).is_(True),
+                    col(RubrikSourceObject.last_seen_run_id).is_distinct_from(run.id),
+                )
+                .values(present=False)
+            )
         run.status = body.status
         run.finished_at = body.finished_at
         run.jobs_collected = body.jobs_collected
@@ -218,7 +299,9 @@ def rubrik_router(
         return RubrikRunOut.model_validate(run)
 
     @router.post("/jobs", summary="Store a batch of jobs")
-    def upsert_jobs(source_name: str, body: RubrikJobBatch, session: SessionDep) -> UpsertResult:
+    def upsert_jobs(
+        source_name: RubrikAccountName, body: RubrikJobBatch, session: SessionDep
+    ) -> UpsertResult:
         """Inserts new jobs and updates known ones, keyed by `series_key`.
         A job collected earlier than what is stored is left alone."""
         account = get_or_create_account(session, source_name)
@@ -255,7 +338,7 @@ def rubrik_router(
 
     @router.get("/jobs", summary="List jobs", responses=not_found("account"))
     def list_jobs(
-        source_name: str,
+        source_name: RubrikAccountName,
         session: SessionDep,
         active: Annotated[
             bool | None, Query(description="Only jobs still running (true) or finished (false).")
@@ -301,5 +384,102 @@ def rubrik_router(
             .limit(limit)
         )
         return [RubrikJobOut.model_validate(job) for job in session.exec(query).all()]
+
+    @router.post(
+        "/objects", summary="Store a batch of inventory", responses=not_found("account or run")
+    )
+    def upsert_objects(
+        source_name: RubrikAccountName, body: RubrikObjectBatch, session: SessionDep
+    ) -> UpsertResult:
+        """Objects as RSC lists them, during an inventory run, keyed by
+        `source_key`."""
+        account = find_account(session, source_name)
+        find_run(session, account, body.run_id)
+        rows: dict[str, dict[str, object]] = {}
+        for item in body.objects:
+            rows[item.source_key] = {
+                **item.model_dump(),
+                "id": uuid.uuid4(),
+                "account_id": account.id,
+                "present": True,
+                "first_seen_at": body.collected_at,
+                "last_seen_at": body.collected_at,
+                "last_seen_run_id": body.run_id,
+            }
+        if not rows:
+            return UpsertResult(received=0, written=0)
+
+        stmt = pg_insert(RubrikSourceObject).values(list(rows.values()))
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["account_id", "source_key"],
+            set_={
+                name: stmt.excluded[name]
+                for name in next(iter(rows.values()))
+                if name not in {"id", "account_id", "source_key", "first_seen_at"}
+            },
+        )
+        written = len(session.execute(stmt.returning(col(RubrikSourceObject.source_key))).all())
+        session.commit()
+        return UpsertResult(received=len(body.objects), written=written)
+
+    @router.get("/objects", summary="List inventory", responses=not_found("account"))
+    def list_objects(
+        source_name: RubrikAccountName,
+        session: SessionDep,
+        kind: Annotated[
+            list[str] | None,
+            Query(
+                description="Only these object types, any case; repeat for several: "
+                "`?kind=O365Mailbox&kind=O365Onedrive`."
+            ),
+        ] = None,
+        protection_status: Annotated[
+            str | None, Query(description="Protected, NoSla or DoNotProtect, any case.")
+        ] = None,
+        compliance_status: Annotated[
+            str | None,
+            Query(description="IN_COMPLIANCE, OUT_OF_COMPLIANCE, UNPROTECTED, ..., any case."),
+        ] = None,
+        sla_domain: Annotated[
+            str | None, Query(description="The SLA domain's name, any case.")
+        ] = None,
+        name: Annotated[str | None, Query(description="Part of the object's name, any case.")] = (
+            None
+        ),
+        present: Annotated[
+            bool | None,
+            Query(description="false: objects the latest inventory no longer lists."),
+        ] = None,
+        limit: Annotated[int, Query(ge=1, le=5000, description="Page size.")] = 1000,
+        offset: Annotated[int, Query(ge=0, description="Rows to skip.")] = 0,
+    ) -> list[RubrikObjectOut]:
+        """What RSC says exists, by type then name."""
+        account = find_account(session, source_name)
+        query = select(RubrikSourceObject).where(RubrikSourceObject.account_id == account.id)
+        if kind:
+            wanted = [value.lower() for value in kind]
+            query = query.where(func.lower(RubrikSourceObject.kind).in_(wanted))
+        if protection_status is not None:
+            query = query.where(
+                func.lower(RubrikSourceObject.protection_status) == protection_status.lower()
+            )
+        if compliance_status is not None:
+            query = query.where(
+                func.lower(RubrikSourceObject.compliance_status) == compliance_status.lower()
+            )
+        if sla_domain is not None:
+            query = query.where(
+                func.lower(RubrikSourceObject.sla_domain_name) == sla_domain.lower()
+            )
+        if name:
+            query = query.where(col(RubrikSourceObject.name).ilike(f"%{name}%"))
+        if present is not None:
+            query = query.where(col(RubrikSourceObject.present) == present)
+        query = (
+            query.order_by(col(RubrikSourceObject.kind), col(RubrikSourceObject.name))
+            .offset(offset)
+            .limit(limit)
+        )
+        return [RubrikObjectOut.model_validate(o) for o in session.exec(query).all()]
 
     return router

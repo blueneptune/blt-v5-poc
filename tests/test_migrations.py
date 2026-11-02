@@ -39,3 +39,13 @@ def test_commvault_tables_are_in_their_schema(database_url: str) -> None:
         "instance_backup_report",
     }
     assert public == {"alembic_version"}
+
+
+def test_rubrik_tables_are_in_their_schema(database_url: str) -> None:
+    engine = create_engine(database_url)
+    try:
+        rubrik = set(inspect(engine).get_table_names(schema=blt.api.rubrik.SCHEMA))
+    finally:
+        engine.dispose()
+    # source_object by the same name as Commvault's, so the two read alike.
+    assert rubrik == {"account", "collection_run", "job", "source_object"}

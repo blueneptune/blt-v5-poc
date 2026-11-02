@@ -289,13 +289,7 @@ def test_backfill_after_a_forced_full_has_nothing_to_do(
     assert http.get("/v1/sources/commvault/prod/backfill").json()["complete"] is True
 
 
-def test_the_paths_from_before_v1_still_work_and_say_they_are_deprecated(
-    http: TestClient,
-) -> None:
-    old = http.get("/commcells/prod/last-run")
-    new = http.get("/v1/sources/commvault/prod/last-run")
-
-    assert old.status_code == new.status_code == 200
-    assert old.json() == new.json()
-    assert old.headers["Deprecation"] == "true" and "Deprecation" not in new.headers
-    assert http.get("/rubrik/acme/last-run").headers["Deprecation"] == "true"
+def test_the_paths_from_before_v1_are_gone(http: TestClient) -> None:
+    assert http.get("/v1/sources/commvault/prod/last-run").status_code == 200
+    assert http.get("/commcells/prod/last-run").status_code == 404
+    assert http.get("/rubrik/acme/last-run").status_code == 404

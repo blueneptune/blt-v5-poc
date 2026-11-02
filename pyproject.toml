@@ -1,6 +1,6 @@
 [project]
 name = "blt"
-version = "2026.10.29"
+version = "2026.10.30.3"
 description = "Commvault job-history collector: per-CommCell collection script, FastAPI ingest API, Postgres store."
 requires-python = ">=3.12"
 # Only what both halves share (the API schemas in blt.schemas). Everything
@@ -50,7 +50,7 @@ sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag =
 #   commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
 commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.3.1" }
 # The Rubrik SDK (yoki-py-rubrik-sdk), pinned to a tag like the others.
-rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", tag = "v0.2.0" }
+rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", tag = "v0.3.0" }
 
 [build-system]
 requires = ["hatchling"]
