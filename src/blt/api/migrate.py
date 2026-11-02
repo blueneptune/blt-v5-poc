@@ -5,7 +5,12 @@ pod is usually still starting at that point, so it waits for a connection
 first instead of failing the container on a race.
 
     blt-migrate                      # upgrade to head
+    blt-migrate reproject            # rebuild common.job after a mapping change
     blt-migrate revision -m "..."    # autogenerate a new migration (dev)
+
+After an upgrade that leaves common.job empty while product jobs exist
+(the release that creates it), it fills common.job from the product
+tables before the API starts - see blt.api.reproject.
 """
 
 from __future__ import annotations
@@ -52,13 +57,24 @@ def main() -> None:
     sub = parser.add_subparsers(dest="action")
     revision = sub.add_parser("revision", help="autogenerate a migration from the models")
     revision.add_argument("-m", "--message", required=True)
+    sub.add_parser("reproject", help="project every product job into common.job again")
     args = parser.parse_args()
 
-    wait_for_database(ApiSettings().database_url.get_secret_value())  # type: ignore[call-arg]
+    url = ApiSettings().database_url.get_secret_value()  # type: ignore[call-arg]
+    wait_for_database(url)
     if args.action == "revision":
         command.revision(alembic_config(), message=args.message, autogenerate=True)
-    else:
-        command.upgrade(alembic_config(), "head")
+        return
+    command.upgrade(alembic_config(), "head")
+    # Imported here: it loads the API's models, which a revision does not need.
+    from .reproject import needs_first_projection, reproject
+
+    engine = create_engine(url)
+    try:
+        if args.action == "reproject" or needs_first_projection(engine):
+            print(f"common.job: {reproject(engine)} jobs projected")
+    finally:
+        engine.dispose()
 
 
 if __name__ == "__main__":

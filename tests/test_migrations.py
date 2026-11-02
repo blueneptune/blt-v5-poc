@@ -8,6 +8,7 @@ from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect
 from sqlmodel import SQLModel
 
+import blt.api.jobs  # noqa: F401  (registers common.job)
 import blt.api.models
 import blt.api.rubrik  # noqa: F401  (registers Rubrik's tables)
 import blt.api.sources
@@ -58,4 +59,4 @@ def test_blt_tables_are_in_their_schema(database_url: str) -> None:
         tables = set(inspect(engine).get_table_names(schema=blt.api.sources.SCHEMA))
     finally:
         engine.dispose()
-    assert tables == {"source"}
+    assert tables == {"source", "job"}

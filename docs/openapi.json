@@ -392,7 +392,7 @@
           "commvault: collection"
         ],
         "summary": "Close a collection run",
-        "description": "Records how the run went. A succeeded collection run (initial,\ndelta or full) becomes the new watermark. A succeeded inventory\nrun marks everything it did not list as no longer present, and\nstores that day's per-instance report.",
+        "description": "Records how the run went. A succeeded collection run (initial,\ndelta or full) becomes the new watermark. A succeeded inventory\nrun marks everything it did not list as no longer present, and\nstores that day's per-instance report, and points jobs at the\nclients they ran on (common.job.source_object_id).",
         "operationId": "finish_run_v1_sources_commvault__source_name__runs__run_id__finish_post",
         "security": [
           {
@@ -1422,7 +1422,7 @@
           "rubrik"
         ],
         "summary": "Close a collection run",
-        "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present.",
+        "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present, and points jobs at the objects they ran\non (common.job.source_object_id).",
         "operationId": "finish_run_v1_sources_rubrik__source_name__runs__run_id__finish_post",
         "security": [
           {

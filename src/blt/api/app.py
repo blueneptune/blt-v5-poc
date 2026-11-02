@@ -30,6 +30,7 @@ from sqlalchemy import Engine, create_engine, func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Session, col, select
 
+from blt.common.mapping import commvault_job
 from blt.schemas import (
     PROBLEM_VERDICTS,
     BackfillState,
@@ -50,6 +51,7 @@ from blt.schemas import (
     classify_status,
 )
 
+from . import jobs as common_jobs
 from .docs import (
     API_V1,
     COLLECTION,
@@ -258,8 +260,10 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         """Records how the run went. A succeeded collection run (initial,
         delta or full) becomes the new watermark. A succeeded inventory
         run marks everything it did not list as no longer present, and
-        stores that day's per-instance report."""
-        run = find_run(session, find_commcell(session, source_name), run_id)
+        stores that day's per-instance report, and points jobs at the
+        clients they ran on (common.job.source_object_id)."""
+        commcell = find_commcell(session, source_name)
+        run = find_run(session, commcell, run_id)
         run.status = body.status
         run.finished_at = body.finished_at
         run.jobs_collected = body.jobs_collected
@@ -280,6 +284,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 )
                 .values(present=False)
             )
+            common_jobs.link(session, "commvault", commcell.source_id)
             # Keep what the per-instance report says as of this
             # inventory, one row per instance per full backup job.
             observed = body.finished_at
@@ -346,9 +351,11 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             where=col(Job.last_collected_at) <= stmt.excluded.last_collected_at,
         )
         # RETURNING, not rowcount: a multi-row INSERT doesn't report one.
-        written = len(session.execute(stmt.returning(col(Job.job_id))).all())
+        written = [r[0] for r in session.execute(stmt.returning(col(Job.job_id)))]
+        common_jobs.project(session, commcell.source_id, [rows[k] for k in written], commvault_job)
+        common_jobs.link(session, "commvault", commcell.source_id, [str(k) for k in written])
         session.commit()
-        return UpsertResult(received=len(body.jobs), written=written)
+        return UpsertResult(received=len(body.jobs), written=len(written))
 
     @router.get("/jobs", tags=[COLLECTION], summary="List jobs", responses=not_found("CommCell"))
     def list_jobs(
@@ -419,6 +426,10 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         job.last_collected_at = body.collected_at
         job.last_seen_run_id = body.run_id
         session.add(job)
+        session.flush()
+        commcell = session.get(Commcell, job.commcell_id)
+        assert commcell is not None
+        common_jobs.project(session, commcell.source_id, [job.model_dump()], commvault_job)
         session.commit()
         session.refresh(job)
         return JobOut.model_validate(job)
