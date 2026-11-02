@@ -1,5 +1,6 @@
-# blt as a Kubernetes manifest: one Pod with Postgres, the API and - when
-# Prefect is on - the Prefect server and worker, as deploy/up.sh builds it.
+# blt as a Kubernetes manifest: one Pod with Postgres, the API, the web UI
+# and - when Prefect is on - the Prefect server and worker, as deploy/up.sh
+# builds it.
 #
 # This is a template. deploy/kube/up.sh fills in the placeholders from
 # config/blt.env and hands the result to `podman kube play`; nothing with
@@ -73,4 +74,5 @@ spec:
           valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_DATABASE_URL}}
       ports:
         - {containerPort: ${API_LISTEN_PORT}, hostPort: ${API_PORT}, hostIP: "${BIND}"}
+# @UI_CONTAINER@
 # @PREFECT_CONTAINERS@
