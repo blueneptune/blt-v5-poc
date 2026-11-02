@@ -66,6 +66,7 @@ from .docs import (
     RunId,
     not_found,
 )
+from .jobs_router import jobs_router
 from .models import CollectionRun, Commcell, InstanceBackupReport, Job, SourceObject
 from .rubrik import rubrik_router
 from .settings import ApiSettings
@@ -800,6 +801,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     # collectors can move over one release at a time.
     v1 = APIRouter(prefix=API_V1)
     v1.include_router(sources_router(get_session, require_api_key))
+    v1.include_router(jobs_router(get_session, require_api_key))
     v1.include_router(router, prefix="/sources/commvault/{source_name}")
     v1.include_router(rubrik, prefix="/sources/rubrik/{source_name}")
     app.include_router(v1)

@@ -1,8 +1,8 @@
 # Common jobs: the `common` schema (design)
 
 **Status: written 2026-10-29, reviewed 2026-11-02 (decisions below).
-Steps 1 and 2 (`common.source`, `common.job`) built 2026-11-02; the API
-(step 3) is not built yet.** It is Phase 2's data foundation ([vision.md](vision.md) section
+Steps 1-3 (`common.source`, `common.job`, `/v1/jobs`) built
+2026-11-02.** It is Phase 2's data foundation ([vision.md](vision.md) section
 3 and 4.4): one shape for a job from any product, so the jobs page and
 reports read one table instead of learning each product. Commvault and
 Rubrik are collected today; Veeam and NetBackup have SDKs not yet run
@@ -188,6 +188,18 @@ year; it is the *display* that needs grouping, not the database.
 
 They sit beside `/v1/sources`, as [api.md](api.md) planned.
 
+**As built:** the list and the summary take the same filters (each of
+`source_type`, `source`, `kind`, `state` may repeat; `since`/`until` are
+on `started_at`; `asset` is part of a name, any case). The list is newest
+start first, with jobs not yet started on top, and returns the match
+count in `X-Total-Count`. The summary groups by any of `day`, `source`,
+`kind`, `protection` (`?group=` repeats; default day and source) and
+returns `{total, states: {state: n}}` per group. `/v1/jobs/{id}` adds the
+product's own record as `product`. Rubrik gained
+`GET /v1/sources/rubrik/{name}/jobs/{series_key}` so every job has a
+`product_path`. Not yet: role-scoped kinds (decision 3) - they need
+sign-in first.
+
 ## Steps
 
 Each a branch of its own, each releasable:
@@ -201,7 +213,8 @@ Each a branch of its own, each releasable:
    from"): every product value mapped and tested, `unknown` reported.
    **Rubrik done** (all 11 statuses, all 74 activity types); Commvault,
    Veeam and NetBackup to come.
-3. **`/v1/jobs`**, `/v1/jobs/{id}`, `/v1/jobs/summary`.
+3. ~~**`/v1/jobs`**, `/v1/jobs/{id}`, `/v1/jobs/summary`~~ **done
+   2026-11-02**.
 4. Veeam and NetBackup mappings when their collectors exist - checked
    against real servers, and this document corrected.
 

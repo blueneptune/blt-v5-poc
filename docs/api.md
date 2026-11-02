@@ -36,6 +36,7 @@ no data.
 | commvault: collection | `/v1/sources/commvault/{source_name}/...` last-run, runs, jobs, backfill | the Commvault collector; reading jobs |
 | commvault: inventory and reports | `/v1/sources/commvault/{source_name}/...` objects, validation, instance-report | inventory runs; "is everything backed up" |
 | rubrik | `/v1/sources/rubrik/{source_name}/...` last-run, runs, jobs | the Rubrik collector; reading Rubrik jobs |
+| jobs | `/v1/jobs`, `/v1/jobs/summary`, `/v1/jobs/{id}` | every product's jobs in one shape (docs/common-jobs.md); the jobs page |
 | sources | `/v1/sources` | every source of any product, with its id |
 | health | `/healthz` | probes |
 
@@ -43,8 +44,11 @@ Paths are `/v1/sources/{source type}/{source name}/...`: the source type
 is the product (`commvault`, `rubrik`, later `netbackup`, `veeam`), the
 name is blt's own for that source. `/v1/sources` itself lists every
 source with its UUID (`?type=rubrik` for one product's). blt's own
-resources, when it has them (users, a jobs view across every product),
-will sit beside `/v1/sources`, not under it.
+resources sit beside `/v1/sources`, not under it: `/v1/jobs` reads every
+product's jobs in their common shape, and later users and saved views.
+
+`GET /v1/jobs` pages with `limit`/`offset` like every list, and also
+returns the number of matching jobs in an `X-Total-Count` header.
 
 The overview at the top of `/docs` describes the conventions (times,
 paging, errors, upserts), how versions work, and the steps of one

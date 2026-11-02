@@ -374,3 +374,126 @@ def test_reproject_rebuilds_common_job_from_the_product_tables(
     assert json.dumps(strip(after), default=str, sort_keys=True) == json.dumps(
         strip(before), default=str, sort_keys=True
     )
+
+
+# --- /v1/jobs ----------------------------------------------------------------
+
+
+def seed(http: TestClient) -> None:
+    """Commvault prod: 1 failed backup yesterday, 2 succeeded today (one a
+    restore); Rubrik acme: 1 running backup under Gold today."""
+    jobs = [
+        {"job_id": 1, "status": "Failed", "operation": "Backup", "client_name": "web01",
+         "start_time": (T0 - timedelta(days=1)).isoformat(), "pending_reason": "disk full"},
+        {"job_id": 2, "status": "Completed", "operation": "Backup", "client_name": "web02",
+         "start_time": T0.isoformat()},
+        {"job_id": 3, "status": "Completed", "operation": "Restore", "client_name": "web01",
+         "start_time": (T0 + timedelta(hours=1)).isoformat()},
+    ]  # fmt: skip
+    body = {"collected_at": (T0 + timedelta(hours=2)).isoformat(), "jobs": jobs}
+    assert http.post("/v1/sources/commvault/prod/jobs", json=body).status_code == 200
+    post_rk(
+        http,
+        "Running",
+        T0 + timedelta(hours=2),
+        object_name="vm-01",
+        sla_domain_name="Gold",
+        start_time=(T0 + timedelta(minutes=30)).isoformat(),
+    )
+
+
+def keys(response: Any) -> list[str]:
+    return [f"{j['source_name']}/{j['product_job_key']}" for j in response.json()]
+
+
+def test_jobs_from_every_product_newest_first(http: TestClient) -> None:
+    seed(http)
+    response = http.get("/v1/jobs")
+    assert keys(response) == ["prod/3", "acme/s1", "prod/2", "prod/1"]
+    assert response.headers["X-Total-Count"] == "4"
+    first = response.json()[0]
+    assert (first["source_type"], first["kind"], first["state"]) == (
+        "commvault",
+        "restore",
+        "succeeded",
+    )
+    assert first["product_path"] == "/v1/sources/commvault/prod/jobs/3"
+    assert http.get(first["product_path"]).status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({"source_type": "rubrik"}, ["acme/s1"]),
+        ({"source": ["prod"], "kind": "backup"}, ["prod/2", "prod/1"]),
+        ({"state": ["failed", "running"]}, ["acme/s1", "prod/1"]),
+        ({"active": "true"}, ["acme/s1"]),
+        (
+            {"since": T0.isoformat(), "until": (T0 + timedelta(hours=1)).isoformat()},
+            ["acme/s1", "prod/2"],
+        ),
+        ({"protection": "Gold"}, ["acme/s1"]),
+        ({"asset": "WEB01"}, ["prod/3", "prod/1"]),
+    ],
+)  # fmt: skip
+def test_jobs_can_be_filtered(
+    http: TestClient, params: dict[str, Any], expected: list[str]
+) -> None:
+    seed(http)
+    response = http.get("/v1/jobs", params=params)
+    assert keys(response) == expected
+    assert response.headers["X-Total-Count"] == str(len(expected))
+
+
+def test_jobs_page(http: TestClient) -> None:
+    seed(http)
+    response = http.get("/v1/jobs", params={"limit": 2, "offset": 1})
+    assert keys(response) == ["acme/s1", "prod/2"]
+    assert response.headers["X-Total-Count"] == "4"
+
+
+def test_one_job_with_the_products_record(http: TestClient) -> None:
+    seed(http)
+    rubrik = http.get("/v1/jobs", params={"source_type": "rubrik"}).json()[0]
+    detail = http.get(f"/v1/jobs/{rubrik['id']}").json()
+    assert detail["product"]["series_key"] == "s1"
+    assert detail["product"]["sla_domain_name"] == "Gold"
+    assert http.get(detail["product_path"]).json()["series_key"] == "s1"
+
+    failed = http.get("/v1/jobs", params={"state": "failed"}).json()[0]
+    detail = http.get(f"/v1/jobs/{failed['id']}").json()
+    assert detail["message"] == "disk full" and detail["product"]["job_id"] == 1
+
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert http.get(f"/v1/jobs/{unknown}").status_code == 404
+    assert http.get("/v1/sources/rubrik/acme/jobs/nope").status_code == 404
+
+
+def test_summary_by_day_and_source(http: TestClient) -> None:
+    seed(http)
+    rows = http.get("/v1/jobs/summary").json()
+    assert [(r["day"], r["source_name"], r["total"], r["states"]) for r in rows] == [
+        ("2026-11-02", "prod", 2, {"succeeded": 2}),
+        ("2026-11-02", "acme", 1, {"running": 1}),
+        ("2026-11-01", "prod", 1, {"failed": 1}),
+    ]
+
+
+def test_summary_by_protection_with_filters(http: TestClient) -> None:
+    seed(http)
+    rows = http.get(
+        "/v1/jobs/summary", params={"group": ["kind"], "source_type": "commvault"}
+    ).json()
+    assert [(r["kind"], r["total"], r["states"]) for r in rows] == [
+        ("backup", 2, {"failed": 1, "succeeded": 1}),
+        ("restore", 1, {"succeeded": 1}),
+    ]
+    assert all(r["day"] is None and r["source_name"] is None for r in rows)
+    by_protection = http.get("/v1/jobs/summary", params={"group": "protection"}).json()
+    assert {r["protection"]: r["total"] for r in by_protection} == {None: 3, "Gold": 1}
+    assert http.get("/v1/jobs/summary", params={"group": "nonsense"}).status_code == 422
+
+
+def test_jobs_need_the_key(http: TestClient) -> None:
+    for path in ("/v1/jobs", "/v1/jobs/summary"):
+        assert http.get(path, headers={"X-API-Key": "wrong"}).status_code == 401

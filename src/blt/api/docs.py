@@ -88,6 +88,11 @@ REPORTS = "commvault: inventory and reports"
 TAGS = [
     {"name": "health", "description": "Is the API up, and can it reach its database."},
     {
+        "name": "jobs",
+        "description": "Jobs from every product in one shape: what the jobs page reads. "
+        "See docs/common-jobs.md.",
+    },
+    {
         "name": "sources",
         "description": "Every source blt collects from, of any product, with its id. "
         "See docs/common-jobs.md.",
