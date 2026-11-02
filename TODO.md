@@ -85,7 +85,10 @@ current work.
     Open question: whether a reset should delete rows outright or keep
     the run history and only clear the jobs and the watermark.
 
-12. **Give each collection source a UUID** instead of the integer
+12. **Give each collection source a UUID** - **done 2026-11-02** as
+    `common.source` (docs/common-jobs.md step 1), alongside the integer
+    ids rather than replacing them; random UUIDs, blt-generated (not
+    `csGUID`). Original note: a UUID instead of the integer
     `commcell.id`. Today a CommCell is identified by the name in its
     config file plus an auto-increment id that means nothing outside
     this database. A UUID (v7, so ids still sort by creation time) is

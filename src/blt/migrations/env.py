@@ -7,6 +7,7 @@ from sqlmodel import SQLModel
 
 import blt.api.models  # noqa: F401  (registers Commvault's tables on SQLModel.metadata)
 import blt.api.rubrik  # noqa: F401  (and Rubrik's)
+import blt.api.sources  # noqa: F401  (and the common tables)
 from blt.api.settings import ApiSettings
 
 target_metadata = SQLModel.metadata

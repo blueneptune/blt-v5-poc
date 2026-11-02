@@ -39,6 +39,8 @@ from blt.rubrik.schemas import (
 from blt.schemas import UpsertResult
 
 from .docs import UNAUTHORIZED, RubrikAccountName, RunId, not_found
+from .sources import SCHEMA as BLT_SCHEMA
+from .sources import ensure_source
 
 SCHEMA = "rubrik"
 
@@ -58,6 +60,8 @@ class RubrikAccount(SQLModel, table=True):
     __table_args__ = {"schema": SCHEMA}
 
     id: int | None = Field(default=None, primary_key=True)
+    # The account's row in common.source: its id outside this schema.
+    source_id: uuid.UUID = Field(foreign_key=f"{BLT_SCHEMA}.source.id", unique=True)
     name: str = Field(index=True, unique=True)
     created_at: datetime = _ts(nullable=False)
 
@@ -205,7 +209,11 @@ def rubrik_router(
     def get_or_create_account(session: Session, name: str) -> RubrikAccount:
         session.execute(
             pg_insert(RubrikAccount)
-            .values(name=name, created_at=datetime.now(UTC))
+            .values(
+                name=name,
+                source_id=ensure_source(session, "rubrik", name),
+                created_at=datetime.now(UTC),
+            )
             .on_conflict_do_nothing(index_elements=["name"])
         )
         return find_account(session, name)

@@ -10,6 +10,7 @@ from sqlmodel import SQLModel
 
 import blt.api.models
 import blt.api.rubrik  # noqa: F401  (registers Rubrik's tables)
+import blt.api.sources
 
 
 def test_migrations_match_the_models(database_url: str) -> None:
@@ -49,3 +50,12 @@ def test_rubrik_tables_are_in_their_schema(database_url: str) -> None:
         engine.dispose()
     # source_object by the same name as Commvault's, so the two read alike.
     assert rubrik == {"account", "collection_run", "job", "source_object"}
+
+
+def test_blt_tables_are_in_their_schema(database_url: str) -> None:
+    engine = create_engine(database_url)
+    try:
+        tables = set(inspect(engine).get_table_names(schema=blt.api.sources.SCHEMA))
+    finally:
+        engine.dispose()
+    assert tables == {"source"}

@@ -47,7 +47,8 @@ def test_each_endpoint_is_in_exactly_one_group() -> None:
 
 def test_every_path_but_the_health_check_is_versioned_and_named_by_source() -> None:
     for path in openapi.spec()["paths"]:
-        if path != "/healthz":
+        # /v1/sources itself lists every source, of any product.
+        if path not in ("/healthz", "/v1/sources"):
             assert path.startswith(("/v1/sources/commvault/", "/v1/sources/rubrik/")), path
 
 

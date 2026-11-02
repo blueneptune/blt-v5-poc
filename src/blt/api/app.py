@@ -67,6 +67,7 @@ from .docs import (
 from .models import CollectionRun, Commcell, InstanceBackupReport, Job, SourceObject
 from .rubrik import rubrik_router
 from .settings import ApiSettings
+from .sources import ensure_source, sources_router
 
 # Runs that collect "now": the ones a watermark can be taken from. A
 # backfill run started at noon says nothing about what happened up to
@@ -117,7 +118,11 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         # CommCell can't race each other into a unique-violation.
         session.execute(
             pg_insert(Commcell)
-            .values(name=name, created_at=datetime.now(UTC))
+            .values(
+                name=name,
+                source_id=ensure_source(session, "commvault", name),
+                created_at=datetime.now(UTC),
+            )
             .on_conflict_do_nothing(index_elements=["name"])
         )
         return find_commcell(session, name)
@@ -783,6 +788,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     # change that would break a client goes into a /v2 beside it, so
     # collectors can move over one release at a time.
     v1 = APIRouter(prefix=API_V1)
+    v1.include_router(sources_router(get_session, require_api_key))
     v1.include_router(router, prefix="/sources/commvault/{source_name}")
     v1.include_router(rubrik, prefix="/sources/rubrik/{source_name}")
     app.include_router(v1)

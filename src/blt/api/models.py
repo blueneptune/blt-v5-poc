@@ -17,6 +17,8 @@ from sqlalchemy import BigInteger, Column, DateTime, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
+from .sources import SCHEMA as BLT_SCHEMA
+
 SCHEMA = "commvault"
 
 
@@ -38,6 +40,8 @@ class Commcell(SQLModel, table=True):
     __table_args__ = {"schema": SCHEMA}
 
     id: int | None = Field(default=None, primary_key=True)
+    # The CommCell's row in common.source: its id outside this schema.
+    source_id: uuid.UUID = Field(foreign_key=f"{BLT_SCHEMA}.source.id", unique=True)
     name: str = Field(index=True, unique=True)
     created_at: datetime = _ts(nullable=False)
     # Backfill position: history is complete back to here (see
