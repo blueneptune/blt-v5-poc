@@ -19,7 +19,7 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import BigInteger, Column, DateTime, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -399,6 +399,19 @@ def rubrik_router(
             .limit(limit)
         )
         return [RubrikJobOut.model_validate(job) for job in session.exec(query).all()]
+
+    @router.get("/jobs/{series_key}", summary="One job", responses=not_found("account or job"))
+    def get_job(
+        source_name: RubrikAccountName,
+        series_key: Annotated[str, Path(description="The job's `series_key`.")],
+        session: SessionDep,
+    ) -> RubrikJobOut:
+        """One job by its series key, with RSC's full record in `raw`."""
+        account = find_account(session, source_name)
+        job = session.get(RubrikJob, (account.id, series_key))
+        if job is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown job {series_key!r}")
+        return RubrikJobOut.model_validate(job)
 
     @router.post(
         "/objects", summary="Store a batch of inventory", responses=not_found("account or run")

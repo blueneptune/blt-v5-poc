@@ -106,6 +106,595 @@
         }
       }
     },
+    "/v1/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List jobs from every product",
+        "description": "Jobs from every source, newest start first (jobs not yet started\nfirst of all). The `X-Total-Count` header holds how many match,\nfor paging.",
+        "operationId": "list_jobs_v1_jobs_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these products; repeat for several.",
+              "examples": [
+                "rubrik"
+              ],
+              "title": "Source Type"
+            },
+            "description": "Only these products; repeat for several."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these sources, by blt's name; repeat for several.",
+              "title": "Source"
+            },
+            "description": "Only these sources, by blt's name; repeat for several."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these kinds: backup, restore, copy, maintenance, scan, other.",
+              "title": "Kind"
+            },
+            "description": "Only these kinds: backup, restore, copy, maintenance, scan, other."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these states: queued, running, waiting, succeeded, warning, info, partial, failed, cancelled, skipped, missing, unknown.",
+              "title": "State"
+            },
+            "description": "Only these states: queued, running, waiting, succeeded, warning, info, partial, failed, cancelled, skipped, missing, unknown."
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs still running (true) or finished (false).",
+              "title": "Active"
+            },
+            "description": "Only jobs still running (true) or finished (false)."
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs that started at or after this time.",
+              "title": "Since"
+            },
+            "description": "Only jobs that started at or after this time."
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs that started before this time.",
+              "title": "Until"
+            },
+            "description": "Only jobs that started before this time."
+          },
+          {
+            "name": "protection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this protection (plan, SLA domain), exactly.",
+              "title": "Protection"
+            },
+            "description": "Only this protection (plan, SLA domain), exactly."
+          },
+          {
+            "name": "asset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the asset's name, any case.",
+              "title": "Asset"
+            },
+            "description": "Part of the asset's name, any case."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CommonJobOut"
+                  },
+                  "title": "Response List Jobs V1 Jobs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/summary": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Count jobs by state, grouped",
+        "description": "Jobs per state for each group, newest day first. Takes the same\nfilters as `GET /v1/jobs`; jobs not yet started have no day.",
+        "operationId": "summary_v1_jobs_summary_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "day",
+                      "source",
+                      "kind",
+                      "protection"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What to group by; repeat for several. Default: day and source. Grouping by protection gives the jobs page's rollup - an M365 backup's 1,000 mailbox jobs as one line.",
+              "title": "Group"
+            },
+            "description": "What to group by; repeat for several. Default: day and source. Grouping by protection gives the jobs page's rollup - an M365 backup's 1,000 mailbox jobs as one line."
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these products; repeat for several.",
+              "examples": [
+                "rubrik"
+              ],
+              "title": "Source Type"
+            },
+            "description": "Only these products; repeat for several."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these sources, by blt's name; repeat for several.",
+              "title": "Source"
+            },
+            "description": "Only these sources, by blt's name; repeat for several."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these kinds: backup, restore, copy, maintenance, scan, other.",
+              "title": "Kind"
+            },
+            "description": "Only these kinds: backup, restore, copy, maintenance, scan, other."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these states: queued, running, waiting, succeeded, warning, info, partial, failed, cancelled, skipped, missing, unknown.",
+              "title": "State"
+            },
+            "description": "Only these states: queued, running, waiting, succeeded, warning, info, partial, failed, cancelled, skipped, missing, unknown."
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs still running (true) or finished (false).",
+              "title": "Active"
+            },
+            "description": "Only jobs still running (true) or finished (false)."
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs that started at or after this time.",
+              "title": "Since"
+            },
+            "description": "Only jobs that started at or after this time."
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs that started before this time.",
+              "title": "Until"
+            },
+            "description": "Only jobs that started before this time."
+          },
+          {
+            "name": "protection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this protection (plan, SLA domain), exactly.",
+              "title": "Protection"
+            },
+            "description": "Only this protection (plan, SLA domain), exactly."
+          },
+          {
+            "name": "asset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the asset's name, any case.",
+              "title": "Asset"
+            },
+            "description": "Part of the asset's name, any case."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SummaryRow"
+                  },
+                  "title": "Response Summary V1 Jobs Summary Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "One job",
+        "description": "One job in the common shape, with the product's full record of\nit in `product`.",
+        "operationId": "get_job_v1_jobs__job_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The blt job id.",
+              "title": "Job Id"
+            },
+            "description": "The blt job id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonJobDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/commvault/{source_name}/last-run": {
       "get": {
         "tags": [
@@ -1779,6 +2368,90 @@
         }
       }
     },
+    "/v1/sources/rubrik/{source_name}/jobs/{series_key}": {
+      "get": {
+        "tags": [
+          "rubrik"
+        ],
+        "summary": "One job",
+        "description": "One job by its series key, with RSC's full record in `raw`.",
+        "operationId": "get_job_v1_sources_rubrik__source_name__jobs__series_key__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it.",
+              "examples": [
+                "work"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the RSC account - its Prefect block's name, not the account's address. Made the first time a run is started for it."
+          },
+          {
+            "name": "series_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The job's `series_key`.",
+              "title": "Series Key"
+            },
+            "description": "The job's `series_key`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RubrikJobOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown account or job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/rubrik/{source_name}/objects": {
       "post": {
         "tags": [
@@ -2152,6 +2825,541 @@
             "complete": false
           }
         ]
+      },
+      "CommonJobDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The blt job id."
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id",
+            "description": "The source's id (`GET /v1/sources`)."
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "description": "The product.",
+            "examples": [
+              "commvault"
+            ]
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name",
+            "description": "blt's name for the source.",
+            "examples": [
+              "prod"
+            ]
+          },
+          "product_job_key": {
+            "type": "string",
+            "title": "Product Job Key",
+            "description": "The product's own id for the job, as text.",
+            "examples": [
+              "4711"
+            ]
+          },
+          "product_path": {
+            "type": "string",
+            "title": "Product Path",
+            "description": "Where the product's full record of the job is, in this API.",
+            "examples": [
+              "/v1/sources/commvault/prod/jobs/4711"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "One of: backup, restore, copy, maintenance, scan, other.",
+            "examples": [
+              "backup"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "One of: queued, running, waiting, succeeded, warning, info, partial, failed, cancelled, skipped, missing, unknown.",
+            "examples": [
+              "failed"
+            ]
+          },
+          "product_status": {
+            "type": "string",
+            "title": "Product Status",
+            "description": "The product's own word for its status, untouched.",
+            "examples": [
+              "Failed"
+            ]
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Will it still change."
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "When it started."
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At",
+            "description": "When it ended; none while it is active."
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When the product last changed it."
+          },
+          "asset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Name",
+            "description": "What it ran on, in the product's words.",
+            "examples": [
+              "web01"
+            ]
+          },
+          "asset_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Type",
+            "description": "What sort of thing that is.",
+            "examples": [
+              "Linux File System"
+            ]
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "What made it run: Commvault plan, Rubrik SLA domain, ...",
+            "examples": [
+              "Gold"
+            ]
+          },
+          "bytes_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Transferred",
+            "description": "Written to backup storage."
+          },
+          "bytes_protected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Protected",
+            "description": "The data it covered."
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Why it failed or warned."
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "The blt job id of its parent, where the product has one."
+          },
+          "source_object_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Object Id",
+            "description": "The inventory row it ran on (the product's `objects`)."
+          },
+          "attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt",
+            "description": "Which try this is."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When blt first collected it."
+          },
+          "last_collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Collected At",
+            "description": "When blt last collected it."
+          },
+          "product": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Product",
+            "description": "The product's record, as its own `GET` at `product_path` returns it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "source_type",
+          "source_name",
+          "product_job_key",
+          "product_path",
+          "kind",
+          "state",
+          "product_status",
+          "is_active",
+          "first_seen_at",
+          "last_collected_at",
+          "product"
+        ],
+        "title": "CommonJobDetail",
+        "description": "One job, with the product's full record of it."
+      },
+      "CommonJobOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The blt job id."
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id",
+            "description": "The source's id (`GET /v1/sources`)."
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "description": "The product.",
+            "examples": [
+              "commvault"
+            ]
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name",
+            "description": "blt's name for the source.",
+            "examples": [
+              "prod"
+            ]
+          },
+          "product_job_key": {
+            "type": "string",
+            "title": "Product Job Key",
+            "description": "The product's own id for the job, as text.",
+            "examples": [
+              "4711"
+            ]
+          },
+          "product_path": {
+            "type": "string",
+            "title": "Product Path",
+            "description": "Where the product's full record of the job is, in this API.",
+            "examples": [
+              "/v1/sources/commvault/prod/jobs/4711"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "One of: backup, restore, copy, maintenance, scan, other.",
+            "examples": [
+              "backup"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "One of: queued, running, waiting, succeeded, warning, info, partial, failed, cancelled, skipped, missing, unknown.",
+            "examples": [
+              "failed"
+            ]
+          },
+          "product_status": {
+            "type": "string",
+            "title": "Product Status",
+            "description": "The product's own word for its status, untouched.",
+            "examples": [
+              "Failed"
+            ]
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Will it still change."
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "When it started."
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At",
+            "description": "When it ended; none while it is active."
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "When the product last changed it."
+          },
+          "asset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Name",
+            "description": "What it ran on, in the product's words.",
+            "examples": [
+              "web01"
+            ]
+          },
+          "asset_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Type",
+            "description": "What sort of thing that is.",
+            "examples": [
+              "Linux File System"
+            ]
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "What made it run: Commvault plan, Rubrik SLA domain, ...",
+            "examples": [
+              "Gold"
+            ]
+          },
+          "bytes_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Transferred",
+            "description": "Written to backup storage."
+          },
+          "bytes_protected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Protected",
+            "description": "The data it covered."
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Why it failed or warned."
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "The blt job id of its parent, where the product has one."
+          },
+          "source_object_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Object Id",
+            "description": "The inventory row it ran on (the product's `objects`)."
+          },
+          "attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt",
+            "description": "Which try this is."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When blt first collected it."
+          },
+          "last_collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Collected At",
+            "description": "When blt last collected it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "source_type",
+          "source_name",
+          "product_job_key",
+          "product_path",
+          "kind",
+          "state",
+          "product_status",
+          "is_active",
+          "first_seen_at",
+          "last_collected_at"
+        ],
+        "title": "CommonJobOut",
+        "description": "A job from any product, in blt's common shape. The product's own\nrecord is at `product_path`."
       },
       "HTTPValidationError": {
         "properties": {
@@ -5512,6 +6720,97 @@
         "title": "SourceOut",
         "description": "A source blt collects from."
       },
+      "SummaryRow": {
+        "properties": {
+          "day": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day",
+            "description": "The day the jobs started (UTC), when grouped by day."
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type",
+            "description": "When grouped by source."
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name",
+            "description": "When grouped by source."
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "When grouped by kind."
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "When grouped by protection."
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Jobs in the group."
+          },
+          "states": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "States",
+            "description": "Jobs per state; states with none are left out.",
+            "examples": [
+              {
+                "failed": 2,
+                "succeeded": 41
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "states"
+        ],
+        "title": "SummaryRow",
+        "description": "How many jobs of one group ended up in each state."
+      },
       "UpsertResult": {
         "properties": {
           "received": {
@@ -5773,6 +7072,10 @@
     {
       "name": "health",
       "description": "Is the API up, and can it reach its database."
+    },
+    {
+      "name": "jobs",
+      "description": "Jobs from every product in one shape: what the jobs page reads. See docs/common-jobs.md."
     },
     {
       "name": "sources",
