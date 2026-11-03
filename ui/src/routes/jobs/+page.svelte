@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onDestroy } from 'svelte';
-	import { RefreshCw, Search } from '@lucide/svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { Pin, PinOff, RefreshCw, Search } from '@lucide/svelte';
 	import StateBadge from '$lib/components/StateBadge.svelte';
 	import StateBar from '$lib/components/StateBar.svelte';
 	import { bytes, duration, when } from '$lib/format';
@@ -52,98 +52,135 @@
 	});
 	onDestroy(() => clearInterval(timer));
 
+	// The heading and filter bar stay on screen while a long list scrolls,
+	// unless the viewer unpins them; the choice is theirs, kept in this browser.
+	// Not on a phone, where the bar would fill half the screen.
+	const PIN_KEY = 'blt.jobs.pinFilters';
+	let pinned = $state(true);
+	onMount(() => {
+		try {
+			pinned = localStorage.getItem(PIN_KEY) !== 'false';
+		} catch {
+			// No storage (private window): stay pinned.
+		}
+	});
+	function togglePin() {
+		pinned = !pinned;
+		try {
+			localStorage.setItem(PIN_KEY, String(pinned));
+		} catch {
+			// Not remembered, but still works for this visit.
+		}
+	}
+
 	const chip = (on: boolean) =>
 		`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
 			on ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent text-muted-foreground'
 		}`;
 </script>
 
-<div class="flex flex-wrap items-baseline justify-between gap-2">
-	<h1 class="text-2xl font-semibold tracking-tight">Jobs</h1>
-	<div class="flex items-center gap-2 text-sm">
-		<a href={link({}, false)} class={chip(!data.grouped)}>Every job</a>
-		<a
-			href={`${link({}, false)}${filtersToQuery({ ...filters, page: 1 }) ? '&' : '?'}view=protection`}
-			class={chip(data.grouped)}
-		>
-			By protection
-		</a>
-		<button
-			type="button"
-			onclick={() => invalidateAll()}
-			class="text-muted-foreground hover:text-foreground rounded-md p-1.5"
-			aria-label="Refresh"
-		>
-			<RefreshCw class="size-4" />
-		</button>
+<div
+	class={pinned
+		? 'bg-background md:sticky md:top-0 md:z-20 md:-mx-6 md:-mt-6 md:border-b md:px-6 md:pt-6 md:pb-3'
+		: ''}
+>
+	<div class="flex flex-wrap items-baseline justify-between gap-2">
+		<h1 class="text-2xl font-semibold tracking-tight">Jobs</h1>
+		<div class="flex items-center gap-2 text-sm">
+			<a href={link({}, false)} class={chip(!data.grouped)}>Every job</a>
+			<a
+				href={`${link({}, false)}${filtersToQuery({ ...filters, page: 1 }) ? '&' : '?'}view=protection`}
+				class={chip(data.grouped)}
+			>
+				By protection
+			</a>
+			<button
+				type="button"
+				onclick={togglePin}
+				class="hidden rounded-md p-1.5 md:block {pinned ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
+				aria-pressed={pinned}
+				aria-label={pinned ? 'Let the filters scroll away' : 'Keep the filters on screen'}
+				title={pinned ? 'Filters pinned: click to let them scroll away' : 'Pin the filters to the top'}
+			>
+				{#if pinned}<Pin class="size-4" />{:else}<PinOff class="size-4" />{/if}
+			</button>
+			<button
+				type="button"
+				onclick={() => invalidateAll()}
+				class="text-muted-foreground hover:text-foreground rounded-md p-1.5"
+				aria-label="Refresh"
+			>
+				<RefreshCw class="size-4" />
+			</button>
+		</div>
 	</div>
-</div>
 
-<!-- The filter bar: kinds first, Backup on by default (decision 3). -->
-<div class="bg-card mt-4 space-y-3 rounded-xl border p-3">
-	<div class="flex flex-wrap items-center gap-1.5">
-		<span class="text-muted-foreground w-14 text-xs">Kind</span>
-		<a href={link({ kinds: [] })} class={chip(filters.kinds.length === 0)}>all</a>
-		{#each KINDS as kind (kind)}
-			<a href={link({ kinds: toggle(filters.kinds, kind) })} class={chip(filters.kinds.includes(kind))}>
-				{kind}
-			</a>
-		{/each}
-	</div>
-	<div class="flex flex-wrap items-center gap-1.5">
-		<span class="text-muted-foreground w-14 text-xs">State</span>
-		{#each STATES as state (state)}
-			<a
-				href={link({ states: toggle(filters.states, state) })}
-				class={chip(filters.states.includes(state))}
-			>
-				{state}
-			</a>
-		{/each}
-	</div>
-	<div class="flex flex-wrap items-center gap-1.5">
-		<span class="text-muted-foreground w-14 text-xs">Source</span>
-		{#each data.sources as source (source.id)}
-			<a
-				href={link({ sources: toggle(filters.sources, source.name) })}
-				class={chip(filters.sources.includes(source.name))}
-				title={source.type}
-			>
-				{source.name}
-			</a>
-		{/each}
-	</div>
-	<div class="flex flex-wrap items-center gap-3">
-		<span class="text-muted-foreground w-14 text-xs">Started</span>
-		<div class="flex flex-wrap gap-1.5">
-			{#each Object.keys(WINDOWS) as window (window)}
-				<a href={link({ window: window as Window })} class={chip(filters.window === window)}>
-					{window === 'all' ? 'any time' : `last ${window}`}
+	<!-- The filter bar: kinds first, Backup on by default (decision 3). -->
+	<div class="bg-card mt-4 space-y-3 rounded-xl border p-3">
+		<div class="flex flex-wrap items-center gap-1.5">
+			<span class="text-muted-foreground w-14 text-xs">Kind</span>
+			<a href={link({ kinds: [] })} class={chip(filters.kinds.length === 0)}>all</a>
+			{#each KINDS as kind (kind)}
+				<a href={link({ kinds: toggle(filters.kinds, kind) })} class={chip(filters.kinds.includes(kind))}>
+					{kind}
 				</a>
 			{/each}
-			<a
-				href={link({ active: filters.active === true ? null : true })}
-				class={chip(filters.active === true)}
-			>
-				running now
-			</a>
 		</div>
-		<form class="ml-auto flex items-center gap-1.5" onsubmit={search}>
-			<Search class="text-muted-foreground size-4" />
-			<input
-				bind:value={asset}
-				placeholder="Asset name"
-				class="bg-background h-8 w-44 rounded-md border px-2 text-sm"
-				aria-label="Search by asset name"
-			/>
-		</form>
+		<div class="flex flex-wrap items-center gap-1.5">
+			<span class="text-muted-foreground w-14 text-xs">State</span>
+			{#each STATES as state (state)}
+				<a
+					href={link({ states: toggle(filters.states, state) })}
+					class={chip(filters.states.includes(state))}
+				>
+					{state}
+				</a>
+			{/each}
+		</div>
+		<div class="flex flex-wrap items-center gap-1.5">
+			<span class="text-muted-foreground w-14 text-xs">Source</span>
+			{#each data.sources as source (source.id)}
+				<a
+					href={link({ sources: toggle(filters.sources, source.name) })}
+					class={chip(filters.sources.includes(source.name))}
+					title={source.type}
+				>
+					{source.name}
+				</a>
+			{/each}
+		</div>
+		<div class="flex flex-wrap items-center gap-3">
+			<span class="text-muted-foreground w-14 text-xs">Started</span>
+			<div class="flex flex-wrap gap-1.5">
+				{#each Object.keys(WINDOWS) as window (window)}
+					<a href={link({ window: window as Window })} class={chip(filters.window === window)}>
+						{window === 'all' ? 'any time' : `last ${window}`}
+					</a>
+				{/each}
+				<a
+					href={link({ active: filters.active === true ? null : true })}
+					class={chip(filters.active === true)}
+				>
+					running now
+				</a>
+			</div>
+			<form class="ml-auto flex items-center gap-1.5" onsubmit={search}>
+				<Search class="text-muted-foreground size-4" />
+				<input
+					bind:value={asset}
+					placeholder="Asset name"
+					class="bg-background h-8 w-44 rounded-md border px-2 text-sm"
+					aria-label="Search by asset name"
+				/>
+			</form>
+		</div>
+		{#if filters.protection}
+			<p class="text-sm">
+				Protection <strong>{filters.protection}</strong>
+				<a href={link({ protection: '' })} class="text-muted-foreground ml-1 underline">clear</a>
+			</p>
+		{/if}
 	</div>
-	{#if filters.protection}
-		<p class="text-sm">
-			Protection <strong>{filters.protection}</strong>
-			<a href={link({ protection: '' })} class="text-muted-foreground ml-1 underline">clear</a>
-		</p>
-	{/if}
 </div>
 
 {#if data.grouped}

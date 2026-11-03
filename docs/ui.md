@@ -14,7 +14,7 @@ section 4.
 | Framework | SvelteKit 2 with Svelte 5, TypeScript, Tailwind 4, its Node server (adapter-node) - continuing what bartman_v2 started. |
 | Talking to the API | Only from the UI's server side. The browser never sees the API key or, later, a user's token. |
 | Sign-in | **Not yet - the places are built, the locks are not fitted** (the owner: "build the spots where the padlocks can be added but don't add them yet"). One function says who is asking (today always the lab user, every role); every page and menu item already asks it. Zitadel comes nearer a true proof of concept. |
-| Filters | In the URL, so views are links. Default: backups, last 24 h (common-jobs decision 3). |
+| Filters | In the URL, so views are links. Default: backups, last 24 h (common-jobs decision 3). On wider screens the filter bar stays pinned at the top while the list scrolls; the pin button lets it scroll away, remembered per browser. |
 
 ## Libraries
 
