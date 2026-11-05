@@ -71,6 +71,7 @@ from .models import CollectionRun, Commcell, InstanceBackupReport, Job, SourceOb
 from .rubrik import rubrik_router
 from .settings import ApiSettings
 from .sources import ensure_source, sources_router
+from .storage import storage_ingest_router, storage_router
 
 # Runs that collect "now": the ones a watermark can be taken from. A
 # backfill run started at noon says nothing about what happened up to
@@ -802,7 +803,17 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     v1 = APIRouter(prefix=API_V1)
     v1.include_router(sources_router(get_session, require_api_key))
     v1.include_router(jobs_router(get_session, require_api_key))
+    v1.include_router(storage_router(get_session, require_api_key))
     v1.include_router(router, prefix="/sources/commvault/{source_name}")
+    v1.include_router(
+        storage_ingest_router("commvault", get_session, require_api_key),
+        prefix="/sources/commvault/{source_name}",
+    )
     v1.include_router(rubrik, prefix="/sources/rubrik/{source_name}")
+    # NetBackup: storage only, so far.
+    v1.include_router(
+        storage_ingest_router("netbackup", get_session, require_api_key),
+        prefix="/sources/netbackup/{source_name}",
+    )
     app.include_router(v1)
     return app

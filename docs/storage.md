@@ -1,0 +1,106 @@
+# Storage monitoring
+
+**Status: Commvault and NetBackup built 2026-11-05; Rubrik and Veeam
+next.** Step 2 of [roadmap-2026-11.md](roadmap-2026-11.md): what each
+source writes its backups to, how full it is, every hour, with trends.
+The **Storage** page in the side panel.
+
+## Data
+
+Two tables in the `common` schema, product-neutral like `common.job`
+([common-jobs.md](common-jobs.md)):
+
+| Table | One row per | |
+|---|---|---|
+| `common.storage` | storage target of a source | name, kind, the product's word for its type, `hosts` (MediaAgents / media servers that write to it), `server` (storage server or library), status, `attributes`, `present`, first and last seen |
+| `common.storage_sample` | target per collection | `capacity_bytes`, `used_bytes`, `free_bytes`, `logical_bytes` (before dedupe), `physical_bytes` (on disk), `dedupe_ratio` |
+
+Kinds: `disk`, `dedupe`, `cloud`, `tape`, `cluster`, `other`. Sizes are
+always bytes, whatever unit the product reports in. A target that
+several MediaAgents share is **one** target with several hosts, so totals
+count it once; grouped by host, the page lists it under each.
+
+A few hundred targets sampled hourly is about two million rows a year;
+nothing is pruned yet.
+
+## API
+
+| | |
+|---|---|
+| `POST /v1/sources/{type}/{name}/storage` | the collector's: one collection, every target with its numbers. `complete` (default) marks targets no longer listed as not present - their samples stay. The same `collected_at` twice stores one sample. |
+| `GET /v1/storage` | every target with its latest sample and **trend**: least-squares growth of used bytes over the last 14 days (once there are 6 hours of samples), and at that rate days until free space runs out. |
+| `GET /v1/storage/{id}` | one target, present or not. |
+| `GET /v1/storage/{id}/samples` | its history, oldest first; `every=day` keeps the last sample of each day for long ranges. |
+
+## Commvault
+
+CommServe -> MediaAgent -> storage pool. `blt-collect-storage/hourly`
+(:27 past each hour) starts `blt-storage-commcell/per-commcell` for each
+CommCell block, with the same token, lock and concurrency slot as job
+collection (`src/blt/storage/commvault.py`):
+
+| What | From |
+|---|---|
+| capacity, free, size on disk (MB) | `GET /StoragePool` - every pool of every type |
+| kind | `/V4/Storage/Disk`, `/Cloud`, `/Tape`, `/Local` (`DEDUPLICATION` -> dedupe) |
+| hosts | `GET /V4/mediaAgent`, then each one's `/Associations` |
+| dedupe savings, mount paths, plans | `GET /V4/Storage/Disk/{id}` (disk pools) |
+
+Commvault gives dedupe *savings* (86.91 %); the ratio is
+`100 / (100 - savings)` and logical bytes are size on disk times that.
+Capacity Commvault does not know (`-1`, cloud) is left empty.
+
+On cv-toaster: one dedupe pool on the CommServe's own MediaAgent, 1 TiB,
+22.5 GiB on disk holding about 180 GiB (7.64:1).
+
+## NetBackup
+
+primary -> media server -> storage server -> disk pool -> storage unit.
+NetBackup is a source in blt for storage only so far (jobs come later):
+one Prefect block per primary, of type **blt NetBackup primary** - the
+address, an API key, and the primary's CA certificate when it is not
+publicly signed. `blt-netbackup-collect-storage/hourly` (:27) starts
+`blt-netbackup-storage-primary/per-primary` for each
+(`src/blt/storage/netbackup.py`):
+
+| What | From |
+|---|---|
+| capacity, free, used (bytes), storage server, volumes, water marks | `GET /storage/disk-pools` |
+| media servers, cloud or not | `GET /storage/storage-units` that write to the pool |
+
+- The **disk pool** is the target: it has the capacity, and its storage
+  units are views onto it. A disk storage unit with no pool (BasicDisk)
+  is a target of its own; tape units are left out for now.
+- Kinds: MSDP and Data Domain are `dedupe`; MSDP on cloud storage is
+  `cloud`, typed `MSDP-C`; AdvancedDisk and BasicDisk are `disk`.
+- NetBackup reports storage with no fixed size (an MSDP cloud volume) as
+  2^53 bytes: kept as no capacity, with its used bytes.
+
+On eth00bck01: an MSDP pool of 7.6 TiB with 65 GiB used, and an MSDP-C
+pool on S3 with 6.75 GiB used.
+
+Adding a primary (the key from the environment, never the command line):
+
+```
+export NBU_API_KEY=...            # an API key for a user that may read storage
+blt-netbackup add eth00bck01 --url https://eth00bck01:1556/netbackup --ca config/eth00bck01-ca.pem
+blt-netbackup show
+blt-netbackup storage eth00bck01  # one collection now, from this host
+```
+
+## The page
+
+- Totals, and how many targets need attention: **Nearly full** at 95 %
+  used or full within 14 days at its rate, **Filling** at 85 % or within
+  60 days. Shown with an icon and the word, never colour alone.
+- Grouped by source, by MediaAgent / media server, or by kind.
+- Each target: used over time (7 days to a year) with capacity as a
+  dashed line, a readout on hover, the samples as a table, its mount
+  paths.
+
+## Next
+
+- NetBackup MSDP dedupe ratio (not in the disk pool answer), tape.
+- Commvault mount paths as their own rows, once a call gives their
+  capacity (`/Library/{id}` reports zeros on SP46).
+- Rubrik clusters, Veeam repositories.

@@ -4,6 +4,12 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+	/* Storage charts and meters (dataviz reference palette, blue ramp). */
+	--meter-fill: #2a78d6;
+	--meter-track: #cde2fb;
+	--chart-line: #2a78d6;
+	--chart-area: rgb(42 120 214 / 12%);
+	--chart-reference: #52514e;
 	--radius: 0.625rem;
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.145 0 0);
@@ -24,6 +30,11 @@
 }
 
 .dark {
+	--meter-fill: #3987e5;
+	--meter-track: #184f95;
+	--chart-line: #3987e5;
+	--chart-area: rgb(57 135 229 / 16%);
+	--chart-reference: #c3c2b7;
 	--background: oklch(0.145 0 0);
 	--foreground: oklch(0.985 0 0);
 	--card: oklch(0.205 0 0);

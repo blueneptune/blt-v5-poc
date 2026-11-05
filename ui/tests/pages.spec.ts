@@ -157,6 +157,45 @@ test('sources: each source with its week', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'rsc-work' })).toBeVisible();
 });
 
+test('storage: totals, each target with how full it is', async ({ page }) => {
+	await page.goto('/storage');
+	await expect(page.getByRole('heading', { name: 'Storage', exact: true })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Storage' })).toHaveAttribute('aria-current', 'page');
+	await expect(page.getByText('Need attention')).toBeVisible();
+	await expect(page.getByRole('meter', { name: /97% used, Nearly full/ })).toBeVisible();
+	await expect(page.getByRole('meter', { name: /capacity unknown/ })).toBeVisible();
+	await expect(page.getByRole('row', { name: /pool-steady/ })).toContainText('26 days');
+});
+
+test('storage: by MediaAgent, a shared pool is under each', async ({ page }) => {
+	await page.goto('/storage');
+	await page.getByRole('link', { name: 'MediaAgent / media server' }).click();
+	await expect(page).toHaveURL(/by=host/);
+	await expect(page.getByRole('heading', { name: 'ma01' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'pool-steady' })).toHaveCount(2);
+});
+
+test('a storage target: its use over time, with a readout', async ({ page }) => {
+	await page.goto('/storage');
+	await page.getByRole('link', { name: 'pool-steady' }).click();
+	await expect(page.getByRole('heading', { name: 'pool-steady' })).toBeVisible();
+	await expect(page.getByText('7.64:1')).toBeVisible();
+	const chart = page.getByRole('img', { name: 'Used space over time' });
+	await expect(chart).toBeVisible();
+	const box = (await chart.boundingBox())!;
+	await page.mouse.move(box.x + box.width * 0.9, box.y + box.height / 2);
+	await expect(page.getByText(/capacity$/).first()).toBeVisible();
+	await expect(page.getByText('mount-01')).toBeVisible();
+});
+
+test('a storage target that does not exist is a 404 page', async ({ page, errors }) => {
+	const response = await page.goto('/storage/00000000-0000-4000-8000-00000000ffff');
+	expect(response?.status()).toBe(404);
+	await expect(page.getByText('No such storage target')).toBeVisible();
+	// the browser logs the 404 itself
+	errors.length = 0;
+});
+
 test('light and dark both render', async ({ page }) => {
 	await page.emulateMedia({ colorScheme: 'dark' });
 	await page.goto('/jobs');

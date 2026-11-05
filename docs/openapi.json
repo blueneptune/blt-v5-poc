@@ -695,6 +695,309 @@
         }
       }
     },
+    "/v1/storage": {
+      "get": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "Every storage target, with its latest use and trend",
+        "description": "Each target with its newest sample and, once there are enough\nhours of samples, how fast it is filling and when it would be\nfull at that rate.",
+        "operationId": "list_storage_v1_storage_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this product's.",
+              "title": "Source Type"
+            },
+            "description": "Only this product's."
+          },
+          {
+            "name": "source_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this source's.",
+              "title": "Source Name"
+            },
+            "description": "Only this source's."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this kind.",
+              "title": "Kind"
+            },
+            "description": "Only this kind."
+          },
+          {
+            "name": "present",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True (default): only targets still listed.",
+              "default": true,
+              "title": "Present"
+            },
+            "description": "True (default): only targets still listed."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StorageOut"
+                  },
+                  "title": "Response List Storage V1 Storage Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/storage/{storage_id}": {
+      "get": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "One storage target",
+        "description": "The target, present or not, with its latest sample and trend.",
+        "operationId": "get_storage_v1_storage__storage_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "blt's id for the target (`GET /v1/storage`).",
+              "title": "Storage Id"
+            },
+            "description": "blt's id for the target (`GET /v1/storage`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown storage target",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/storage/{storage_id}/samples": {
+      "get": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "One target's use over time",
+        "description": "Oldest first. `every=day` gives one sample a day (the last of\nit), for long ranges.",
+        "operationId": "list_samples_v1_storage__storage_id__samples_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "blt's id for the target (`GET /v1/storage`).",
+              "title": "Storage Id"
+            },
+            "description": "blt's id for the target (`GET /v1/storage`)."
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 3660,
+              "exclusiveMinimum": 0,
+              "description": "How far back.",
+              "default": 30,
+              "title": "Days"
+            },
+            "description": "How far back."
+          },
+          {
+            "name": "every",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "sample",
+                "hour",
+                "day"
+              ],
+              "type": "string",
+              "description": "Each sample as stored, or the last of each hour or day.",
+              "default": "sample",
+              "title": "Every"
+            },
+            "description": "Each sample as stored, or the last of each hour or day."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SampleOut"
+                  },
+                  "title": "Response List Samples V1 Storage  Storage Id  Samples Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown storage target",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/commvault/{source_name}/last-run": {
       "get": {
         "tags": [
@@ -1869,6 +2172,79 @@
         }
       }
     },
+    "/v1/sources/commvault/{source_name}/storage": {
+      "post": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "Store one collection of storage",
+        "description": "Every storage target the collector read from the source, each\nwith its capacity and use at `collected_at`. A target is matched\nby `product_key`; one not seen before is added. With `complete`\n(the default), targets the source no longer lists are marked not\npresent - their samples stay.",
+        "operationId": "post_storage_v1_sources_commvault__source_name__storage_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the source - its Prefect block's name. Made the first time storage is posted for it.",
+              "examples": [
+                "cv-toaster"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the source - its Prefect block's name. Made the first time storage is posted for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageWritten"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/rubrik/{source_name}/last-run": {
       "get": {
         "tags": [
@@ -2727,6 +3103,79 @@
           },
           "404": {
             "description": "Unknown account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources/netbackup/{source_name}/storage": {
+      "post": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "Store one collection of storage",
+        "description": "Every storage target the collector read from the source, each\nwith its capacity and use at `collected_at`. A target is matched\nby `product_key`; one not seen before is added. With `complete`\n(the default), targets the source no longer lists are marked not\npresent - their samples stay.",
+        "operationId": "post_storage_v1_sources_netbackup__source_name__storage_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the source - its Prefect block's name. Made the first time storage is posted for it.",
+              "examples": [
+                "cv-toaster"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the source - its Prefect block's name. Made the first time storage is posted for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageWritten"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6679,6 +7128,94 @@
           }
         ]
       },
+      "SampleOut": {
+        "properties": {
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When the source was read."
+          },
+          "capacity_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Bytes",
+            "description": "Total size."
+          },
+          "used_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Bytes",
+            "description": "In use."
+          },
+          "free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Bytes",
+            "description": "Free to write."
+          },
+          "logical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Bytes",
+            "description": "Data held, before deduplication and compression."
+          },
+          "physical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Bytes",
+            "description": "What that data takes on disk."
+          },
+          "dedupe_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedupe Ratio",
+            "description": "logical / physical, where the product says."
+          }
+        },
+        "type": "object",
+        "required": [
+          "collected_at"
+        ],
+        "title": "SampleOut",
+        "description": "A target's capacity and use at one moment."
+      },
       "SourceOut": {
         "properties": {
           "id": {
@@ -6719,6 +7256,401 @@
         ],
         "title": "SourceOut",
         "description": "A source blt collects from."
+      },
+      "StorageBatch": {
+        "properties": {
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When the source was read."
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete",
+            "description": "The batch is all of the source's storage: targets it leaves out are marked not present. False for a partial read.",
+            "default": true
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/StorageIn"
+            },
+            "type": "array",
+            "title": "Targets",
+            "description": "The targets, each as it was at collected_at."
+          }
+        },
+        "type": "object",
+        "required": [
+          "collected_at",
+          "targets"
+        ],
+        "title": "StorageBatch",
+        "description": "One collection of a source's storage.",
+        "examples": [
+          {
+            "collected_at": "2026-11-05T14:27:00Z",
+            "targets": [
+              {
+                "capacity_bytes": 1099509530624,
+                "free_bytes": 1075347718144,
+                "hosts": [
+                  "ma01"
+                ],
+                "kind": "dedupe",
+                "name": "pool-01",
+                "product_key": "2",
+                "product_type": "DEDUPLICATION",
+                "status": "Online"
+              }
+            ]
+          }
+        ]
+      },
+      "StorageIn": {
+        "properties": {
+          "product_key": {
+            "type": "string",
+            "title": "Product Key",
+            "description": "The product's own stable id for it, unique within the source."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name, as the product shows it."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "disk",
+              "dedupe",
+              "cloud",
+              "tape",
+              "cluster",
+              "other"
+            ],
+            "title": "Kind",
+            "description": "disk (plain), dedupe, cloud (object storage), tape, cluster or other."
+          },
+          "product_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Type",
+            "description": "The product's own word for its type: DEDUPLICATION, MSDP, AdvancedDisk, ..."
+          },
+          "hosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hosts",
+            "description": "The MediaAgents or media servers that write to it."
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server",
+            "description": "What it sits on: the NetBackup storage server, the Commvault library."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "Its status, in the product's words."
+          },
+          "capacity_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Bytes",
+            "description": "Total size."
+          },
+          "used_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Used Bytes",
+            "description": "In use. Left out: capacity less free."
+          },
+          "free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Free Bytes",
+            "description": "Free to write."
+          },
+          "logical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Bytes",
+            "description": "Data held, before deduplication and compression."
+          },
+          "physical_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Physical Bytes",
+            "description": "What that data takes on disk."
+          },
+          "dedupe_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedupe Ratio",
+            "description": "Deduplication ratio (logical / physical), where given."
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes",
+            "description": "Whatever else the product says about it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_key",
+          "name",
+          "kind"
+        ],
+        "title": "StorageIn",
+        "description": "One storage target as the collector read it: what it is, and how\nfull it is now. Sizes in bytes, whatever unit the product used."
+      },
+      "StorageOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "blt's id for the target."
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id",
+            "description": "The source's id (`GET /v1/sources`)."
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "description": "The product.",
+            "examples": [
+              "commvault"
+            ]
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name",
+            "description": "blt's name for the source."
+          },
+          "product_key": {
+            "type": "string",
+            "title": "Product Key",
+            "description": "The product's own id for it, as text."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name, as the product shows it."
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "disk, dedupe, cloud, tape, cluster or other."
+          },
+          "product_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Type",
+            "description": "The product's own word for its type.",
+            "examples": [
+              "DEDUPLICATION",
+              "MSDP",
+              "AdvancedDisk"
+            ]
+          },
+          "hosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hosts",
+            "description": "MediaAgents / media servers that write to it."
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server",
+            "description": "Storage server (NetBackup) or library (Commvault)."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "As the product words it."
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "description": "False once a collection no longer lists it."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When blt first saw it."
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At",
+            "description": "When a collection last listed it."
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes",
+            "description": "Whatever else the product says."
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest sample."
+          },
+          "trend": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Trend"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "From the last 14 days; none with under 6 hours."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "source_type",
+          "source_name",
+          "product_key",
+          "name",
+          "kind",
+          "hosts",
+          "present",
+          "first_seen_at",
+          "last_seen_at",
+          "attributes"
+        ],
+        "title": "StorageOut",
+        "description": "A storage target, with its latest sample and trend."
+      },
+      "StorageWritten": {
+        "properties": {
+          "received": {
+            "type": "integer",
+            "title": "Received",
+            "description": "Targets in the batch."
+          },
+          "new": {
+            "type": "integer",
+            "title": "New",
+            "description": "Of those, seen for the first time."
+          },
+          "samples": {
+            "type": "integer",
+            "title": "Samples",
+            "description": "Samples stored (a target already sampled at this collected_at is skipped)."
+          },
+          "gone": {
+            "type": "integer",
+            "title": "Gone",
+            "description": "Targets of the source this complete batch no longer lists, now not present."
+          }
+        },
+        "type": "object",
+        "required": [
+          "received",
+          "new",
+          "samples",
+          "gone"
+        ],
+        "title": "StorageWritten",
+        "description": "What a storage batch did."
       },
       "SummaryRow": {
         "properties": {
@@ -6810,6 +7742,52 @@
         ],
         "title": "SummaryRow",
         "description": "How many jobs of one group ended up in each state."
+      },
+      "Trend": {
+        "properties": {
+          "days": {
+            "type": "number",
+            "title": "Days",
+            "description": "How many days of samples the trend is from."
+          },
+          "used_bytes_per_day": {
+            "type": "number",
+            "title": "Used Bytes Per Day",
+            "description": "Growth of used bytes per day (negative when shrinking)."
+          },
+          "days_to_full": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days To Full",
+            "description": "At that rate, days until free space runs out. None when not growing."
+          },
+          "full_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full At",
+            "description": "When that would be."
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "used_bytes_per_day"
+        ],
+        "title": "Trend",
+        "description": "How fast use is growing, from the samples of the last days."
       },
       "UpsertResult": {
         "properties": {

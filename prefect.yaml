@@ -77,6 +77,39 @@ deployments:
     work_pool:
       name: blt
 
+  # Storage: every CommCell's pools hourly, at :27 - between Commvault's
+  # jobs (:07) and Rubrik's (:17) runs finishing and the next hour's.
+  - name: hourly
+    description: Storage pools, capacity and use, from every CommCell block (docs/storage.md).
+    entrypoint: blt.flows.flows:collect_storage
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "27 * * * *"
+        timezone: UTC
+
+  - name: per-commcell
+    description: Storage from one CommCell. Started by blt-collect-storage/hourly.
+    entrypoint: blt.flows.flows:storage_commcell
+    work_pool:
+      name: blt
+
+  # NetBackup: every primary block's storage hourly, with Commvault's.
+  - name: hourly
+    description: Storage (disk pools, capacity and use) from every NetBackup primary block.
+    entrypoint: blt.flows.netbackup:netbackup_collect_storage
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "27 * * * *"
+        timezone: UTC
+
+  - name: per-primary
+    description: Storage from one NetBackup primary. Started by blt-netbackup-collect-storage/hourly.
+    entrypoint: blt.flows.netbackup:netbackup_storage_primary
+    work_pool:
+      name: blt
+
   - name: by-hand
     description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
     entrypoint: blt.flows.flows:backfill

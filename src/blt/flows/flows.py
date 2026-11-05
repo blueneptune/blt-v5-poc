@@ -11,6 +11,8 @@ log. Settings and credentials come from blocks (blocks.py) instead of
                      (collect.sh <commcell> --inventory). Twice a day.
 - backfill         - one CommCell's older history (--backfill). By hand;
                      once a CommCell's history is in, it is not needed.
+- collect_storage  - every CommCell: storage pools, capacity and use
+                     (docs/storage.md). Hourly.
 
 The "every CommCell" flows start one flow run per CommCell, all at once,
 through the per-commcell deployments: each runs in its own process (a
@@ -46,6 +48,8 @@ from blt.collector.lock import run_lock
 from blt.collector.settings import CollectorSettings
 from blt.collector.source import CommvaultJobs
 from blt.collector.store import BltStore
+from blt.storage.collect import collect_commvault_storage
+from blt.storage.store import StorageStore
 
 from .blocks import BLOCK_TYPE_SLUG, BlockTokenStore, settings_from_blocks
 
@@ -55,7 +59,9 @@ LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
 SLOTS = "blt-commcell-runs"
 COLLECT_ONE = "blt-collect-commcell/per-commcell"
 INVENTORY_ONE = "blt-inventory-commcell/per-commcell"
-Kind = Literal["collection", "inventory", "backfill"]
+STORAGE_ONE = "blt-storage-commcell/per-commcell"
+_RUN_LABELS = {COLLECT_ONE: "collect", INVENTORY_ONE: "inventory", STORAGE_ONE: "storage"}
+Kind = Literal["collection", "inventory", "backfill", "storage"]
 
 
 @contextmanager
@@ -98,6 +104,15 @@ def _with_commcell(
 ) -> str:
     """Load the CommCell's blocks, take the same per-CommCell lock
     collect.sh takes, connect, and run `work`."""
+    return _with_commcell_api(
+        commcell, kind, lambda settings, api, cv: work(settings, BltStore(api, commcell), cv)
+    )
+
+
+def _with_commcell_api(
+    commcell: str, kind: Kind, work: Callable[[CollectorSettings, APIClient, CommvaultClient], str]
+) -> str:
+    """_with_commcell, handing `work` the blt API client itself."""
     # A slot first (waiting for one if every slot is taken), then the
     # per-CommCell lock. Without the limit defined, nothing is capped.
     with logs_to_prefect(), concurrency(SLOTS, occupy=1, strict=False):
@@ -108,7 +123,7 @@ def _with_commcell(
             settings, token_block = settings_from_blocks(commcell)
             commvault = build_client(settings, commcell, BlockTokenStore(token_block))
             with commvault, _blt_api(settings) as api:
-                return work(settings, BltStore(api, commcell), commvault)
+                return work(settings, api, commvault)
 
 
 @flow(
@@ -148,13 +163,29 @@ def inventory_commcell(commcell: str) -> str:
     return _with_commcell(commcell, "inventory", work)
 
 
+@flow(
+    name="blt-storage-commcell",
+    flow_run_name="storage-{commcell}",
+    retries=1,
+    retry_delay_seconds=120,
+)
+def storage_commcell(commcell: str) -> str:
+    """One CommCell's storage pools, with capacity and use, posted as one
+    sample each (docs/storage.md)."""
+
+    def work(settings: CollectorSettings, api: APIClient, cv: CommvaultClient) -> str:
+        return collect_commvault_storage(cv, StorageStore(api, "commvault", commcell))
+
+    return _with_commcell_api(commcell, "storage", work)
+
+
 StartRun = Callable[[str, str], str]
 ReadState = Callable[[str], State]
 
 
 def _start_run(deployment: str, commcell: str) -> str:
     """Start one CommCell's flow run and return its id, without waiting."""
-    label = "collect" if deployment == COLLECT_ONE else "inventory"
+    label = _RUN_LABELS[deployment]
     # run_deployment is typed as possibly a coroutine; called from sync
     # code it is not.
     run = cast(
@@ -255,6 +286,13 @@ def collect_inventory(
     """Collect inventory from every CommCell block (or the ones named),
     all at once, each in its own flow run."""
     return fan_out(commcells, INVENTORY_ONE, "collect inventory", wait_minutes=wait_minutes)
+
+
+@flow(name="blt-collect-storage")
+def collect_storage(commcells: list[str] | None = None, wait_minutes: float = 30) -> dict[str, str]:
+    """Storage from every CommCell block (or the ones named), all at once,
+    each in its own flow run."""
+    return fan_out(commcells, STORAGE_ONE, "collect storage", wait_minutes=wait_minutes)
 
 
 @flow(name="blt-backfill", flow_run_name="backfill-{commcell}")
