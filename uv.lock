@@ -287,15 +287,15 @@ dev = [
 requires-dist = [
     { name = "alembic", marker = "extra == 'api'", specifier = ">=1.14" },
     { name = "blt", extras = ["collector"], marker = "extra == 'prefect'" },
-    { name = "commvault-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.3.1" },
+    { name = "commvault-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.3.2" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.4" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "rubrik-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.3.0" },
-    { name = "sdk-primer", marker = "extra == 'collector'", git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.1.2" },
+    { name = "rubrik-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.3.1" },
+    { name = "sdk-primer", marker = "extra == 'collector'", git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.2.0" },
     { name = "sqlmodel", marker = "extra == 'api'", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.34" },
 ]
@@ -589,8 +589,8 @@ wheels = [
 
 [[package]]
 name = "commvault-sdk"
-version = "0.3.1"
-source = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.3.1#e2b9b8dfa152a5149c91a35eefafc1962b36a79d" }
+version = "0.3.2"
+source = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.3.2#8b2b2a9ea76706bbe16789ea62452d6de0f56ea3" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
@@ -2442,8 +2442,8 @@ wheels = [
 
 [[package]]
 name = "rubrik-sdk"
-version = "0.3.0"
-source = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.3.0#f32267baeae4c2c33e0234780a9a2307b4f7aa59" }
+version = "0.3.1"
+source = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.3.1#68985a1716207a01584ae6bff0f7c1e3c13ae0a8" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
@@ -2478,8 +2478,8 @@ wheels = [
 
 [[package]]
 name = "sdk-primer"
-version = "0.1.2"
-source = { git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.1.2#3aabb854478be2564cd8920609978f12f3f84960" }
+version = "0.2.0"
+source = { git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.2.0#8a98dfa8aad7a3a1539d52321e637f2c6a353ed6" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
