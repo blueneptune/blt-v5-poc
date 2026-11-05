@@ -1,0 +1,92 @@
+/**
+ * A stand-in for blt's API, for the page tests: the few /v1 calls the UI
+ * makes, answered from made-up jobs. The UI calls the API from its server
+ * side, so the browser cannot mock it; this runs as a real server instead.
+ *
+ * Typed from the same docs/openapi.json as the UI (src/lib/api/schema.d.ts),
+ * so when the API's answers change shape, `npm run check` fails here until
+ * the fake follows.
+ *
+ *   node tests/fake-api.ts          (FAKE_API_PORT, default 4199)
+ */
+import { createServer, type ServerResponse } from 'node:http';
+import type { components } from '../src/lib/api/schema';
+import { API_KEY, JOBS, SOURCES, type Job } from './fixtures.ts';
+
+type JobDetail = components['schemas']['CommonJobDetail'];
+type SummaryRow = components['schemas']['SummaryRow'];
+
+const PORT = Number(process.env.FAKE_API_PORT ?? 4199);
+
+function matches(job: Job, q: URLSearchParams): boolean {
+	const any = (name: string, value: string | null | undefined) => {
+		const wanted = q.getAll(name);
+		return wanted.length === 0 || wanted.includes(value ?? '');
+	};
+	const since = q.get('since');
+	const until = q.get('until');
+	const active = q.get('active');
+	const asset = q.get('asset')?.toLowerCase();
+	return (
+		any('kind', job.kind) &&
+		any('state', job.state) &&
+		any('source_type', job.source_type) &&
+		any('source', job.source_name) &&
+		any('protection', job.protection) &&
+		(active === null || String(job.is_active) === active) &&
+		(!since || (job.started_at ?? '') >= since) &&
+		(!until || (job.started_at ?? '') < until) &&
+		(!asset || (job.asset_name ?? '').toLowerCase().includes(asset))
+	);
+}
+
+function summary(jobs: Job[], groups: string[]): SummaryRow[] {
+	const rows = new Map<string, SummaryRow>();
+	for (const job of jobs) {
+		const row: SummaryRow = { total: 0, states: {} };
+		if (groups.includes('day')) row.day = job.started_at?.slice(0, 10) ?? null;
+		if (groups.includes('source')) {
+			row.source_type = job.source_type;
+			row.source_name = job.source_name;
+		}
+		if (groups.includes('kind')) row.kind = job.kind;
+		if (groups.includes('protection')) row.protection = job.protection;
+		const key = JSON.stringify(row);
+		const found = rows.get(key) ?? row;
+		found.total += 1;
+		found.states[job.state] = (found.states[job.state] ?? 0) + 1;
+		rows.set(key, found);
+	}
+	return [...rows.values()];
+}
+
+function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
+	res.writeHead(status, { 'content-type': 'application/json', ...headers });
+	res.end(JSON.stringify(body));
+}
+
+createServer((req, res) => {
+	const url = new URL(req.url ?? '/', 'http://fake');
+	if (req.headers['x-api-key'] !== API_KEY) return send(res, 401, { detail: 'Invalid API key' });
+	const q = url.searchParams;
+	const path = url.pathname;
+
+	if (path === '/v1/sources') return send(res, 200, SOURCES);
+	if (path === '/v1/jobs/summary') return send(res, 200, summary(JOBS.filter((j) => matches(j, q)), q.getAll('group')));
+	if (path === '/v1/jobs') {
+		const found = JOBS.filter((j) => matches(j, q));
+		const offset = Number(q.get('offset') ?? 0);
+		const limit = Number(q.get('limit') ?? 100);
+		return send(res, 200, found.slice(offset, offset + limit), {
+			'X-Total-Count': String(found.length)
+		});
+	}
+	const one = path.match(/^\/v1\/jobs\/([0-9a-f-]{36})$/);
+	if (one) {
+		const job = JOBS.find((j) => j.id === one[1]);
+		if (!job) return send(res, 404, { detail: 'No such job' });
+		const detail: JobDetail = { ...job, product: { jobId: Number(job.product_job_key), status: job.product_status } };
+		return send(res, 200, detail);
+	}
+	send(res, 404, { detail: 'Not Found' });
+}).listen(PORT, '127.0.0.1', () => console.log(`fake blt API on http://127.0.0.1:${PORT}`));

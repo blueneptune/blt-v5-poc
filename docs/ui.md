@@ -20,8 +20,20 @@ section 4.
 
 In use: `openapi-typescript` + `openapi-fetch` (typed API calls),
 `@lucide/svelte` (icons), `mode-watcher` (light/dark), Vitest, Playwright
-(screenshots so far; page tests to come). The card and button components
+(page tests, below). The card and button components
 are bartman_v2's shadcn-style ones.
+
+**Page tests.** `npm run test:pages` runs the production build (`node
+build`, as the container does) against `ui/tests/fake-api.ts`: a small
+Node server answering the four `/v1` calls the UI makes from 130 made-up
+jobs (`ui/tests/fixtures.ts`). The UI calls the API from its server side,
+so the browser cannot mock it; a real fake server can. The fake is typed
+from `src/lib/api/schema.d.ts`, so when the API's answers change shape,
+`npm run check` fails until it follows. Each test also fails on any
+browser error. They cover every page, the filters, paging, search, the
+pinned filter bar and headings at desktop, narrow and phone widths, and
+light and dark. On a CI failure the report, screenshots and traces are
+attached to the run as `playwright-report`.
 
 Planned, each when a page needs it - not before:
 
@@ -42,7 +54,8 @@ Planned, each when a page needs it - not before:
 3. **Jobs page, richer**: column chooser and product-specific columns
    (vision 4.4), sorting, the inventory row a job ran on, a "last run"
    per source on the overview (collection health).
-4. **Page tests** with Playwright against an API with known data, in CI.
+4. ~~**Page tests** with Playwright against an API with known data, in CI.~~
+   Done after 2026.11.03: `ui/tests/pages.spec.ts`, run by CI's `ui` job.
 5. **Sign-in** (Zitadel), roles, saved per-user filters, role-scoped kinds
    - nearer a true proof of concept.
 6. Data sources and work pools (vision 4.2, 4.3).

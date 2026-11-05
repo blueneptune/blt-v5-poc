@@ -10,6 +10,7 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"test": "vitest run",
+		"test:pages": "playwright test",
 		"api:types": "openapi-typescript ../docs/openapi.json -o src/lib/api/schema.d.ts",
 		"api:check": "openapi-typescript ../docs/openapi.json -o .svelte-kit/schema.check.d.ts && cmp -s .svelte-kit/schema.check.d.ts src/lib/api/schema.d.ts || (echo 'src/lib/api/schema.d.ts is stale: run npm run api:types' && exit 1)"
 	},
