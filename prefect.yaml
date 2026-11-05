@@ -94,6 +94,22 @@ deployments:
     work_pool:
       name: blt
 
+  # NetBackup: every primary block's storage hourly, with Commvault's.
+  - name: hourly
+    description: Storage (disk pools, capacity and use) from every NetBackup primary block.
+    entrypoint: blt.flows.netbackup:netbackup_collect_storage
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "27 * * * *"
+        timezone: UTC
+
+  - name: per-primary
+    description: Storage from one NetBackup primary. Started by blt-netbackup-collect-storage/hourly.
+    entrypoint: blt.flows.netbackup:netbackup_storage_primary
+    work_pool:
+      name: blt
+
   - name: by-hand
     description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
     entrypoint: blt.flows.flows:backfill

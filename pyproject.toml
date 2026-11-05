@@ -23,6 +23,7 @@ api = [
 ]
 collector = [
     "commvault-sdk",
+    "netbackup-sdk",
     "rubrik-sdk",
     "sdk-primer",
 ]
@@ -40,6 +41,7 @@ blt-lookup = "blt.collector.lookup:main"
 blt-prefect-import = "blt.flows.importer:main"
 blt-prefect-block = "blt.flows.manage:main"
 blt-rubrik = "blt.rubrik.cli:main"
+blt-netbackup = "blt.netbackup.cli:main"
 blt-openapi = "blt.api.openapi:main"
 
 [tool.uv.sources]
@@ -49,6 +51,8 @@ sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag =
 # a sibling checkout instead:
 #   commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
 commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.4.0" }
+# The NetBackup SDK (yoki-py-netbackup-sdk), pinned to a tag like the others.
+netbackup-sdk = { git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git", tag = "v0.2.0" }
 # The Rubrik SDK (yoki-py-rubrik-sdk), pinned to a tag like the others.
 rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", tag = "v0.3.1" }
 

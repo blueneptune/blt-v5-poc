@@ -1,7 +1,7 @@
 # Storage monitoring
 
-**Status: Commvault built 2026-11-05; NetBackup next, then Rubrik and
-Veeam.** Step 2 of [roadmap-2026-11.md](roadmap-2026-11.md): what each
+**Status: Commvault and NetBackup built 2026-11-05; Rubrik and Veeam
+next.** Step 2 of [roadmap-2026-11.md](roadmap-2026-11.md): what each
 source writes its backups to, how full it is, every hour, with trends.
 The **Storage** page in the side panel.
 
@@ -53,6 +53,41 @@ Capacity Commvault does not know (`-1`, cloud) is left empty.
 On cv-toaster: one dedupe pool on the CommServe's own MediaAgent, 1 TiB,
 22.5 GiB on disk holding about 180 GiB (7.64:1).
 
+## NetBackup
+
+primary -> media server -> storage server -> disk pool -> storage unit.
+NetBackup is a source in blt for storage only so far (jobs come later):
+one Prefect block per primary, of type **blt NetBackup primary** - the
+address, an API key, and the primary's CA certificate when it is not
+publicly signed. `blt-netbackup-collect-storage/hourly` (:27) starts
+`blt-netbackup-storage-primary/per-primary` for each
+(`src/blt/storage/netbackup.py`):
+
+| What | From |
+|---|---|
+| capacity, free, used (bytes), storage server, volumes, water marks | `GET /storage/disk-pools` |
+| media servers, cloud or not | `GET /storage/storage-units` that write to the pool |
+
+- The **disk pool** is the target: it has the capacity, and its storage
+  units are views onto it. A disk storage unit with no pool (BasicDisk)
+  is a target of its own; tape units are left out for now.
+- Kinds: MSDP and Data Domain are `dedupe`; MSDP on cloud storage is
+  `cloud`, typed `MSDP-C`; AdvancedDisk and BasicDisk are `disk`.
+- NetBackup reports storage with no fixed size (an MSDP cloud volume) as
+  2^53 bytes: kept as no capacity, with its used bytes.
+
+On eth00bck01: an MSDP pool of 7.6 TiB with 65 GiB used, and an MSDP-C
+pool on S3 with 6.75 GiB used.
+
+Adding a primary (the key from the environment, never the command line):
+
+```
+export NBU_API_KEY=...            # an API key for a user that may read storage
+blt-netbackup add eth00bck01 --url https://eth00bck01:1556/netbackup --ca config/eth00bck01-ca.pem
+blt-netbackup show
+blt-netbackup storage eth00bck01  # one collection now, from this host
+```
+
 ## The page
 
 - Totals, and how many targets need attention: **Nearly full** at 95 %
@@ -65,10 +100,7 @@ On cv-toaster: one dedupe pool on the CommServe's own MediaAgent, 1 TiB,
 
 ## Next
 
-- NetBackup: primary -> media server -> storage server -> disk pool
-  (AdvancedDisk, MSDP, BasicDisk, MSDP-C, Data Domain) -> storage unit,
-  from `/storage/disk-pools` and `/storage/storage-units`. Needs a
-  NetBackup source in blt (a Prefect block with the API key).
+- NetBackup MSDP dedupe ratio (not in the disk pool answer), tape.
 - Commvault mount paths as their own rows, once a call gives their
   capacity (`/Library/{id}` reports zeros on SP46).
 - Rubrik clusters, Veeam repositories.

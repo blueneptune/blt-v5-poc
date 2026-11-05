@@ -49,6 +49,8 @@ def test_every_deployment_points_at_a_flow_that_exists() -> None:
         "collect_jobs/hourly",
         "collect_storage/hourly",
         "inventory_commcell/per-commcell",
+        "netbackup_collect_storage/hourly",
+        "netbackup_storage_primary/per-primary",
         "rubrik_collect_account/per-account",
         "rubrik_collect_inventory/twice-daily",
         "rubrik_collect_jobs/hourly",

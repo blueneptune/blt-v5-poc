@@ -810,5 +810,10 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         prefix="/sources/commvault/{source_name}",
     )
     v1.include_router(rubrik, prefix="/sources/rubrik/{source_name}")
+    # NetBackup: storage only, so far.
+    v1.include_router(
+        storage_ingest_router("netbackup", get_session, require_api_key),
+        prefix="/sources/netbackup/{source_name}",
+    )
     app.include_router(v1)
     return app

@@ -52,7 +52,9 @@ def test_every_path_but_the_health_check_is_versioned_and_named_by_source() -> N
         # resources, beside the sources.
         if path in ("/healthz", "/v1/sources") or path.startswith(("/v1/jobs", "/v1/storage")):
             continue
-        assert path.startswith(("/v1/sources/commvault/", "/v1/sources/rubrik/")), path
+        assert path.startswith(
+            ("/v1/sources/commvault/", "/v1/sources/rubrik/", "/v1/sources/netbackup/")
+        ), path
 
 
 def test_the_paths_from_before_v1_are_left_out_of_the_docs() -> None:

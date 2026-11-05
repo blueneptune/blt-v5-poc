@@ -28,7 +28,7 @@ from .docs import UNAUTHORIZED
 SCHEMA = "common"
 
 # The products blt has a collector for. A source's `type` is one of these.
-SOURCE_TYPES = ("commvault", "rubrik")
+SOURCE_TYPES = ("commvault", "rubrik", "netbackup")
 
 
 def _ts(*, nullable: bool = True) -> Any:

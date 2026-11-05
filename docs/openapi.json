@@ -3123,6 +3123,79 @@
           }
         }
       }
+    },
+    "/v1/sources/netbackup/{source_name}/storage": {
+      "post": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "Store one collection of storage",
+        "description": "Every storage target the collector read from the source, each\nwith its capacity and use at `collected_at`. A target is matched\nby `product_key`; one not seen before is added. With `complete`\n(the default), targets the source no longer lists are marked not\npresent - their samples stay.",
+        "operationId": "post_storage_v1_sources_netbackup__source_name__storage_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the source - its Prefect block's name. Made the first time storage is posted for it.",
+              "examples": [
+                "cv-toaster"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the source - its Prefect block's name. Made the first time storage is posted for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageWritten"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
