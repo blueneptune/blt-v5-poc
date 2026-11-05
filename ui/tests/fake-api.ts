@@ -11,7 +11,7 @@
  */
 import { createServer, type ServerResponse } from 'node:http';
 import type { components } from '../src/lib/api/schema';
-import { API_KEY, JOBS, SOURCES, type Job } from './fixtures.ts';
+import { API_KEY, JOBS, SAMPLES, SOURCES, STORAGE, type Job } from './fixtures.ts';
 
 type JobDetail = components['schemas']['CommonJobDetail'];
 type SummaryRow = components['schemas']['SummaryRow'];
@@ -80,6 +80,13 @@ createServer((req, res) => {
 		return send(res, 200, found.slice(offset, offset + limit), {
 			'X-Total-Count': String(found.length)
 		});
+	}
+	if (path === '/v1/storage') return send(res, 200, STORAGE);
+	const target = path.match(/^\/v1\/storage\/([0-9a-f-]{36})(\/samples)?$/);
+	if (target) {
+		const found = STORAGE.find((t) => t.id === target[1]);
+		if (!found) return send(res, 404, { detail: 'storage target not found' });
+		return send(res, 200, target[2] ? (found.id === STORAGE[0].id ? SAMPLES : []) : found);
 	}
 	const one = path.match(/^\/v1\/jobs\/([0-9a-f-]{36})$/);
 	if (one) {

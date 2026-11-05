@@ -47,11 +47,13 @@ def test_every_deployment_points_at_a_flow_that_exists() -> None:
         "collect_commcell/per-commcell",
         "collect_inventory/twice-daily",
         "collect_jobs/hourly",
+        "collect_storage/hourly",
         "inventory_commcell/per-commcell",
         "rubrik_collect_account/per-account",
         "rubrik_collect_inventory/twice-daily",
         "rubrik_collect_jobs/hourly",
         "rubrik_inventory_account/per-account",
+        "storage_commcell/per-commcell",
     ]
     for deployment in deployments:
         module, name = deployment["entrypoint"].split(":")

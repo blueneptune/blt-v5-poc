@@ -111,6 +111,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every storage target, with its latest use and trend
+         * @description Each target with its newest sample and, once there are enough
+         *     hours of samples, how fast it is filling and when it would be
+         *     full at that rate.
+         */
+        get: operations["list_storage_v1_storage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/storage/{storage_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One storage target
+         * @description The target, present or not, with its latest sample and trend.
+         */
+        get: operations["get_storage_v1_storage__storage_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/storage/{storage_id}/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One target's use over time
+         * @description Oldest first. `every=day` gives one sample a day (the last of
+         *     it), for long ranges.
+         */
+        get: operations["list_samples_v1_storage__storage_id__samples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/commvault/{source_name}/last-run": {
         parameters: {
             query?: never;
@@ -324,6 +387,30 @@ export interface paths {
         get: operations["validation_v1_sources_commvault__source_name__validation_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/commvault/{source_name}/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Store one collection of storage
+         * @description Every storage target the collector read from the source, each
+         *     with its capacity and use at `collected_at`. A target is matched
+         *     by `product_key`; one not seen before is added. With `complete`
+         *     (the default), targets the source no longer lists are marked not
+         *     present - their samples stay.
+         */
+        post: operations["post_storage_v1_sources_commvault__source_name__storage_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2557,6 +2644,48 @@ export interface components {
             lookup_seconds: number;
         };
         /**
+         * SampleOut
+         * @description A target's capacity and use at one moment.
+         */
+        SampleOut: {
+            /**
+             * Collected At
+             * Format: date-time
+             * @description When the source was read.
+             */
+            collected_at: string;
+            /**
+             * Capacity Bytes
+             * @description Total size.
+             */
+            capacity_bytes?: number | null;
+            /**
+             * Used Bytes
+             * @description In use.
+             */
+            used_bytes?: number | null;
+            /**
+             * Free Bytes
+             * @description Free to write.
+             */
+            free_bytes?: number | null;
+            /**
+             * Logical Bytes
+             * @description Data held, before deduplication and compression.
+             */
+            logical_bytes?: number | null;
+            /**
+             * Physical Bytes
+             * @description What that data takes on disk.
+             */
+            physical_bytes?: number | null;
+            /**
+             * Dedupe Ratio
+             * @description logical / physical, where the product says.
+             */
+            dedupe_ratio?: number | null;
+        };
+        /**
          * SourceOut
          * @description A source blt collects from.
          */
@@ -2585,6 +2714,247 @@ export interface components {
              * @description When blt first collected from it.
              */
             created_at: string;
+        };
+        /**
+         * StorageBatch
+         * @description One collection of a source's storage.
+         * @example {
+         *       "collected_at": "2026-11-05T14:27:00Z",
+         *       "targets": [
+         *         {
+         *           "capacity_bytes": 1099509530624,
+         *           "free_bytes": 1075347718144,
+         *           "hosts": [
+         *             "ma01"
+         *           ],
+         *           "kind": "dedupe",
+         *           "name": "pool-01",
+         *           "product_key": "2",
+         *           "product_type": "DEDUPLICATION",
+         *           "status": "Online"
+         *         }
+         *       ]
+         *     }
+         */
+        StorageBatch: {
+            /**
+             * Collected At
+             * Format: date-time
+             * @description When the source was read.
+             */
+            collected_at: string;
+            /**
+             * Complete
+             * @description The batch is all of the source's storage: targets it leaves out are marked not present. False for a partial read.
+             * @default true
+             */
+            complete: boolean;
+            /**
+             * Targets
+             * @description The targets, each as it was at collected_at.
+             */
+            targets: components["schemas"]["StorageIn"][];
+        };
+        /**
+         * StorageIn
+         * @description One storage target as the collector read it: what it is, and how
+         *     full it is now. Sizes in bytes, whatever unit the product used.
+         */
+        StorageIn: {
+            /**
+             * Product Key
+             * @description The product's own stable id for it, unique within the source.
+             */
+            product_key: string;
+            /**
+             * Name
+             * @description Its name, as the product shows it.
+             */
+            name: string;
+            /**
+             * Kind
+             * @description disk (plain), dedupe, cloud (object storage), tape, cluster or other.
+             * @enum {string}
+             */
+            kind: "disk" | "dedupe" | "cloud" | "tape" | "cluster" | "other";
+            /**
+             * Product Type
+             * @description The product's own word for its type: DEDUPLICATION, MSDP, AdvancedDisk, ...
+             */
+            product_type?: string | null;
+            /**
+             * Hosts
+             * @description The MediaAgents or media servers that write to it.
+             */
+            hosts?: string[];
+            /**
+             * Server
+             * @description What it sits on: the NetBackup storage server, the Commvault library.
+             */
+            server?: string | null;
+            /**
+             * Status
+             * @description Its status, in the product's words.
+             */
+            status?: string | null;
+            /**
+             * Capacity Bytes
+             * @description Total size.
+             */
+            capacity_bytes?: number | null;
+            /**
+             * Used Bytes
+             * @description In use. Left out: capacity less free.
+             */
+            used_bytes?: number | null;
+            /**
+             * Free Bytes
+             * @description Free to write.
+             */
+            free_bytes?: number | null;
+            /**
+             * Logical Bytes
+             * @description Data held, before deduplication and compression.
+             */
+            logical_bytes?: number | null;
+            /**
+             * Physical Bytes
+             * @description What that data takes on disk.
+             */
+            physical_bytes?: number | null;
+            /**
+             * Dedupe Ratio
+             * @description Deduplication ratio (logical / physical), where given.
+             */
+            dedupe_ratio?: number | null;
+            /**
+             * Attributes
+             * @description Whatever else the product says about it.
+             */
+            attributes?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * StorageOut
+         * @description A storage target, with its latest sample and trend.
+         */
+        StorageOut: {
+            /**
+             * Id
+             * Format: uuid
+             * @description blt's id for the target.
+             */
+            id: string;
+            /**
+             * Source Id
+             * Format: uuid
+             * @description The source's id (`GET /v1/sources`).
+             */
+            source_id: string;
+            /**
+             * Source Type
+             * @description The product.
+             * @example commvault
+             */
+            source_type: string;
+            /**
+             * Source Name
+             * @description blt's name for the source.
+             */
+            source_name: string;
+            /**
+             * Product Key
+             * @description The product's own id for it, as text.
+             */
+            product_key: string;
+            /**
+             * Name
+             * @description Its name, as the product shows it.
+             */
+            name: string;
+            /**
+             * Kind
+             * @description disk, dedupe, cloud, tape, cluster or other.
+             */
+            kind: string;
+            /**
+             * Product Type
+             * @description The product's own word for its type.
+             * @example DEDUPLICATION
+             * @example MSDP
+             * @example AdvancedDisk
+             */
+            product_type?: string | null;
+            /**
+             * Hosts
+             * @description MediaAgents / media servers that write to it.
+             */
+            hosts: string[];
+            /**
+             * Server
+             * @description Storage server (NetBackup) or library (Commvault).
+             */
+            server?: string | null;
+            /**
+             * Status
+             * @description As the product words it.
+             */
+            status?: string | null;
+            /**
+             * Present
+             * @description False once a collection no longer lists it.
+             */
+            present: boolean;
+            /**
+             * First Seen At
+             * Format: date-time
+             * @description When blt first saw it.
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             * @description When a collection last listed it.
+             */
+            last_seen_at: string;
+            /**
+             * Attributes
+             * @description Whatever else the product says.
+             */
+            attributes: {
+                [key: string]: unknown;
+            };
+            /** @description The newest sample. */
+            latest?: components["schemas"]["SampleOut"] | null;
+            /** @description From the last 14 days; none with under 6 hours. */
+            trend?: components["schemas"]["Trend"] | null;
+        };
+        /**
+         * StorageWritten
+         * @description What a storage batch did.
+         */
+        StorageWritten: {
+            /**
+             * Received
+             * @description Targets in the batch.
+             */
+            received: number;
+            /**
+             * New
+             * @description Of those, seen for the first time.
+             */
+            new: number;
+            /**
+             * Samples
+             * @description Samples stored (a target already sampled at this collected_at is skipped).
+             */
+            samples: number;
+            /**
+             * Gone
+             * @description Targets of the source this complete batch no longer lists, now not present.
+             */
+            gone: number;
         };
         /**
          * SummaryRow
@@ -2632,6 +3002,32 @@ export interface components {
             states: {
                 [key: string]: number;
             };
+        };
+        /**
+         * Trend
+         * @description How fast use is growing, from the samples of the last days.
+         */
+        Trend: {
+            /**
+             * Days
+             * @description How many days of samples the trend is from.
+             */
+            days: number;
+            /**
+             * Used Bytes Per Day
+             * @description Growth of used bytes per day (negative when shrinking).
+             */
+            used_bytes_per_day: number;
+            /**
+             * Days To Full
+             * @description At that rate, days until free space runs out. None when not growing.
+             */
+            days_to_full?: number | null;
+            /**
+             * Full At
+             * @description When that would be.
+             */
+            full_at?: string | null;
         };
         /**
          * UpsertResult
@@ -2991,6 +3387,158 @@ export interface operations {
                 };
             };
             /** @description Unknown job */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_storage_v1_storage_get: {
+        parameters: {
+            query?: {
+                /** @description Only this product's. */
+                source_type?: string | null;
+                /** @description Only this source's. */
+                source_name?: string | null;
+                /** @description Only this kind. */
+                kind?: string | null;
+                /** @description True (default): only targets still listed. */
+                present?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_storage_v1_storage__storage_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's id for the target (`GET /v1/storage`). */
+                storage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown storage target */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_samples_v1_storage__storage_id__samples_get: {
+        parameters: {
+            query?: {
+                /** @description How far back. */
+                days?: number;
+                /** @description Each sample as stored, or the last of each hour or day. */
+                every?: "sample" | "hour" | "day";
+            };
+            header?: never;
+            path: {
+                /** @description blt's id for the target (`GET /v1/storage`). */
+                storage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown storage target */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3660,6 +4208,51 @@ export interface operations {
             };
             /** @description Unknown CommCell */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_storage_v1_sources_commvault__source_name__storage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the source - its Prefect block's name. Made the first time storage is posted for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageWritten"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

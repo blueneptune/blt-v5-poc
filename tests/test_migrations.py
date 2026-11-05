@@ -12,6 +12,7 @@ import blt.api.jobs  # noqa: F401  (registers common.job)
 import blt.api.models
 import blt.api.rubrik  # noqa: F401  (registers Rubrik's tables)
 import blt.api.sources
+import blt.api.storage  # noqa: F401  (registers common.storage)
 
 
 def test_migrations_match_the_models(database_url: str) -> None:
@@ -59,4 +60,4 @@ def test_blt_tables_are_in_their_schema(database_url: str) -> None:
         tables = set(inspect(engine).get_table_names(schema=blt.api.sources.SCHEMA))
     finally:
         engine.dispose()
-    assert tables == {"source", "job"}
+    assert tables == {"source", "job", "storage", "storage_sample"}

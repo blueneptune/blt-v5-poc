@@ -58,3 +58,56 @@ export const JOBS: Job[] = Array.from({ length: 130 }, (_, i) => {
 		last_collected_at: new Date(now).toISOString()
 	};
 });
+
+type Storage = components['schemas']['StorageOut'];
+type Sample = components['schemas']['SampleOut'];
+const GIB = 1024 ** 3;
+
+// Three targets: a dedupe pool filling steadily (full in about 26 days),
+// one nearly full, and a cloud pool with no capacity to speak of.
+function storage(n: number, name: string, over: Partial<Storage>): Storage {
+	return {
+		id: uuid(n, 2),
+		source_id: SOURCES[0].id,
+		source_type: 'commvault',
+		source_name: 'cv-toaster',
+		product_key: String(n),
+		name,
+		kind: 'dedupe',
+		product_type: 'DEDUPLICATION',
+		hosts: ['ma01'],
+		server: null,
+		status: 'Online',
+		present: true,
+		first_seen_at: new Date(now - 30 * 24 * HOUR).toISOString(),
+		last_seen_at: new Date(now - 10 * 60_000).toISOString(),
+		attributes: {},
+		latest: null,
+		trend: null,
+		...over
+	};
+}
+
+export const SAMPLES: Sample[] = Array.from({ length: 4 * 24 }, (_, i) => {
+	const used = 40 * GIB + i * (2 * GIB) / 24;
+	return {
+		collected_at: new Date(now - (4 * 24 - i) * HOUR).toISOString(),
+		capacity_bytes: 100 * GIB,
+		used_bytes: Math.round(used),
+		free_bytes: Math.round(100 * GIB - used)
+	};
+});
+
+export const STORAGE: Storage[] = [
+	storage(1, 'pool-steady', {
+		hosts: ['ma01', 'ma02'],
+		latest: { ...SAMPLES[SAMPLES.length - 1], dedupe_ratio: 7.64, logical_bytes: 300 * GIB, physical_bytes: 40 * GIB },
+		trend: { days: 4, used_bytes_per_day: 2 * GIB, days_to_full: 26 },
+		attributes: { mount_paths: [{ name: 'mount-01', status: 'Ready' }] }
+	}),
+	storage(2, 'pool-full', {
+		hosts: ['ma02'],
+		latest: { collected_at: new Date(now - 600_000).toISOString(), capacity_bytes: 10 * GIB, used_bytes: 9.7 * GIB, free_bytes: 0.3 * GIB }
+	}),
+	storage(3, 's3-archive', { kind: 'cloud', product_type: 'CLOUD', hosts: ['ma01'] })
+];

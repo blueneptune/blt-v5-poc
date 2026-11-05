@@ -590,3 +590,84 @@ class LastRun(BaseModel):
     last_run: RunOut | None = Field(
         default=None, description="The most recent run of any kind, whatever its outcome."
     )
+
+
+# Storage monitoring (blt.api.storage, docs/storage.md).
+StorageKind = Literal["disk", "dedupe", "cloud", "tape", "cluster", "other"]
+
+
+class StorageIn(BaseModel):
+    """One storage target as the collector read it: what it is, and how
+    full it is now. Sizes in bytes, whatever unit the product used."""
+
+    product_key: str = Field(
+        description="The product's own stable id for it, unique within the source."
+    )
+    name: str = Field(description="Its name, as the product shows it.")
+    kind: StorageKind = Field(
+        description="disk (plain), dedupe, cloud (object storage), tape, cluster or other."
+    )
+    product_type: str | None = Field(
+        default=None,
+        description="The product's own word for its type: DEDUPLICATION, MSDP, AdvancedDisk, ...",
+    )
+    hosts: list[str] = Field(
+        default_factory=list,
+        description="The MediaAgents or media servers that write to it.",
+    )
+    server: str | None = Field(
+        default=None,
+        description="What it sits on: the NetBackup storage server, the Commvault library.",
+    )
+    status: str | None = Field(default=None, description="Its status, in the product's words.")
+    capacity_bytes: int | None = Field(default=None, description="Total size.")
+    used_bytes: int | None = Field(
+        default=None, description="In use. Left out: capacity less free."
+    )
+    free_bytes: int | None = Field(default=None, description="Free to write.")
+    logical_bytes: int | None = Field(
+        default=None, description="Data held, before deduplication and compression."
+    )
+    physical_bytes: int | None = Field(default=None, description="What that data takes on disk.")
+    dedupe_ratio: float | None = Field(
+        default=None, description="Deduplication ratio (logical / physical), where given."
+    )
+    attributes: dict[str, Any] = Field(
+        default_factory=dict, description="Whatever else the product says about it."
+    )
+
+
+class StorageBatch(BaseModel):
+    """One collection of a source's storage."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "collected_at": "2026-11-05T14:27:00Z",
+                    "targets": [
+                        {
+                            "product_key": "2",
+                            "name": "pool-01",
+                            "kind": "dedupe",
+                            "product_type": "DEDUPLICATION",
+                            "hosts": ["ma01"],
+                            "status": "Online",
+                            "capacity_bytes": 1099509530624,
+                            "free_bytes": 1075347718144,
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    collected_at: AwareDatetime = Field(description="When the source was read.")
+    complete: bool = Field(
+        default=True,
+        description=(
+            "The batch is all of the source's storage: targets it leaves out are marked not "
+            "present. False for a partial read."
+        ),
+    )
+    targets: list[StorageIn] = Field(description="The targets, each as it was at collected_at.")
