@@ -119,9 +119,8 @@ test('jobs: on a phone nothing is pinned and nothing spills sideways', async ({ 
 	await page.goto(everyJob);
 	await expect(page.getByRole('button', { name: /scroll away/ })).toBeHidden();
 	await page.mouse.wheel(0, 1500);
-	const phone = await layout(page);
-	expect(phone.pageScrolled).toBeGreaterThan(0);
-	expect(phone.sideways).toBe(false);
+	await expect.poll(async () => (await layout(page)).pageScrolled).toBeGreaterThan(0);
+	expect((await layout(page)).sideways).toBe(false);
 });
 
 test('jobs: by protection', async ({ page }) => {
