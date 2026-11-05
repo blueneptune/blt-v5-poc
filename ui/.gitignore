@@ -5,3 +5,5 @@ node_modules
 .env.*
 !.env.example
 vite.config.ts.timestamp-*
+/playwright-report
+/test-results

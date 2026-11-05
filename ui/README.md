@@ -20,6 +20,7 @@ Any blt API will do: the work desktop's, the lab's, or one run locally
 |---|---|
 | `npm run check` | types, including every API call against the spec |
 | `npm test` | unit tests (Vitest) |
+| `npm run test:pages` | page tests (Playwright): the build, after `npm run build`, against the fake API in `tests/fake-api.ts`; `npx playwright install chromium` once first |
 | `npm run api:types` | regenerate `src/lib/api/schema.d.ts` after the API changes (`uv run blt-openapi` first) - CI fails while it is stale |
 | `npm run build` | the production server, in `build/` |
 
