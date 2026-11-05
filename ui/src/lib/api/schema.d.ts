@@ -553,6 +553,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/netbackup/{source_name}/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Store one collection of storage
+         * @description Every storage target the collector read from the source, each
+         *     with its capacity and use at `collected_at`. A target is matched
+         *     by `product_key`; one not seen before is added. With `complete`
+         *     (the default), targets the source no longer lists are marked not
+         *     present - their samples stay.
+         */
+        post: operations["post_storage_v1_sources_netbackup__source_name__storage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4678,6 +4702,51 @@ export interface operations {
             };
             /** @description Unknown account or run */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_storage_v1_sources_netbackup__source_name__storage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the source - its Prefect block's name. Made the first time storage is posted for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StorageBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageWritten"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
