@@ -15,9 +15,10 @@ One local account, until Zitadel ([vision.md](vision.md) 4.1):
 | `BLT_UI_PASSWORD_HASH` | the password's scrypt hash - only the hash is kept anywhere |
 | `BLT_UI_SESSION_SECRET` | signs the session cookie; 32+ random characters |
 
-Make both with `cd ui && npm run password -- --secret` (it asks for the
-password twice and shows neither) and put them in `config/blt.env`, or in
-the cluster's secret. A new password, or a new secret, signs everyone out.
+Make both with `cd ui && npm run --silent password -- --secret >>
+../config/blt.env` (it asks for the password twice and shows neither;
+`--silent` keeps npm's own banner out of the file), or put them in the
+cluster's secret. A new password, or a new secret, signs everyone out.
 
 - Every page but `/healthz` and `/login` needs signing in. The session is
   an HttpOnly, SameSite=Lax cookie, Secure over https, for 12 hours.

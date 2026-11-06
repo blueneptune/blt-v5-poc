@@ -9,7 +9,7 @@ own Node server. Plan and order of work: docs/ui.md.
 cd ui
 npm ci
 cp .env.example .env      # BLT_API_URL, BLT_API_KEY, and the sign-in:
-npm run password -- --secret >> .env    # BLT_UI_PASSWORD_HASH, BLT_UI_SESSION_SECRET
+npm run --silent password -- --secret >> .env    # BLT_UI_PASSWORD_HASH, BLT_UI_SESSION_SECRET
 npm run dev               # http://localhost:5173 - sign in as admin
 ```
 
