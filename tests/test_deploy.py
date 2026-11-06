@@ -110,6 +110,9 @@ def test_the_manifest_publishes_each_service_on_its_own_address(tmp_path: Path) 
     ui_env = {e["name"]: e.get("value") for e in found["ui"]["env"]}
     assert ui_env["BLT_API_URL"] == "http://127.0.0.1:8000"
     assert (ui_env["BLT_UI_SIGN_IN"], ui_env["BLT_UI_USER"]) == ("on", "admin")
+    # Without it the UI assumes https and refuses the sign-in post as
+    # cross-site (2026.11.06.1 on the work desktop).
+    assert ui_env["ORIGIN"] == "http://localhost:8090"
     api_env = {e["name"]: e.get("value") for e in found["api"]["env"]}
     assert api_env["BLT_PREFECT_API_URL"] == "http://127.0.0.1:4200/api"
     server_env = {e["name"]: e.get("value") for e in found["prefect-server"]["env"]}
@@ -172,6 +175,13 @@ def test_the_ui_stays_local_when_the_rest_is_opened(tmp_path: Path) -> None:
     # ... unless it is asked for, on its own setting.
     found = containers(render(tmp_path, "BLT_UI_BIND_ADDRESS=0.0.0.0\nBLT_UI_PORT=9000\n"))
     assert found["ui"]["ports"] == [{"containerPort": 3000, "hostPort": 9000, "hostIP": "0.0.0.0"}]
+    assert ui_origin(found) == "http://localhost:9000"
+    found = containers(render(tmp_path, "BLT_UI_ORIGIN=https://blt.example.test\n"))
+    assert ui_origin(found) == "https://blt.example.test"
+
+
+def ui_origin(found: dict) -> str:
+    return {e["name"]: e.get("value") for e in found["ui"]["env"]}["ORIGIN"]
 
 
 def test_prefect_stays_on_this_machine_unless_asked(tmp_path: Path) -> None:
