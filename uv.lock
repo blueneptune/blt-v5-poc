@@ -246,7 +246,7 @@ wheels = [
 
 [[package]]
 name = "blt"
-version = "2026.11.3"
+version = "2026.11.6"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },

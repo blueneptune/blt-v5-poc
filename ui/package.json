@@ -1,7 +1,7 @@
 {
 	"name": "blt-ui",
 	"private": true,
-	"version": "2026.11.3",
+	"version": "2026.11.6",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
