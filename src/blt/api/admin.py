@@ -557,8 +557,9 @@ def admin_router(
 
     @router.post("/deployments/{deployment_id}/pause", summary="Pause a deployment's schedules")
     def pause(deployment_id: DeploymentId, prefect: PrefectDep) -> dict[str, bool]:
-        """No scheduled runs until it is resumed. Lasts until the worker
-        next starts, which deploys every schedule from prefect.yaml again."""
+        """No scheduled runs until it is resumed. It stays paused when the
+        worker restarts and deploys prefect.yaml again (prefect deploy
+        leaves `paused` alone when prefect.yaml does not set it)."""
         find_deployment(prefect, deployment_id)
         guarded(lambda: prefect.set_paused(deployment_id, True))
         return {"paused": True}

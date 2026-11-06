@@ -23,8 +23,8 @@
 
 <h1 class="text-2xl font-semibold tracking-tight">Schedules</h1>
 <p class="text-muted-foreground mt-1 max-w-3xl text-sm">
-	What runs, and when: schedules are in UTC, times in your own zone. A pause lasts until the worker next starts: it deploys every
-	schedule from prefect.yaml again.
+	What runs, and when: schedules are in UTC, times in your own zone. A pause stays when the
+	worker restarts; the schedules themselves are set in prefect.yaml.
 </p>
 
 {#if data.problem}

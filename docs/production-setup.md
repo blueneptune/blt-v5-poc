@@ -67,10 +67,16 @@ curl http://127.0.0.1:8090/healthz          # {"status":"ok"}
 ```
 
 Open **http://localhost:8090** - under WSL, from Windows as well (WSL
-forwards localhost). It has **no sign-in yet**: anyone who can reach it
-sees every job. So it listens on `127.0.0.1` only, even when
-`BLT_BIND_ADDRESS` opens the API wider; `BLT_UI_BIND_ADDRESS` opens it
-deliberately, `BLT_UI_PORT` moves it, `BLT_UI=false` leaves it out.
+forwards localhost) - and sign in. The account is set in
+`config/blt.env` ([admin.md](admin.md), "Signing in"):
+
+```
+cd ui && npm run password -- --secret    # prints BLT_UI_PASSWORD_HASH and BLT_UI_SESSION_SECRET
+```
+
+It listens on `127.0.0.1` only, even when `BLT_BIND_ADDRESS` opens the
+API wider; `BLT_UI_BIND_ADDRESS` opens it deliberately (put https in
+front first), `BLT_UI_PORT` moves it, `BLT_UI=false` leaves it out.
 
 An older pod on published ports (not `BLT_POD_NETWORK=host`) has no UI
 port: `up.sh` says so - run `./deploy/down.sh` (the data is kept), then

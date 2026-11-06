@@ -1511,7 +1511,7 @@
           "admin"
         ],
         "summary": "Pause a deployment's schedules",
-        "description": "No scheduled runs until it is resumed. Lasts until the worker\nnext starts, which deploys every schedule from prefect.yaml again.",
+        "description": "No scheduled runs until it is resumed. It stays paused when the\nworker restarts and deploys prefect.yaml again (prefect deploy\nleaves `paused` alone when prefect.yaml does not set it).",
         "operationId": "pause_v1_admin_deployments__deployment_id__pause_post",
         "security": [
           {

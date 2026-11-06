@@ -13,7 +13,7 @@ section 4.
 | Where | `ui/` in this repository: the front end of the blt platform, released with the API it reads. Its API types are generated from `docs/openapi.json` and CI fails when they drift. |
 | Framework | SvelteKit 2 with Svelte 5, TypeScript, Tailwind 4, its Node server (adapter-node) - continuing what bartman_v2 started. |
 | Talking to the API | Only from the UI's server side. The browser never sees the API key or, later, a user's token. |
-| Sign-in | **Not yet - the places are built, the locks are not fitted** (the owner: "build the spots where the padlocks can be added but don't add them yet"). One function says who is asking (today always the lab user, every role); every page and menu item already asks it. Zitadel comes nearer a true proof of concept. |
+| Sign-in | **One local admin account since 2026-11-05** ([admin.md](admin.md)): a scrypt hash in the environment, a signed HttpOnly session cookie, throttled. One function says who is asking (`$lib/server/auth`); every page and menu item already asks it, so Zitadel replaces that function and nothing else. |
 | Filters | In the URL, so views are links. Default: backups, last 24 h (common-jobs decision 3). On wider screens the filter bar stays pinned and the table scrolls under it, its column headings kept at its top; the pin button lets it all scroll away, remembered per browser. |
 
 ## Libraries
@@ -56,6 +56,8 @@ Planned, each when a page needs it - not before:
    per source on the overview (collection health).
 4. ~~**Page tests** with Playwright against an API with known data, in CI.~~
    Done after 2026.11.03: `ui/tests/pages.spec.ts`, run by CI's `ui` job.
-5. **Sign-in** (Zitadel), roles, saved per-user filters, role-scoped kinds
-   - nearer a true proof of concept.
+5. **Sign-in**: a local admin account done 2026-11-05, with the
+   Administration pages (sources, schedules, runs) that replace Prefect's
+   UI - [admin.md](admin.md). Next: Zitadel, roles, saved per-user
+   filters, role-scoped kinds.
 6. Data sources and work pools (vision 4.2, 4.3).

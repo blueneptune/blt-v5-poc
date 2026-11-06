@@ -341,8 +341,9 @@ export interface paths {
         put?: never;
         /**
          * Pause a deployment's schedules
-         * @description No scheduled runs until it is resumed. Lasts until the worker
-         *     next starts, which deploys every schedule from prefect.yaml again.
+         * @description No scheduled runs until it is resumed. It stays paused when the
+         *     worker restarts and deploys prefect.yaml again (prefect deploy
+         *     leaves `paused` alone when prefect.yaml does not set it).
          */
         post: operations["pause_v1_admin_deployments__deployment_id__pause_post"];
         delete?: never;

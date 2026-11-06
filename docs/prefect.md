@@ -18,7 +18,7 @@ blt pod
 ├── blt-postgres         Postgres 17: database "blt" (jobs) and
 │                        database "prefect" (Prefect's own), one volume
 ├── blt-api              blt's API, as before
-├── blt-prefect-server   Prefect API and UI, port 4200
+├── blt-prefect-server   Prefect API (no UI), port 4200
 └── blt-prefect-worker   blt's flows + a process worker on pool "blt"
 ```
 
@@ -57,13 +57,19 @@ blt pod
   login share that login's token renewals, which take turns.
 - A run for a CommCell that is still going when the next one starts is
   skipped, not doubled up (the same per-CommCell lock as collect.sh).
-- blt's own log lines appear in each flow run's log in the UI.
+- blt's own log lines appear in each flow run's log: blt's UI,
+  *Administration → Runs*.
 - Schedules are changed in `prefect.yaml` (then restart the worker), or
-  paused per deployment in the UI. A paused schedule stays paused when
-  the worker restarts.
-- **Backfill** from the UI: *Deployments → blt-backfill/by-hand → Run →
-  Custom run*, and give `commcell`. Once a CommCell's history is in, it
-  is not needed again.
+  paused per deployment in blt's UI (*Administration → Schedules*). A
+  paused schedule stays paused when the worker restarts.
+- **Backfill** from blt's UI: *Administration → Schedules →
+  blt-backfill/by-hand → Run now*, and give `commcell`. Once a CommCell's
+  history is in, it is not needed again.
+
+**Prefect serves no UI** since 2026-11-05: blt's own UI manages sources,
+schedules and runs ([admin.md](admin.md)). The server image sets
+`PREFECT_SERVER_UI_ENABLED=false`; its API is still there, behind
+`PREFECT_AUTH`.
 
 ## Turning it on
 
@@ -77,7 +83,7 @@ PREFECT_AUTH=admin:<a new password>
 # BLT_PREFECT_BIND_ADDRESS=127.0.0.1
 ```
 
-`PREFECT_AUTH` is the login for the UI and API. Prefect's open-source
+`PREFECT_AUTH` is the login for Prefect's API. Prefect's open-source
 server has no user accounts; this one shared login is all that guards
 it, and the blocks behind it hold Commvault credentials.
 
@@ -89,32 +95,22 @@ Then recreate the pod (data is kept):
 ```
 
 The first start builds two more images and takes a few minutes. It ends
-with `Prefect UI on http://<address>:4200`.
+with `Prefect API on http://<address>:4200/api`. The server reads
+`PREFECT_AUTH` when its container starts, so after changing it run the
+start script again (no `down.sh` needed).
 
-**Logging in to the UI:** its login page has one box, and it wants the
-whole of `PREFECT_AUTH` - `admin:<password>`, not just the password. The
-server reads `PREFECT_AUTH` when its container starts, so after changing
-it run the start script again (no `down.sh` needed).
+### Who can reach Prefect
 
-### Who can reach the UI
-
-`BLT_PREFECT_BIND_ADDRESS` sets this for the UI alone; the API and the
-database keep `BLT_BIND_ADDRESS`.
-
-- **The Linux dev machine (eth00dev1)**, opened from your desktop:
-  `BLT_PREFECT_BIND_ADDRESS=0.0.0.0`, then browse to
-  `http://192.168.50.187:4200`. The login travels unencrypted over the
-  LAN (plain HTTP with basic auth) - acceptable for a dev box, not for
-  anything wider.
-- **Your desktop (podman in WSL)**, used only there: leave it unset, so
-  it follows `BLT_BIND_ADDRESS=127.0.0.1`, and browse to
-  `http://127.0.0.1:4200`.
+Only the worker, blt's API (both inside the pod) and the `blt-prefect-*`
+tools on this machine need it, so it listens on `127.0.0.1` unless
+`BLT_PREFECT_BIND_ADDRESS` says otherwise. Use blt's UI for everything
+the Prefect UI was used for.
 
 ### Podman in WSL
 
 Same as the existing setup there: keep `BLT_POD_NETWORK=host` (podman's
 port forwarding does not work under WSL, as found before). On the host
-network each service listens on its own port, so the UI is on
+network each service listens on its own port, so Prefect is on
 `BLT_PREFECT_PORT` directly. Both start scripts handle it; the manifest
 drops its port mappings in that mode because podman refuses them.
 
@@ -135,8 +131,8 @@ uv run --extra prefect blt-prefect-import --all         # every config/*.env but
 ```
 
 It prints what it imported - deployment, whether it is collected, which
-secrets it carried - and never a value. After that the block is visible
-in the UI under *Blocks*, secrets masked, and can be edited there.
+secrets it carried - and never a value. After that the block is listed in
+blt's UI under *Administration → Sources*, with which secrets are set.
 
 - **An MSP's login file** (one that other files name in
   `CV_CREDENTIALS`) becomes a block with *collect* off: it lends its
@@ -263,9 +259,10 @@ podman logs -f blt-prefect-worker     # registrations, then every flow run
 podman logs blt-prefect-server        # database setup, then the server
 ```
 
-In the UI: *Runs* for history and logs, *Deployments* for schedules and
-running something now, *Blocks* for CommCells, *Work pools → blt* to see
-the worker is connected.
+In blt's UI, *Administration*: *Runs* for history and logs, *Schedules*
+for what runs when and running something now, *Sources* for the blocks.
+Whether the worker is connected is not shown there yet: `podman logs
+blt-prefect-worker`.
 
 ## Not done yet
 

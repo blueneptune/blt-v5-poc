@@ -25,6 +25,8 @@ BLT_PREFECT=true
 PREFECT_DB_PASSWORD=prefect-secret
 PREFECT_AUTH=admin:ui-secret
 BLT_PREFECT_BIND_ADDRESS=0.0.0.0
+BLT_UI_PASSWORD_HASH=scrypt:1024:8:1:c2FsdA:aGFzaC1zZWNyZXQ
+BLT_UI_SESSION_SECRET=session-secret-session-secret-xyz
 """
 
 
@@ -99,14 +101,19 @@ def test_the_manifest_publishes_each_service_on_its_own_address(tmp_path: Path) 
     ports = {name: c.get("ports") for name, c in found.items()}
     assert ports["api"] == [{"containerPort": 8000, "hostPort": 8188, "hostIP": "127.0.0.1"}]
     assert ports["postgres"] == [{"containerPort": 5432, "hostPort": 5544, "hostIP": "127.0.0.1"}]
-    # The UI may be opened to other machines without the API or database.
+    # Prefect may be opened to other machines without the API or database.
     assert ports["prefect-server"] == [
         {"containerPort": 4200, "hostPort": 4200, "hostIP": "0.0.0.0"}
     ]
-    # The web UI has no sign-in: on this machine only, whatever else is open.
+    # The web UI stays on this machine unless asked, whatever else is open.
     assert ports["ui"] == [{"containerPort": 3000, "hostPort": 8090, "hostIP": "127.0.0.1"}]
     ui_env = {e["name"]: e.get("value") for e in found["ui"]["env"]}
     assert ui_env["BLT_API_URL"] == "http://127.0.0.1:8000"
+    assert (ui_env["BLT_UI_SIGN_IN"], ui_env["BLT_UI_USER"]) == ("on", "admin")
+    api_env = {e["name"]: e.get("value") for e in found["api"]["env"]}
+    assert api_env["BLT_PREFECT_API_URL"] == "http://127.0.0.1:4200/api"
+    server_env = {e["name"]: e.get("value") for e in found["prefect-server"]["env"]}
+    assert server_env["PREFECT_SERVER_UI_ENABLED"] == "false"
     worker_env = {e["name"]: e.get("value") for e in found["prefect-worker"]["env"]}
     assert worker_env["PREFECT_API_URL"] == "http://127.0.0.1:4200/api"
     assert worker_env["BLT_API_URL"] == "http://127.0.0.1:8000"
@@ -120,7 +127,15 @@ def test_secrets_are_only_in_the_secret(tmp_path: Path) -> None:
     assert decoded["PREFECT_AUTH"] == "admin:ui-secret"
     assert decoded["BLT_DATABASE_URL"] == ("postgresql+psycopg://blt:pg-secret@127.0.0.1:5432/blt")
     rest = yaml.safe_dump(documents[1:])
-    for value in ("pg-secret", "prefect-secret", "ui-secret", "key-1"):
+    assert decoded["BLT_UI_SESSION_SECRET"] == "session-secret-session-secret-xyz"
+    for value in (
+        "pg-secret",
+        "prefect-secret",
+        "ui-secret",
+        "key-1",
+        "hash-secret",
+        "session-secret",
+    ):
         assert value not in rest
 
 
@@ -144,6 +159,8 @@ def test_on_the_host_network_nothing_is_published_and_services_listen_themselves
 def test_with_prefect_off_the_pod_has_only_postgres_the_api_and_the_ui(tmp_path: Path) -> None:
     found = containers(render(tmp_path, "BLT_PREFECT=false\n"))
     assert list(found) == ["postgres", "api", "ui"]
+    api_env = {e["name"]: e.get("value") for e in found["api"]["env"]}
+    assert api_env["BLT_PREFECT_API_URL"] == ""
     found = containers(render(tmp_path, "BLT_PREFECT=false\nBLT_UI=false\n"))
     assert list(found) == ["postgres", "api"]
 
@@ -155,6 +172,31 @@ def test_the_ui_stays_local_when_the_rest_is_opened(tmp_path: Path) -> None:
     # ... unless it is asked for, on its own setting.
     found = containers(render(tmp_path, "BLT_UI_BIND_ADDRESS=0.0.0.0\nBLT_UI_PORT=9000\n"))
     assert found["ui"]["ports"] == [{"containerPort": 3000, "hostPort": 9000, "hostIP": "0.0.0.0"}]
+
+
+def test_prefect_stays_on_this_machine_unless_asked(tmp_path: Path) -> None:
+    found = containers(render(tmp_path, "BLT_PREFECT_BIND_ADDRESS=\nBLT_BIND_ADDRESS=0.0.0.0\n"))
+    assert found["prefect-server"]["ports"][0]["hostIP"] == "127.0.0.1"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "BLT_UI_PASSWORD_HASH=\n",
+        "BLT_UI_PASSWORD_HASH=hunter2\n",
+        "BLT_UI_SESSION_SECRET=short\n",
+        "BLT_UI_SIGN_IN=off\nBLT_UI_BIND_ADDRESS=0.0.0.0\n",
+    ],
+)
+def test_the_ui_needs_its_sign_in_settings(tmp_path: Path, bad: str) -> None:
+    with pytest.raises(AssertionError):
+        render(tmp_path, bad)
+
+
+def test_sign_in_can_be_off_for_a_ui_on_this_machine_only(tmp_path: Path) -> None:
+    found = containers(render(tmp_path, "BLT_UI_SIGN_IN=off\nBLT_UI_PASSWORD_HASH=\n"))
+    ui_env = {e["name"]: e.get("value") for e in found["ui"]["env"]}
+    assert ui_env["BLT_UI_SIGN_IN"] == "off"
 
 
 def test_a_bad_ui_address_is_refused(tmp_path: Path) -> None:
@@ -172,8 +214,8 @@ def test_bad_prefect_settings_are_refused(tmp_path: Path, bad: str) -> None:
 
 
 def test_git_bash_is_told_not_to_rewrite_podman_arguments() -> None:
-    # Otherwise PREFECT_SERVER_UI_API_URL=/api reached the container as
-    # C:/Program Files/Git/api and the UI could never log in (seen on
+    # Otherwise an argument such as /api reached the container as
+    # C:/Program Files/Git/api (seen with PREFECT_SERVER_UI_API_URL on
     # Windows with podman in WSL).
     script = (ROOT / "deploy/env.sh").read_text()
     assert "export MSYS_NO_PATHCONV=1" in script
