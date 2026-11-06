@@ -151,7 +151,7 @@ check_ui_sign_in() {
         fi
         return 0
     fi
-    local how="(cd ui && npm run password -- --secret)" secret="${BLT_UI_SESSION_SECRET:-}"
+    local how="(cd ui && npm run --silent password -- --secret >> ../config/blt.env)" secret="${BLT_UI_SESSION_SECRET:-}"
     if [[ "${BLT_UI_PASSWORD_HASH:-}" != scrypt:* ]]; then
         echo "Set BLT_UI_PASSWORD_HASH in config/blt.env to a hash from npm run password ${how}." >&2
         exit 1
