@@ -5,5 +5,8 @@
 FROM docker.io/prefecthq/prefect:3.8.8-python3.12
 
 COPY deploy/prefect/server/start.py /opt/blt/start.py
+# No Prefect UI: blt's own UI manages sources, schedules and runs
+# (docs/admin.md). Only the API is served, behind basic auth.
+ENV PREFECT_SERVER_UI_ENABLED=false
 EXPOSE 4200
 CMD ["python", "/opt/blt/start.py"]

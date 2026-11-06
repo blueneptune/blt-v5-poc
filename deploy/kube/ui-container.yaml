@@ -8,5 +8,11 @@
         - {name: BLT_API_URL, value: "http://${API_IN_POD}:${API_LISTEN_PORT}"}
         - name: BLT_API_KEY
           valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_API_KEY}}
+        - {name: BLT_UI_SIGN_IN, value: "${UI_SIGN_IN}"}
+        - {name: BLT_UI_USER, value: "${UI_USER}"}
+        - name: BLT_UI_PASSWORD_HASH
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_UI_PASSWORD_HASH}}
+        - name: BLT_UI_SESSION_SECRET
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_UI_SESSION_SECRET}}
       ports:
         - {containerPort: ${UI_LISTEN_PORT}, hostPort: ${UI_PORT}, hostIP: "${UI_BIND}"}

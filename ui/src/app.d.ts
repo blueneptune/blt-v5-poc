@@ -5,8 +5,8 @@ import type { User } from '$lib/server/auth';
 declare global {
 	namespace App {
 		interface Locals {
-			/** Who is asking. Always the lab user until sign-in exists (see $lib/server/auth). */
-			user: User;
+			/** Who is asking; null before signing in (see $lib/server/auth). */
+			user: User | null;
 			/** blt's API, on that user's behalf. */
 			api: ApiClient;
 		}

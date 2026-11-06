@@ -998,6 +998,936 @@
         }
       }
     },
+    "/v1/admin/sources": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Every source's block",
+        "description": "Every CommCell, Rubrik account and NetBackup primary Prefect\nholds a block for, with whether each secret is set - never its\nvalue.",
+        "operationId": "list_sources_v1_admin_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceBlockOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Sources V1 Admin Sources Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/admin/sources/netbackup": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Add a NetBackup primary",
+        "description": "Saves the primary's block. Collection starts off: check the\nprimary first (`.../check`), then turn `collect` on.",
+        "operationId": "add_netbackup_v1_admin_sources_netbackup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetBackupPrimaryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceBlockOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "409": {
+            "description": "A source by that name exists"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/admin/sources/{source_type}/{source_name}": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Change a source's block",
+        "description": "Changes only what is given. For CommCells and Rubrik accounts\nthat is `collect`; their credentials are set with\nblt-prefect-import / blt-rubrik.",
+        "operationId": "change_source_v1_admin_sources__source_type___source_name__patch",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "commvault",
+                "rubrik",
+                "netbackup"
+              ],
+              "type": "string",
+              "description": "The product.",
+              "title": "Source Type"
+            },
+            "description": "The product."
+          },
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The source's block name.",
+              "title": "Source Name"
+            },
+            "description": "The source's block name."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceBlockPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceBlockOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Remove a source's block",
+        "description": "Removes the block, so nothing collects from it any more. What\nwas collected stays in blt.",
+        "operationId": "remove_source_v1_admin_sources__source_type___source_name__delete",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "commvault",
+                "rubrik",
+                "netbackup"
+              ],
+              "type": "string",
+              "description": "The product.",
+              "title": "Source Type"
+            },
+            "description": "The product."
+          },
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The source's block name.",
+              "title": "Source Name"
+            },
+            "description": "The source's block name."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/sources/netbackup/{source_name}/check": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Check a NetBackup primary, from a worker",
+        "description": "Starts blt-netbackup-check for the primary: it signs in with\nthe block's key and tries each read blt makes (storage, SLP\nimages, jobs), and logs what it found. Watch the run's log.",
+        "operationId": "check_netbackup_v1_admin_sources_netbackup__source_name__check_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The source's block name.",
+              "title": "Source Name"
+            },
+            "description": "The source's block name."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/netbackup/ca-certificate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Fetch a NetBackup primary's CA certificate, from a worker",
+        "description": "Starts blt-netbackup-fetch-ca: it asks the primary for its CA\ncertificate (which needs no sign-in) and logs it with its SHA-256\nfingerprint. Compare the fingerprint with the primary's own\n(`nbcertcmd -displayCACertDetail`) before trusting it.",
+        "operationId": "fetch_netbackup_ca_v1_admin_netbackup_ca_certificate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaFetchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/admin/deployments": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "What runs, and when",
+        "description": "Every deployment, with its schedules, its last finished run and\nits next scheduled one.",
+        "operationId": "list_deployments_v1_admin_deployments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeploymentOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Deployments V1 Admin Deployments Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/admin/deployments/{deployment_id}/runs": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Run a deployment now",
+        "description": "Starts a run now, with these parameters over its defaults.",
+        "operationId": "run_now_v1_admin_deployments__deployment_id__runs_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The deployment's id.",
+              "title": "Deployment Id"
+            },
+            "description": "The deployment's id."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunNowIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/deployments/{deployment_id}/pause": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Pause a deployment's schedules",
+        "description": "No scheduled runs until it is resumed. It stays paused when the\nworker restarts and deploys prefect.yaml again (prefect deploy\nleaves `paused` alone when prefect.yaml does not set it).",
+        "operationId": "pause_v1_admin_deployments__deployment_id__pause_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The deployment's id.",
+              "title": "Deployment Id"
+            },
+            "description": "The deployment's id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Pause V1 Admin Deployments  Deployment Id  Pause Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/deployments/{deployment_id}/resume": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resume a deployment's schedules",
+        "description": "Its schedules make runs again.",
+        "operationId": "resume_v1_admin_deployments__deployment_id__resume_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The deployment's id.",
+              "title": "Deployment Id"
+            },
+            "description": "The deployment's id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Resume V1 Admin Deployments  Deployment Id  Resume Post"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/runs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Flow runs, newest first",
+        "description": "Flow runs by when they were due, newest first: every\ndeployment's, or one's.",
+        "operationId": "list_runs_v1_admin_runs_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One deployment's runs.",
+              "title": "Deployment Id"
+            },
+            "description": "One deployment's runs."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "SCHEDULED",
+                      "PENDING",
+                      "RUNNING",
+                      "COMPLETED",
+                      "FAILED",
+                      "CANCELLED",
+                      "CANCELLING",
+                      "CRASHED",
+                      "PAUSED"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only runs in these states.",
+              "title": "State"
+            },
+            "description": "Only runs in these states."
+          },
+          {
+            "name": "scheduled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include runs that have not started yet.",
+              "default": false,
+              "title": "Scheduled"
+            },
+            "description": "Include runs that have not started yet."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "At most this many.",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "At most this many."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Skip this many.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Skip this many."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FlowRunOut"
+                  },
+                  "title": "Response List Runs V1 Admin Runs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "A flow run and its log",
+        "description": "The run and its log lines, oldest first. Poll with `log_offset`\nset to the lines already shown to get only new ones.",
+        "operationId": "get_run_v1_admin_runs__run_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The flow run's id.",
+              "title": "Run Id"
+            },
+            "description": "The flow run's id."
+          },
+          {
+            "name": "log_offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Skip this many log lines.",
+              "default": 0,
+              "title": "Log Offset"
+            },
+            "description": "Skip this many log lines."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRunDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/runs/{run_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancel a flow run",
+        "description": "Asks the worker to stop the run: it goes to CANCELLING, then\nCANCELLED once the worker has stopped it.",
+        "operationId": "cancel_run_v1_admin_runs__run_id__cancel_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The flow run's id.",
+              "title": "Run Id"
+            },
+            "description": "The flow run's id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlowRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/commvault/{source_name}/last-run": {
       "get": {
         "tags": [
@@ -3275,6 +4205,26 @@
           }
         ]
       },
+      "CaFetchIn": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "The primary, as for adding one."
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "CaFetchIn",
+        "description": "A primary whose CA certificate to fetch.",
+        "examples": [
+          {
+            "url": "nbu01.example.com"
+          }
+        ]
+      },
       "CommonJobDetail": {
         "properties": {
           "id": {
@@ -3809,6 +4759,428 @@
         ],
         "title": "CommonJobOut",
         "description": "A job from any product, in blt's common shape. The product's own\nrecord is at `product_path`."
+      },
+      "DeploymentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The deployment's id."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name, e.g. hourly."
+          },
+          "flow_name": {
+            "type": "string",
+            "title": "Flow Name",
+            "description": "The flow it runs."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "What it does."
+          },
+          "paused": {
+            "type": "boolean",
+            "title": "Paused",
+            "description": "No scheduled runs while paused."
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/Schedule"
+            },
+            "type": "array",
+            "title": "Schedules",
+            "description": "When it runs; none for by-hand ones."
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Parameters",
+            "description": "The parameters it runs with by default."
+          },
+          "parameter_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Parameter Schema",
+            "description": "JSON schema of its parameters, for a run-now form."
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunBrief"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its latest run that started."
+          },
+          "next_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunBrief"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its next scheduled run."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "flow_name",
+          "paused",
+          "schedules",
+          "parameters",
+          "parameter_schema"
+        ],
+        "title": "DeploymentOut",
+        "description": "Something Prefect runs: a flow, how it is started, and when."
+      },
+      "FlowRunDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The flow run's id."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name."
+          },
+          "flow_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Name",
+            "description": "The flow."
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id",
+            "description": "The deployment that started it."
+          },
+          "deployment_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Name",
+            "description": "That deployment's name."
+          },
+          "state_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Type",
+            "description": "SCHEDULED, PENDING, RUNNING, COMPLETED, FAILED, ..."
+          },
+          "state_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Name",
+            "description": "Prefect's name for the state."
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "The state's message, if any."
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Parameters",
+            "description": "What it was run with."
+          },
+          "auto_scheduled": {
+            "type": "boolean",
+            "title": "Auto Scheduled",
+            "description": "Started by its schedule, not by hand."
+          },
+          "expected_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Start Time",
+            "description": "When it was due."
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time",
+            "description": "When it started."
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time",
+            "description": "When it ended."
+          },
+          "total_run_time": {
+            "type": "number",
+            "title": "Total Run Time",
+            "description": "Seconds."
+          },
+          "logs": {
+            "items": {
+              "$ref": "#/components/schemas/LogLine"
+            },
+            "type": "array",
+            "title": "Logs",
+            "description": "Its log lines, oldest first."
+          },
+          "logs_truncated": {
+            "type": "boolean",
+            "title": "Logs Truncated",
+            "description": "More lines than were returned."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "flow_name",
+          "deployment_id",
+          "deployment_name",
+          "state_type",
+          "state_name",
+          "parameters",
+          "auto_scheduled",
+          "total_run_time",
+          "logs",
+          "logs_truncated"
+        ],
+        "title": "FlowRunDetail",
+        "description": "A flow run and its log."
+      },
+      "FlowRunOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The flow run's id."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name."
+          },
+          "flow_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Name",
+            "description": "The flow."
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id",
+            "description": "The deployment that started it."
+          },
+          "deployment_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Name",
+            "description": "That deployment's name."
+          },
+          "state_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Type",
+            "description": "SCHEDULED, PENDING, RUNNING, COMPLETED, FAILED, ..."
+          },
+          "state_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Name",
+            "description": "Prefect's name for the state."
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "The state's message, if any."
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Parameters",
+            "description": "What it was run with."
+          },
+          "auto_scheduled": {
+            "type": "boolean",
+            "title": "Auto Scheduled",
+            "description": "Started by its schedule, not by hand."
+          },
+          "expected_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Start Time",
+            "description": "When it was due."
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time",
+            "description": "When it started."
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time",
+            "description": "When it ended."
+          },
+          "total_run_time": {
+            "type": "number",
+            "title": "Total Run Time",
+            "description": "Seconds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "flow_name",
+          "deployment_id",
+          "deployment_name",
+          "state_type",
+          "state_name",
+          "parameters",
+          "auto_scheduled",
+          "total_run_time"
+        ],
+        "title": "FlowRunOut",
+        "description": "One flow run."
       },
       "HTTPValidationError": {
         "properties": {
@@ -4717,6 +6089,100 @@
         ],
         "title": "LastRun",
         "description": "`watermark` is when the most recent *successful* collection run\n(initial, delta or full - not backfill) started - the\npoint a delta run has to reach back to. None means nothing has ever\nbeen collected for this CommCell, i.e. do a full run."
+      },
+      "LogLine": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When."
+          },
+          "level": {
+            "type": "string",
+            "title": "Level",
+            "description": "INFO, WARNING, ERROR, ..."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "The line."
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "level",
+          "message"
+        ],
+        "title": "LogLine",
+        "description": "One line of a flow run's log."
+      },
+      "NetBackupPrimaryIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "blt's name for it: lower case letters, digits and dashes.",
+            "examples": [
+              "nbu-prod-01"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "The primary: a host name, or https://<primary>:1556/netbackup.",
+            "examples": [
+              "nbu01.example.com"
+            ]
+          },
+          "api_key": {
+            "type": "string",
+            "format": "password",
+            "title": "Api Key",
+            "description": "An API key, made in NetBackup's web UI.",
+            "writeOnly": true
+          },
+          "ca_certificate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ca Certificate",
+            "description": "The primary's CA certificate (PEM), unless publicly signed."
+          },
+          "verify_tls": {
+            "type": "boolean",
+            "title": "Verify Tls",
+            "description": "Check the primary's TLS certificate.",
+            "default": true
+          },
+          "collect": {
+            "type": "boolean",
+            "title": "Collect",
+            "description": "Collected by the scheduled flows.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "url",
+          "api_key"
+        ],
+        "title": "NetBackupPrimaryIn",
+        "description": "A NetBackup primary to add. It starts with collection off, so it\ncan be checked first.",
+        "examples": [
+          {
+            "api_key": "A1b2...",
+            "name": "nbu-prod-01",
+            "url": "nbu01.example.com"
+          }
+        ]
       },
       "ObjectBatch": {
         "properties": {
@@ -6920,6 +8386,93 @@
           }
         ]
       },
+      "RunBrief": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "The flow run's id."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name."
+          },
+          "state_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Type",
+            "description": "SCHEDULED, RUNNING, COMPLETED, FAILED, ..."
+          },
+          "state_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Name",
+            "description": "Prefect's name for the state (Late, Crashed, ...)."
+          },
+          "expected_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Start Time",
+            "description": "When it was due."
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time",
+            "description": "When it started."
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time",
+            "description": "When it ended."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "state_type",
+          "state_name"
+        ],
+        "title": "RunBrief",
+        "description": "A flow run, briefly."
+      },
       "RunFinish": {
         "properties": {
           "status": {
@@ -6982,6 +8535,26 @@
             "jobs_missing": 0,
             "jobs_reconciled": 3,
             "status": "succeeded"
+          }
+        ]
+      },
+      "RunNowIn": {
+        "properties": {
+          "parameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Parameters",
+            "description": "Parameters, over the deployment's own."
+          }
+        },
+        "type": "object",
+        "title": "RunNowIn",
+        "description": "A run to start now.",
+        "examples": [
+          {
+            "parameters": {
+              "commcell": "cv-toaster"
+            }
           }
         ]
       },
@@ -7215,6 +8788,232 @@
         ],
         "title": "SampleOut",
         "description": "A target's capacity and use at one moment."
+      },
+      "Schedule": {
+        "properties": {
+          "cron": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron",
+            "description": "A cron schedule.",
+            "examples": [
+              "7 * * * *"
+            ]
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds",
+            "description": "Or every so many seconds."
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone",
+            "description": "The cron schedule's time zone."
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "description": "False: this schedule is switched off."
+          }
+        },
+        "type": "object",
+        "required": [
+          "active"
+        ],
+        "title": "Schedule",
+        "description": "When a deployment runs."
+      },
+      "SourceBlockOut": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "commvault",
+              "rubrik",
+              "netbackup"
+            ],
+            "title": "Type",
+            "description": "The product."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The block's name: blt's name for the source."
+          },
+          "block_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Block Id",
+            "description": "The Prefect block document's id."
+          },
+          "collect": {
+            "type": "boolean",
+            "title": "Collect",
+            "description": "Collected by the scheduled flows."
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address",
+            "description": "Where it is: its API's URL."
+          },
+          "verify_tls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify Tls",
+            "description": "TLS certificates are checked."
+          },
+          "has_ca_certificate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Ca Certificate",
+            "description": "NetBackup: a CA certificate is kept for it."
+          },
+          "secrets_set": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secrets Set",
+            "description": "The secret fields that have a value."
+          },
+          "updated": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated",
+            "description": "When the block last changed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "block_id",
+          "collect",
+          "address",
+          "secrets_set"
+        ],
+        "title": "SourceBlockOut",
+        "description": "One source's Prefect block, without its secrets."
+      },
+      "SourceBlockPatch": {
+        "properties": {
+          "collect": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collect",
+            "description": "Collected by the scheduled flows."
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "NetBackup: a new address."
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key",
+            "description": "NetBackup: a new API key."
+          },
+          "ca_certificate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ca Certificate",
+            "description": "NetBackup: a new CA certificate; an empty string removes it."
+          },
+          "verify_tls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify Tls",
+            "description": "NetBackup: check the primary's TLS certificate."
+          }
+        },
+        "type": "object",
+        "title": "SourceBlockPatch",
+        "description": "What to change; anything left out stays as it is. Only `collect`\napplies to every source; the rest are NetBackup's.",
+        "examples": [
+          {
+            "collect": true
+          }
+        ]
       },
       "SourceOut": {
         "properties": {
@@ -8050,6 +9849,10 @@
     {
       "name": "health",
       "description": "Is the API up, and can it reach its database."
+    },
+    {
+      "name": "admin",
+      "description": "Sources, schedules and flow runs, through Prefect: what the UI's Administration pages use. See docs/admin.md."
     },
     {
       "name": "jobs",

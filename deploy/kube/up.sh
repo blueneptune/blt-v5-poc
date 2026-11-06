@@ -11,6 +11,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 # shellcheck source=deploy/env.sh
 source deploy/env.sh
+check_ui_sign_in
 
 b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 
@@ -35,12 +36,16 @@ render() {
         [MAX_PARALLEL]="${MAX_PARALLEL:-4}"
         [UI_BIND]="${UI_BIND:-}" [UI_PORT]="${UI_PORT:-}"
         [UI_LISTEN_HOST]="${UI_LISTEN_HOST:-}" [UI_LISTEN_PORT]="${UI_LISTEN_PORT:-}"
+        [UI_SIGN_IN]="${UI_SIGN_IN:-on}" [UI_USER]="${BLT_UI_USER:-admin}"
+        [API_PREFECT_URL]="$API_PREFECT_URL"
     )
     local -A secrets=(
         [BLT_API_KEY]="$BLT_API_KEY" [POSTGRES_PASSWORD]="$POSTGRES_PASSWORD"
         [BLT_DATABASE_URL]="postgresql+psycopg://blt:${POSTGRES_PASSWORD}@127.0.0.1:${PG_LISTEN_PORT}/blt"
         [PREFECT_DB_PASSWORD]="${PREFECT_DB_PASSWORD:-unused}"
         [PREFECT_AUTH]="${PREFECT_AUTH:-unused:unused}"
+        [BLT_UI_PASSWORD_HASH]="${BLT_UI_PASSWORD_HASH:-unused}"
+        [BLT_UI_SESSION_SECRET]="${BLT_UI_SESSION_SECRET:-unused}"
     )
     # On the host's network there is nothing to publish - each service
     # listens on its port itself - and podman refuses port mappings there.

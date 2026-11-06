@@ -7,7 +7,7 @@
         - {name: PG_PORT, value: "${PG_LISTEN_PORT}"}
         - {name: PREFECT_LISTEN_HOST, value: "${PREFECT_LISTEN_HOST}"}
         - {name: PREFECT_LISTEN_PORT, value: "${PREFECT_LISTEN_PORT}"}
-        - {name: PREFECT_SERVER_UI_API_URL, value: /api}
+        - {name: PREFECT_SERVER_UI_ENABLED, value: "false"}
         - name: POSTGRES_PASSWORD
           valueFrom: {secretKeyRef: {name: blt-secrets, key: POSTGRES_PASSWORD}}
         - name: PREFECT_DB_PASSWORD

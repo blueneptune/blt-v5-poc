@@ -110,8 +110,21 @@ deployments:
     work_pool:
       name: blt
 
+  # Started from blt's Administration pages, never on a schedule.
   - name: by-hand
-    description: One CommCell's older history, until complete. Run it from the UI with the CommCell's name.
+    description: Checks one NetBackup primary's API key and each read blt makes. Started from Administration -> Sources.
+    entrypoint: blt.flows.netbackup:netbackup_check
+    work_pool:
+      name: blt
+
+  - name: by-hand
+    description: Fetches a NetBackup primary's CA certificate, by address, with its fingerprint. Started from Administration -> Sources.
+    entrypoint: blt.flows.netbackup:netbackup_fetch_ca
+    work_pool:
+      name: blt
+
+  - name: by-hand
+    description: One CommCell's older history, until complete. Run it from Administration -> Schedules with the CommCell's name.
     entrypoint: blt.flows.flows:backfill
     work_pool:
       name: blt

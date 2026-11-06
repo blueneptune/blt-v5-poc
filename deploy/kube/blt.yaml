@@ -21,6 +21,8 @@ data:
   BLT_DATABASE_URL: ${B64_BLT_DATABASE_URL}
   PREFECT_DB_PASSWORD: ${B64_PREFECT_DB_PASSWORD}
   PREFECT_AUTH: ${B64_PREFECT_AUTH}
+  BLT_UI_PASSWORD_HASH: ${B64_BLT_UI_PASSWORD_HASH}
+  BLT_UI_SESSION_SECRET: ${B64_BLT_UI_SESSION_SECRET}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -72,6 +74,10 @@ spec:
           valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_API_KEY}}
         - name: BLT_DATABASE_URL
           valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_DATABASE_URL}}
+        # Where the Administration pages reach Prefect; empty with it off.
+        - {name: BLT_PREFECT_API_URL, value: "${API_PREFECT_URL}"}
+        - name: BLT_PREFECT_AUTH
+          valueFrom: {secretKeyRef: {name: blt-secrets, key: PREFECT_AUTH}}
       ports:
         - {containerPort: ${API_LISTEN_PORT}, hostPort: ${API_PORT}, hostIP: "${BIND}"}
 # @UI_CONTAINER@

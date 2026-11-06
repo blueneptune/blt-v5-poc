@@ -55,6 +55,14 @@ The breakdown follows each product's own hierarchy:
 - UI: by source, by media server / MediaAgent, by kind; use over time;
   "full in about N days" from the trend.
 
+## Also done: sign-in and Administration (2026-11-05)
+
+The UI asks for a password (one local admin until Zitadel), and its
+Administration pages - sources, schedules, runs - replace Prefect's UI,
+which is switched off. A NetBackup primary is added, checked and switched
+on from there ([admin.md](admin.md)). Next on that track: the SLP backlog
+report, on the work NetBackup primary the owner hooks in.
+
 ## 3. Environment change log
 
 **Goal:** every change to what protects what - Commvault plans and

@@ -12,6 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 # shellcheck source=deploy/env.sh
 source deploy/env.sh
+check_ui_sign_in
 
 build_images
 
@@ -45,23 +46,25 @@ podman run -d --replace --pod blt --name blt-postgres \
     postgres -c "listen_addresses=${PG_LISTEN_ADDRESSES}"
 
 # Containers in a pod share localhost, so the API reaches Postgres there.
+# BLT_PREFECT_AUTH is Prefect's basic auth, for the Administration pages.
 podman run -d --replace --pod blt --name blt-api \
     -e BLT_API_KEY \
+    -e "BLT_PREFECT_API_URL=${API_PREFECT_URL}" -e "BLT_PREFECT_AUTH=${PREFECT_AUTH:-}" \
     -e "BLT_LISTEN_HOST=${API_LISTEN_HOST}" -e "BLT_LISTEN_PORT=${API_LISTEN_PORT}" \
     -e "BLT_DATABASE_URL=postgresql+psycopg://blt:${POSTGRES_PASSWORD}@127.0.0.1:${PG_LISTEN_PORT}/blt" \
     localhost/blt-api
 
 if [[ "$PREFECT_ENABLED" == true ]]; then
     # The server gives itself a database (prefect) on the same Postgres,
-    # then serves the API and UI. The UI's calls go to /api on whatever
-    # address the browser used, so it works from another machine too.
+    # then serves its API - and no UI (PREFECT_SERVER_UI_ENABLED=false in
+    # its image): blt's UI is where sources, schedules and runs are managed.
     podman run -d --replace --pod blt --name blt-prefect-server \
         -e "PG_HOST=127.0.0.1" -e "PG_PORT=${PG_LISTEN_PORT}" \
         -e POSTGRES_PASSWORD -e PREFECT_DB_PASSWORD \
         -e "PREFECT_LISTEN_HOST=${PREFECT_LISTEN_HOST}" \
         -e "PREFECT_LISTEN_PORT=${PREFECT_LISTEN_PORT}" \
         -e "PREFECT_SERVER_API_AUTH_STRING=${PREFECT_AUTH}" \
-        -e "PREFECT_SERVER_UI_API_URL=/api" \
+        -e "PREFECT_SERVER_UI_ENABLED=false" \
         localhost/blt-prefect-server
     podman run -d --replace --pod blt --name blt-prefect-worker \
         -e "PREFECT_API_URL=http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}/api" \
@@ -81,6 +84,8 @@ if [[ "$UI_ENABLED" == true ]]; then
         -e "HOST=${UI_LISTEN_HOST}" -e "PORT=${UI_LISTEN_PORT}" \
         -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
         -e BLT_API_KEY \
+        -e "BLT_UI_SIGN_IN=${UI_SIGN_IN}" -e "BLT_UI_USER=${BLT_UI_USER:-admin}" \
+        -e BLT_UI_PASSWORD_HASH -e BLT_UI_SESSION_SECRET \
         localhost/blt-ui
 else
     podman rm -f --ignore blt-ui >/dev/null

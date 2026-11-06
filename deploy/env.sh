@@ -5,8 +5,9 @@
 # Sets: BIND API_PORT PG_PORT HOST_NETWORK API_LISTEN_HOST API_LISTEN_PORT
 # PG_LISTEN_PORT PG_LISTEN_ADDRESSES LOCAL API_IN_POD PREFECT_ENABLED and, when it
 # is on, PREFECT_BIND PREFECT_PORT PREFECT_LISTEN_HOST PREFECT_LISTEN_PORT
-# PREFECT_LOCAL MAX_PARALLEL, and UI_ENABLED with, when it is on, UI_BIND
-# UI_PORT UI_LISTEN_HOST UI_LISTEN_PORT.
+# PREFECT_LOCAL MAX_PARALLEL, API_PREFECT_URL (where the API reaches Prefect,
+# empty when it is off), and UI_ENABLED with, when it is on, UI_BIND
+# UI_PORT UI_LISTEN_HOST UI_LISTEN_PORT UI_SIGN_IN.
 
 # Git Bash on Windows rewrites any argument that looks like a Unix path
 # into a Windows one before running a command - so podman was being told
@@ -88,9 +89,10 @@ if [[ "${BLT_PREFECT:-false}" == "true" ]]; then
         echo "PREFECT_AUTH in config/blt.env must be user:password." >&2
         exit 1
     fi
-    # The UI may need to be reachable from more machines than the API and
-    # the database do, so it has its own bind address.
-    PREFECT_BIND="${BLT_PREFECT_BIND_ADDRESS:-$BIND}"
+    # Prefect serves only its API now (no UI): the worker and blt's API
+    # reach it inside the pod, the blt-prefect-* tools on this machine. So
+    # it stays on 127.0.0.1 unless BLT_PREFECT_BIND_ADDRESS says otherwise.
+    PREFECT_BIND="${BLT_PREFECT_BIND_ADDRESS:-127.0.0.1}"
     if ! is_ip "$PREFECT_BIND"; then
         echo "BLT_PREFECT_BIND_ADDRESS in config/blt.env is not an IP address." >&2
         exit 1
@@ -110,10 +112,16 @@ if [[ "${BLT_PREFECT:-false}" == "true" ]]; then
     fi
 fi
 
-# The web UI (ui/). On unless BLT_UI=false. It has no sign-in yet, so
-# it gets its own bind address that does NOT follow BLT_BIND_ADDRESS: it
-# stays on this machine (127.0.0.1) unless BLT_UI_BIND_ADDRESS says
-# otherwise - anyone who can reach it sees every job.
+# Where the API reaches Prefect, for the Administration pages.
+API_PREFECT_URL=""
+[[ "$PREFECT_ENABLED" == true ]] && API_PREFECT_URL="http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}/api"
+
+# The web UI (ui/). On unless BLT_UI=false. It needs signing in: the
+# account is BLT_UI_USER (default admin) with BLT_UI_PASSWORD_HASH, the
+# session cookie signed with BLT_UI_SESSION_SECRET (`npm run password --
+# --secret` in ui/ makes both). BLT_UI_SIGN_IN=off opens it to anyone
+# who can reach it - then keep it on 127.0.0.1. It has its own bind
+# address, which does not follow BLT_BIND_ADDRESS.
 UI_ENABLED=true
 [[ "${BLT_UI:-true}" == "false" ]] && UI_ENABLED=false
 if [[ "$UI_ENABLED" == true ]]; then
@@ -123,12 +131,36 @@ if [[ "$UI_ENABLED" == true ]]; then
         exit 1
     fi
     UI_PORT="${BLT_UI_PORT:-8090}"
+    UI_SIGN_IN=on
+    [[ "${BLT_UI_SIGN_IN:-on}" == "off" ]] && UI_SIGN_IN=off
     if [[ "$HOST_NETWORK" == true ]]; then
         UI_LISTEN_HOST="$UI_BIND" UI_LISTEN_PORT="$UI_PORT"
     else
         UI_LISTEN_HOST="0.0.0.0" UI_LISTEN_PORT=3000
     fi
 fi
+
+# The UI's sign-in settings, checked by the start scripts only (backup.sh
+# and down.sh source this file too, and need none of it).
+check_ui_sign_in() {
+    [[ "$UI_ENABLED" == true ]] || return 0
+    if [[ "$UI_SIGN_IN" == off ]]; then
+        if [[ "$UI_BIND" != "127.0.0.1" ]]; then
+            echo "BLT_UI_SIGN_IN=off opens the UI to anyone: keep BLT_UI_BIND_ADDRESS at 127.0.0.1." >&2
+            exit 1
+        fi
+        return 0
+    fi
+    local how="(cd ui && npm run password -- --secret)" secret="${BLT_UI_SESSION_SECRET:-}"
+    if [[ "${BLT_UI_PASSWORD_HASH:-}" != scrypt:* ]]; then
+        echo "Set BLT_UI_PASSWORD_HASH in config/blt.env to a hash from npm run password ${how}." >&2
+        exit 1
+    fi
+    if (( ${#secret} < 32 )); then
+        echo "Set BLT_UI_SESSION_SECRET in config/blt.env: 32 characters or more ${how}." >&2
+        exit 1
+    fi
+}
 
 build_images() {
     podman build -t blt-api -f Containerfile .
@@ -156,7 +188,7 @@ wait_until_up() {
         fi
         if [[ "$ok" == true ]]; then
             echo "blt pod is up: API on http://${BIND}:${API_PORT}, Postgres on ${BIND}:${PG_PORT}"
-            [[ -n "$prefect" ]] && echo "Prefect UI on http://${PREFECT_BIND}:${PREFECT_PORT}"
+            [[ -n "$prefect" ]] && echo "Prefect API on http://${PREFECT_BIND}:${PREFECT_PORT}/api"
             [[ -n "$ui" ]] && echo "blt UI on http://${UI_BIND}:${UI_PORT}"
             return 0
         fi
