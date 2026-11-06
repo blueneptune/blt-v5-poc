@@ -48,7 +48,14 @@
 		</div>
 
 		<nav class="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-1 md:flex-col md:pb-0">
-			{#each data.nav as item (item.href)}
+			{#each data.nav as item, i (item.href)}
+				{#if item.section && item.section !== data.nav[i - 1]?.section}
+					<p
+						class="text-muted-foreground hidden px-3 pt-4 pb-1 text-xs font-medium tracking-wide uppercase md:block"
+					>
+						{item.section}
+					</p>
+				{/if}
 				<a
 					href={item.href}
 					aria-current={active(item.href) ? 'page' : undefined}
@@ -57,7 +64,7 @@
 						? 'bg-accent text-accent-foreground'
 						: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
 				>
-					{item.label}
+					{#if item.section}<span class="md:hidden">{item.section === 'Administration' ? 'Admin · ' : `${item.section} · `}</span>{/if}{item.label}
 				</a>
 			{/each}
 		</nav>

@@ -11,6 +11,7 @@
  */
 import { createServer, type ServerResponse } from 'node:http';
 import type { components } from '../src/lib/api/schema';
+import { admin } from './fake-admin.ts';
 import { API_KEY, JOBS, SAMPLES, SOURCES, STORAGE, type Job } from './fixtures.ts';
 
 type JobDetail = components['schemas']['CommonJobDetail'];
@@ -65,11 +66,22 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
 	res.end(JSON.stringify(body));
 }
 
-createServer((req, res) => {
+createServer(async (req, res) => {
 	const url = new URL(req.url ?? '/', 'http://fake');
 	if (req.headers['x-api-key'] !== API_KEY) return send(res, 401, { detail: 'Invalid API key' });
 	const q = url.searchParams;
 	const path = url.pathname;
+
+	let text = '';
+	for await (const chunk of req) text += chunk;
+	const answer = admin(req.method ?? 'GET', path, q, text ? JSON.parse(text) : null);
+	if (answer) {
+		if (answer[0] === 204) {
+			res.writeHead(204);
+			return res.end();
+		}
+		return send(res, answer[0], answer[1]);
+	}
 
 	if (path === '/v1/sources') return send(res, 200, SOURCES);
 	if (path === '/v1/jobs/summary') return send(res, 200, summary(JOBS.filter((j) => matches(j, q)), q.getAll('group')));

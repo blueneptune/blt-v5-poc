@@ -174,6 +174,266 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every source's block
+         * @description Every CommCell, Rubrik account and NetBackup primary Prefect
+         *     holds a block for, with whether each secret is set - never its
+         *     value.
+         */
+        get: operations["list_sources_v1_admin_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/sources/netbackup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a NetBackup primary
+         * @description Saves the primary's block. Collection starts off: check the
+         *     primary first (`.../check`), then turn `collect` on.
+         */
+        post: operations["add_netbackup_v1_admin_sources_netbackup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/sources/{source_type}/{source_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a source's block
+         * @description Removes the block, so nothing collects from it any more. What
+         *     was collected stays in blt.
+         */
+        delete: operations["remove_source_v1_admin_sources__source_type___source_name__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a source's block
+         * @description Changes only what is given. For CommCells and Rubrik accounts
+         *     that is `collect`; their credentials are set with
+         *     blt-prefect-import / blt-rubrik.
+         */
+        patch: operations["change_source_v1_admin_sources__source_type___source_name__patch"];
+        trace?: never;
+    };
+    "/v1/admin/sources/netbackup/{source_name}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a NetBackup primary, from a worker
+         * @description Starts blt-netbackup-check for the primary: it signs in with
+         *     the block's key and tries each read blt makes (storage, SLP
+         *     images, jobs), and logs what it found. Watch the run's log.
+         */
+        post: operations["check_netbackup_v1_admin_sources_netbackup__source_name__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/netbackup/ca-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch a NetBackup primary's CA certificate, from a worker
+         * @description Starts blt-netbackup-fetch-ca: it asks the primary for its CA
+         *     certificate (which needs no sign-in) and logs it with its SHA-256
+         *     fingerprint. Compare the fingerprint with the primary's own
+         *     (`nbcertcmd -displayCACertDetail`) before trusting it.
+         */
+        post: operations["fetch_netbackup_ca_v1_admin_netbackup_ca_certificate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/deployments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What runs, and when
+         * @description Every deployment, with its schedules, its last finished run and
+         *     its next scheduled one.
+         */
+        get: operations["list_deployments_v1_admin_deployments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/deployments/{deployment_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a deployment now
+         * @description Starts a run now, with these parameters over its defaults.
+         */
+        post: operations["run_now_v1_admin_deployments__deployment_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/deployments/{deployment_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause a deployment's schedules
+         * @description No scheduled runs until it is resumed. Lasts until the worker
+         *     next starts, which deploys every schedule from prefect.yaml again.
+         */
+        post: operations["pause_v1_admin_deployments__deployment_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/deployments/{deployment_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume a deployment's schedules
+         * @description Its schedules make runs again.
+         */
+        post: operations["resume_v1_admin_deployments__deployment_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Flow runs, newest first
+         * @description Flow runs by when they were due, newest first: every
+         *     deployment's, or one's.
+         */
+        get: operations["list_runs_v1_admin_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A flow run and its log
+         * @description The run and its log lines, oldest first. Poll with `log_offset`
+         *     set to the lines already shown to get only new ones.
+         */
+        get: operations["get_run_v1_admin_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a flow run
+         * @description Asks the worker to stop the run: it goes to CANCELLING, then
+         *     CANCELLED once the worker has stopped it.
+         */
+        post: operations["cancel_run_v1_admin_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/commvault/{source_name}/last-run": {
         parameters: {
             query?: never;
@@ -636,6 +896,20 @@ export interface components {
             complete: boolean;
         };
         /**
+         * CaFetchIn
+         * @description A primary whose CA certificate to fetch.
+         * @example {
+         *       "url": "nbu01.example.com"
+         *     }
+         */
+        CaFetchIn: {
+            /**
+             * Url
+             * @description The primary, as for adding one.
+             */
+            url: string;
+        };
+        /**
          * CommonJobDetail
          * @description One job, with the product's full record of it.
          */
@@ -922,6 +1196,229 @@ export interface components {
              * @description When blt last collected it.
              */
             last_collected_at: string;
+        };
+        /**
+         * DeploymentOut
+         * @description Something Prefect runs: a flow, how it is started, and when.
+         */
+        DeploymentOut: {
+            /**
+             * Id
+             * Format: uuid
+             * @description The deployment's id.
+             */
+            id: string;
+            /**
+             * Name
+             * @description Its name, e.g. hourly.
+             */
+            name: string;
+            /**
+             * Flow Name
+             * @description The flow it runs.
+             */
+            flow_name: string;
+            /**
+             * Description
+             * @description What it does.
+             */
+            description?: string | null;
+            /**
+             * Paused
+             * @description No scheduled runs while paused.
+             */
+            paused: boolean;
+            /**
+             * Schedules
+             * @description When it runs; none for by-hand ones.
+             */
+            schedules: components["schemas"]["Schedule"][];
+            /**
+             * Parameters
+             * @description The parameters it runs with by default.
+             */
+            parameters: {
+                [key: string]: unknown;
+            };
+            /**
+             * Parameter Schema
+             * @description JSON schema of its parameters, for a run-now form.
+             */
+            parameter_schema: {
+                [key: string]: unknown;
+            };
+            /** @description Its latest run that started. */
+            last_run?: components["schemas"]["RunBrief"] | null;
+            /** @description Its next scheduled run. */
+            next_run?: components["schemas"]["RunBrief"] | null;
+        };
+        /**
+         * FlowRunDetail
+         * @description A flow run and its log.
+         */
+        FlowRunDetail: {
+            /**
+             * Id
+             * Format: uuid
+             * @description The flow run's id.
+             */
+            id: string;
+            /**
+             * Name
+             * @description Its name.
+             */
+            name: string;
+            /**
+             * Flow Name
+             * @description The flow.
+             */
+            flow_name: string | null;
+            /**
+             * Deployment Id
+             * @description The deployment that started it.
+             */
+            deployment_id: string | null;
+            /**
+             * Deployment Name
+             * @description That deployment's name.
+             */
+            deployment_name: string | null;
+            /**
+             * State Type
+             * @description SCHEDULED, PENDING, RUNNING, COMPLETED, FAILED, ...
+             */
+            state_type: string | null;
+            /**
+             * State Name
+             * @description Prefect's name for the state.
+             */
+            state_name: string | null;
+            /**
+             * Message
+             * @description The state's message, if any.
+             */
+            message?: string | null;
+            /**
+             * Parameters
+             * @description What it was run with.
+             */
+            parameters: {
+                [key: string]: unknown;
+            };
+            /**
+             * Auto Scheduled
+             * @description Started by its schedule, not by hand.
+             */
+            auto_scheduled: boolean;
+            /**
+             * Expected Start Time
+             * @description When it was due.
+             */
+            expected_start_time?: string | null;
+            /**
+             * Start Time
+             * @description When it started.
+             */
+            start_time?: string | null;
+            /**
+             * End Time
+             * @description When it ended.
+             */
+            end_time?: string | null;
+            /**
+             * Total Run Time
+             * @description Seconds.
+             */
+            total_run_time: number;
+            /**
+             * Logs
+             * @description Its log lines, oldest first.
+             */
+            logs: components["schemas"]["LogLine"][];
+            /**
+             * Logs Truncated
+             * @description More lines than were returned.
+             */
+            logs_truncated: boolean;
+        };
+        /**
+         * FlowRunOut
+         * @description One flow run.
+         */
+        FlowRunOut: {
+            /**
+             * Id
+             * Format: uuid
+             * @description The flow run's id.
+             */
+            id: string;
+            /**
+             * Name
+             * @description Its name.
+             */
+            name: string;
+            /**
+             * Flow Name
+             * @description The flow.
+             */
+            flow_name: string | null;
+            /**
+             * Deployment Id
+             * @description The deployment that started it.
+             */
+            deployment_id: string | null;
+            /**
+             * Deployment Name
+             * @description That deployment's name.
+             */
+            deployment_name: string | null;
+            /**
+             * State Type
+             * @description SCHEDULED, PENDING, RUNNING, COMPLETED, FAILED, ...
+             */
+            state_type: string | null;
+            /**
+             * State Name
+             * @description Prefect's name for the state.
+             */
+            state_name: string | null;
+            /**
+             * Message
+             * @description The state's message, if any.
+             */
+            message?: string | null;
+            /**
+             * Parameters
+             * @description What it was run with.
+             */
+            parameters: {
+                [key: string]: unknown;
+            };
+            /**
+             * Auto Scheduled
+             * @description Started by its schedule, not by hand.
+             */
+            auto_scheduled: boolean;
+            /**
+             * Expected Start Time
+             * @description When it was due.
+             */
+            expected_start_time?: string | null;
+            /**
+             * Start Time
+             * @description When it started.
+             */
+            start_time?: string | null;
+            /**
+             * End Time
+             * @description When it ended.
+             */
+            end_time?: string | null;
+            /**
+             * Total Run Time
+             * @description Seconds.
+             */
+            total_run_time: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1395,6 +1892,75 @@ export interface components {
             watermark?: string | null;
             /** @description The most recent run of any kind, whatever its outcome. */
             last_run?: components["schemas"]["RunOut"] | null;
+        };
+        /**
+         * LogLine
+         * @description One line of a flow run's log.
+         */
+        LogLine: {
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When.
+             */
+            timestamp: string;
+            /**
+             * Level
+             * @description INFO, WARNING, ERROR, ...
+             */
+            level: string;
+            /**
+             * Message
+             * @description The line.
+             */
+            message: string;
+        };
+        /**
+         * NetBackupPrimaryIn
+         * @description A NetBackup primary to add. It starts with collection off, so it
+         *     can be checked first.
+         * @example {
+         *       "api_key": "A1b2...",
+         *       "name": "nbu-prod-01",
+         *       "url": "nbu01.example.com"
+         *     }
+         */
+        NetBackupPrimaryIn: {
+            /**
+             * Name
+             * @description blt's name for it: lower case letters, digits and dashes.
+             * @example nbu-prod-01
+             */
+            name: string;
+            /**
+             * Url
+             * @description The primary: a host name, or https://<primary>:1556/netbackup.
+             * @example nbu01.example.com
+             */
+            url: string;
+            /**
+             * Api Key
+             * Format: password
+             * @description An API key, made in NetBackup's web UI.
+             */
+            api_key: string;
+            /**
+             * Ca Certificate
+             * @description The primary's CA certificate (PEM), unless publicly signed.
+             */
+            ca_certificate?: string | null;
+            /**
+             * Verify Tls
+             * @description Check the primary's TLS certificate.
+             * @default true
+             */
+            verify_tls: boolean;
+            /**
+             * Collect
+             * @description Collected by the scheduled flows.
+             * @default false
+             */
+            collect: boolean;
         };
         /**
          * ObjectBatch
@@ -2528,6 +3094,48 @@ export interface components {
             lookup_seconds: number;
         };
         /**
+         * RunBrief
+         * @description A flow run, briefly.
+         */
+        RunBrief: {
+            /**
+             * Id
+             * Format: uuid
+             * @description The flow run's id.
+             */
+            id: string;
+            /**
+             * Name
+             * @description Its name.
+             */
+            name: string;
+            /**
+             * State Type
+             * @description SCHEDULED, RUNNING, COMPLETED, FAILED, ...
+             */
+            state_type: string | null;
+            /**
+             * State Name
+             * @description Prefect's name for the state (Late, Crashed, ...).
+             */
+            state_name: string | null;
+            /**
+             * Expected Start Time
+             * @description When it was due.
+             */
+            expected_start_time?: string | null;
+            /**
+             * Start Time
+             * @description When it started.
+             */
+            start_time?: string | null;
+            /**
+             * End Time
+             * @description When it ended.
+             */
+            end_time?: string | null;
+        };
+        /**
          * RunFinish
          * @description How a run ended.
          * @example {
@@ -2574,6 +3182,24 @@ export interface components {
              * @description Why a failed run failed.
              */
             error?: string | null;
+        };
+        /**
+         * RunNowIn
+         * @description A run to start now.
+         * @example {
+         *       "parameters": {
+         *         "commcell": "cv-toaster"
+         *       }
+         *     }
+         */
+        RunNowIn: {
+            /**
+             * Parameters
+             * @description Parameters, over the deployment's own.
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * RunOut
@@ -2708,6 +3334,121 @@ export interface components {
              * @description logical / physical, where the product says.
              */
             dedupe_ratio?: number | null;
+        };
+        /**
+         * Schedule
+         * @description When a deployment runs.
+         */
+        Schedule: {
+            /**
+             * Cron
+             * @description A cron schedule.
+             * @example 7 * * * *
+             */
+            cron?: string | null;
+            /**
+             * Interval Seconds
+             * @description Or every so many seconds.
+             */
+            interval_seconds?: number | null;
+            /**
+             * Timezone
+             * @description The cron schedule's time zone.
+             */
+            timezone?: string | null;
+            /**
+             * Active
+             * @description False: this schedule is switched off.
+             */
+            active: boolean;
+        };
+        /**
+         * SourceBlockOut
+         * @description One source's Prefect block, without its secrets.
+         */
+        SourceBlockOut: {
+            /**
+             * Type
+             * @description The product.
+             * @enum {string}
+             */
+            type: "commvault" | "rubrik" | "netbackup";
+            /**
+             * Name
+             * @description The block's name: blt's name for the source.
+             */
+            name: string;
+            /**
+             * Block Id
+             * Format: uuid
+             * @description The Prefect block document's id.
+             */
+            block_id: string;
+            /**
+             * Collect
+             * @description Collected by the scheduled flows.
+             */
+            collect: boolean;
+            /**
+             * Address
+             * @description Where it is: its API's URL.
+             */
+            address: string | null;
+            /**
+             * Verify Tls
+             * @description TLS certificates are checked.
+             */
+            verify_tls?: boolean | null;
+            /**
+             * Has Ca Certificate
+             * @description NetBackup: a CA certificate is kept for it.
+             */
+            has_ca_certificate?: boolean | null;
+            /**
+             * Secrets Set
+             * @description The secret fields that have a value.
+             */
+            secrets_set: string[];
+            /**
+             * Updated
+             * @description When the block last changed.
+             */
+            updated?: string | null;
+        };
+        /**
+         * SourceBlockPatch
+         * @description What to change; anything left out stays as it is. Only `collect`
+         *     applies to every source; the rest are NetBackup's.
+         * @example {
+         *       "collect": true
+         *     }
+         */
+        SourceBlockPatch: {
+            /**
+             * Collect
+             * @description Collected by the scheduled flows.
+             */
+            collect?: boolean | null;
+            /**
+             * Url
+             * @description NetBackup: a new address.
+             */
+            url?: string | null;
+            /**
+             * Api Key
+             * @description NetBackup: a new API key.
+             */
+            api_key?: string | null;
+            /**
+             * Ca Certificate
+             * @description NetBackup: a new CA certificate; an empty string removes it.
+             */
+            ca_certificate?: string | null;
+            /**
+             * Verify Tls
+             * @description NetBackup: check the primary's TLS certificate.
+             */
+            verify_tls?: boolean | null;
         };
         /**
          * SourceOut
@@ -3579,6 +4320,640 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    list_sources_v1_admin_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceBlockOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_netbackup_v1_admin_sources_netbackup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetBackupPrimaryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceBlockOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A source by that name exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_source_v1_admin_sources__source_type___source_name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The product. */
+                source_type: "commvault" | "rubrik" | "netbackup";
+                /** @description The source's block name. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    change_source_v1_admin_sources__source_type___source_name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The product. */
+                source_type: "commvault" | "rubrik" | "netbackup";
+                /** @description The source's block name. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceBlockPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceBlockOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    check_netbackup_v1_admin_sources_netbackup__source_name__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The source's block name. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowRunOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    fetch_netbackup_ca_v1_admin_netbackup_ca_certificate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaFetchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowRunOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_deployments_v1_admin_deployments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    run_now_v1_admin_deployments__deployment_id__runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The deployment's id. */
+                deployment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunNowIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowRunOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    pause_v1_admin_deployments__deployment_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The deployment's id. */
+                deployment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resume_v1_admin_deployments__deployment_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The deployment's id. */
+                deployment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_runs_v1_admin_runs_get: {
+        parameters: {
+            query?: {
+                /** @description One deployment's runs. */
+                deployment_id?: string | null;
+                /** @description Only runs in these states. */
+                state?: ("SCHEDULED" | "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "CANCELLING" | "CRASHED" | "PAUSED")[] | null;
+                /** @description Include runs that have not started yet. */
+                scheduled?: boolean;
+                /** @description At most this many. */
+                limit?: number;
+                /** @description Skip this many. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowRunOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_run_v1_admin_runs__run_id__get: {
+        parameters: {
+            query?: {
+                /** @description Skip this many log lines. */
+                log_offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The flow run's id. */
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowRunDetail"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancel_run_v1_admin_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The flow run's id. */
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowRunOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
