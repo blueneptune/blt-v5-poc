@@ -52,6 +52,7 @@ from blt.schemas import (
 )
 
 from . import jobs as common_jobs
+from .admin import admin_router
 from .docs import (
     API_V1,
     COLLECTION,
@@ -68,6 +69,7 @@ from .docs import (
 )
 from .jobs_router import jobs_router
 from .models import CollectionRun, Commcell, InstanceBackupReport, Job, SourceObject
+from .prefect import PrefectApi
 from .rubrik import rubrik_router
 from .settings import ApiSettings
 from .sources import ensure_source, sources_router
@@ -88,13 +90,24 @@ _INSERT_ONLY = frozenset({"commcell_id", "job_id", "first_seen_at"})
 _SQL_SYSTEM_DATABASES = frozenset({"master", "model", "msdb"})
 
 
-def create_app(settings: ApiSettings | None = None) -> FastAPI:
+def create_app(settings: ApiSettings | None = None, prefect: PrefectApi | None = None) -> FastAPI:
     settings = settings or ApiSettings()  # type: ignore[call-arg]
     engine: Engine = create_engine(settings.database_url.get_secret_value(), pool_pre_ping=True)
+    if prefect is None and settings.prefect_api_url:
+        auth = settings.prefect_auth.get_secret_value() if settings.prefect_auth else None
+        prefect = PrefectApi.connect(settings.prefect_api_url, auth)
 
     def get_session() -> Iterator[Session]:
         with Session(engine) as session:
             yield session
+
+    def get_prefect() -> Iterator[PrefectApi]:
+        if prefect is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Prefect is not set up for the API (BLT_PREFECT_API_URL).",
+            )
+        yield prefect
 
     # Declared as a security scheme, not a plain header, so the docs show
     # an Authorize button and mark which endpoints need the key.
@@ -804,6 +817,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     v1.include_router(sources_router(get_session, require_api_key))
     v1.include_router(jobs_router(get_session, require_api_key))
     v1.include_router(storage_router(get_session, require_api_key))
+    v1.include_router(admin_router(get_prefect, require_api_key))
     v1.include_router(router, prefix="/sources/commvault/{source_name}")
     v1.include_router(
         storage_ingest_router("commvault", get_session, require_api_key),

@@ -49,8 +49,10 @@ def test_every_path_but_the_health_check_is_versioned_and_named_by_source() -> N
     for path in openapi.spec()["paths"]:
         # /v1/sources itself lists every source, and /v1/jobs reads every
         # product's jobs, /v1/storage every product's storage: blt's own
-        # resources, beside the sources.
-        if path in ("/healthz", "/v1/sources") or path.startswith(("/v1/jobs", "/v1/storage")):
+        # resources, beside the sources; /v1/admin is blt's own management.
+        if path in ("/healthz", "/v1/sources") or path.startswith(
+            ("/v1/jobs", "/v1/storage", "/v1/admin")
+        ):
             continue
         assert path.startswith(
             ("/v1/sources/commvault/", "/v1/sources/rubrik/", "/v1/sources/netbackup/")

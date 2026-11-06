@@ -88,6 +88,11 @@ REPORTS = "commvault: inventory and reports"
 TAGS = [
     {"name": "health", "description": "Is the API up, and can it reach its database."},
     {
+        "name": "admin",
+        "description": "Sources, schedules and flow runs, through Prefect: what the UI's "
+        "Administration pages use. See docs/admin.md.",
+    },
+    {
         "name": "jobs",
         "description": "Jobs from every product in one shape: what the jobs page reads. "
         "See docs/common-jobs.md.",

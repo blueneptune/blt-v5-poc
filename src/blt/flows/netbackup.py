@@ -11,6 +11,11 @@ key does not renew, so as for Rubrik there is nothing to write back.
 - netbackup_collect_storage - every primary block, one flow run each, at
                               the same time (blt-netbackup-collect-
                               storage/hourly).
+- netbackup_check           - one primary's key and reads, for the admin
+                              pages (blt-netbackup-check/by-hand).
+- netbackup_fetch_ca        - a primary's CA certificate, by address,
+                              before it has a block (blt-netbackup-fetch-
+                              ca/by-hand).
 
 Jobs are collected from NetBackup later; storage comes first
 (docs/storage.md).
@@ -36,6 +41,7 @@ from prefect.deployments import run_deployment
 from pydantic import Field, SecretStr
 
 from blt.collector.lock import run_lock
+from blt.netbackup.check import check_primary, fetch_ca_certificates, verifies
 from blt.storage.netbackup import netbackup_storage
 from blt.storage.store import StorageStore
 
@@ -156,3 +162,51 @@ def netbackup_collect_storage(
     return fan_out(
         names, STORAGE_ONE, "collect NetBackup storage", wait_minutes=wait_minutes, start=_start_run
     )
+
+
+@flow(name="blt-netbackup-check", flow_run_name="check-{primary}")
+def netbackup_check(primary: str) -> str:
+    """Signs in to the primary with its block's key and tries each read
+    blt makes, logging one line for each. Fails only if it cannot sign in
+    at all; a read the key may not make is a FAIL line, not a failed run."""
+    with logs_to_prefect():
+        block = cast(NetBackupPrimaryBlock, NetBackupPrimaryBlock.load(primary))
+        logger.info("Checking NetBackup {} at {}", primary, block.url)
+        with block.client() as nbu:
+            checks = check_primary(nbu)
+        for check in checks:
+            (logger.info if check.ok else logger.warning)(check.line())
+        passed = sum(c.ok for c in checks)
+        summary = f"{passed} of {len(checks)} checks passed"
+        if not checks[0].ok:
+            raise RuntimeError(f"Could not sign in to {primary}: {checks[0].detail}")
+        logger.info(summary)
+        return summary
+
+
+@flow(name="blt-netbackup-fetch-ca", flow_run_name="fetch-ca")
+def netbackup_fetch_ca(url: str) -> str:
+    """Asks the primary at `url` for its CA certificate and logs each one
+    it gives - PEM, subject, SHA-256 fingerprint - and whether it verifies
+    the primary's TLS certificate at this address. Signs in to nothing."""
+    with logs_to_prefect():
+        certificates = fetch_ca_certificates(url)
+        if not certificates:
+            raise RuntimeError(f"{url} gave no CA certificate")
+        logger.info("{} gave {} CA certificate(s)", url, len(certificates))
+        trusted = 0
+        for number, certificate in enumerate(certificates, 1):
+            logger.info(
+                "CA certificate {}: {} - SHA-256 {}",
+                number,
+                certificate.subject or "subject unreadable",
+                certificate.sha256,
+            )
+            logger.info("{}", certificate.pem.strip())
+            problem = verifies(url, certificate.pem)
+            if problem is None:
+                trusted += 1
+                logger.info("CA certificate {} verifies this primary's TLS certificate.", number)
+            else:
+                logger.warning("CA certificate {} does not verify it: {}", number, problem)
+        return f"{len(certificates)} CA certificate(s), {trusted} verifying the primary"
