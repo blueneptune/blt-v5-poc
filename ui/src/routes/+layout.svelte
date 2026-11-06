@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { ModeWatcher, toggleMode } from 'mode-watcher';
-	import { Moon, Sun, LockOpen } from '@lucide/svelte';
+	import { Moon, Sun, LockOpen, LogOut } from '@lucide/svelte';
 
 	let { children, data } = $props();
 
@@ -18,10 +18,13 @@
 
 <ModeWatcher />
 
+{#if !data.user}
+	<main class="min-w-0 p-4 md:p-6">{@render children()}</main>
+{:else}
 <div class="flex min-h-svh flex-col md:flex-row">
 	<aside class="bg-muted/60 flex shrink-0 flex-col border-b md:w-56 md:border-r md:border-b-0">
-		<div class="flex items-center justify-between px-4 py-4">
-			<a href="/" class="text-lg font-semibold tracking-tight">blt</a>
+		<div class="flex items-center gap-1 px-4 py-4">
+			<a href="/" class="mr-auto text-lg font-semibold tracking-tight">blt</a>
 			<button
 				type="button"
 				onclick={toggleMode}
@@ -31,6 +34,17 @@
 				<Sun class="size-4 dark:hidden" />
 				<Moon class="hidden size-4 dark:block" />
 			</button>
+			{#if data.user.signedIn}
+				<form method="POST" action="/logout" class="md:hidden">
+					<button
+						type="submit"
+						class="text-muted-foreground hover:text-foreground rounded-md p-1.5"
+						aria-label="Sign out"
+					>
+						<LogOut class="size-4" />
+					</button>
+				</form>
+			{/if}
 		</div>
 
 		<nav class="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-1 md:flex-col md:pb-0">
@@ -48,12 +62,26 @@
 			{/each}
 		</nav>
 
-		<div class="hidden border-t p-3 md:block">
-			<p class="truncate text-sm font-medium">{data.user.name}</p>
-			{#if !data.user.signedIn}
-				<p class="text-muted-foreground flex items-center gap-1 text-xs">
-					<LockOpen class="size-3" /> Sign-in not enabled yet
-				</p>
+		<div class="hidden items-center justify-between gap-2 border-t p-3 md:flex">
+			<div class="min-w-0">
+				<p class="truncate text-sm font-medium">{data.user.name}</p>
+				{#if !data.user.signedIn}
+					<p class="text-muted-foreground flex items-center gap-1 text-xs">
+						<LockOpen class="size-3" /> Sign-in is off
+					</p>
+				{/if}
+			</div>
+			{#if data.user.signedIn}
+				<form method="POST" action="/logout">
+					<button
+						type="submit"
+						class="text-muted-foreground hover:text-foreground rounded-md p-1.5"
+						aria-label="Sign out"
+						title="Sign out"
+					>
+						<LogOut class="size-4" />
+					</button>
+				</form>
 			{/if}
 		</div>
 	</aside>
@@ -62,3 +90,4 @@
 		{@render children()}
 	</main>
 </div>
+{/if}

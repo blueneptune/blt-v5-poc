@@ -10,6 +10,11 @@ export type Job = components['schemas']['CommonJobOut'];
 type Source = components['schemas']['SourceOut'];
 
 export const API_KEY = 'page-tests';
+/** The UI's sign-in, for the page tests only. */
+export const USER = 'admin';
+export const PASSWORD = 'page-tests-password';
+/** Where the sign-in project keeps the signed-in cookie. */
+export const SIGNED_IN = 'test-results/.signed-in.json';
 const HOUR = 3_600_000;
 const now = Date.now();
 

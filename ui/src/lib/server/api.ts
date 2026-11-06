@@ -17,7 +17,7 @@ import type { User } from './auth';
 
 export type ApiClient = ReturnType<typeof createClient<paths>>;
 
-export function apiFor(_user: User, fetch: typeof globalThis.fetch): ApiClient {
+export function apiFor(_user: User | null, fetch: typeof globalThis.fetch): ApiClient {
 	const configured = Boolean(env.BLT_API_URL && env.BLT_API_KEY);
 	// With sign-in, the user's own token goes here instead, so the API
 	// decides what each user may see.
