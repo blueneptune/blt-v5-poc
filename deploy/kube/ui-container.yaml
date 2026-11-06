@@ -5,6 +5,7 @@
       env:
         - {name: HOST, value: "${UI_LISTEN_HOST}"}
         - {name: PORT, value: "${UI_LISTEN_PORT}"}
+        - {name: ORIGIN, value: "${UI_ORIGIN}"}
         - {name: BLT_API_URL, value: "http://${API_IN_POD}:${API_LISTEN_PORT}"}
         - name: BLT_API_KEY
           valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_API_KEY}}

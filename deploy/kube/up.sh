@@ -34,7 +34,7 @@ render() {
         [PREFECT_LISTEN_HOST]="${PREFECT_LISTEN_HOST:-}"
         [PREFECT_LISTEN_PORT]="${PREFECT_LISTEN_PORT:-}" [PREFECT_LOCAL]="${PREFECT_LOCAL:-}"
         [MAX_PARALLEL]="${MAX_PARALLEL:-4}"
-        [UI_BIND]="${UI_BIND:-}" [UI_PORT]="${UI_PORT:-}"
+        [UI_BIND]="${UI_BIND:-}" [UI_PORT]="${UI_PORT:-}" [UI_ORIGIN]="${UI_ORIGIN:-}"
         [UI_LISTEN_HOST]="${UI_LISTEN_HOST:-}" [UI_LISTEN_PORT]="${UI_LISTEN_PORT:-}"
         [UI_SIGN_IN]="${UI_SIGN_IN:-on}" [UI_USER]="${BLT_UI_USER:-admin}"
         [API_PREFECT_URL]="$API_PREFECT_URL"

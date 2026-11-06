@@ -81,7 +81,7 @@ if [[ "$UI_ENABLED" == true ]]; then
     # It calls the API inside the pod, from its own server side: the key
     # never reaches a browser.
     podman run -d --replace --pod blt --name blt-ui \
-        -e "HOST=${UI_LISTEN_HOST}" -e "PORT=${UI_LISTEN_PORT}" \
+        -e "HOST=${UI_LISTEN_HOST}" -e "PORT=${UI_LISTEN_PORT}" -e "ORIGIN=${UI_ORIGIN}" \
         -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
         -e BLT_API_KEY \
         -e "BLT_UI_SIGN_IN=${UI_SIGN_IN}" -e "BLT_UI_USER=${BLT_UI_USER:-admin}" \

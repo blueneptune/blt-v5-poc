@@ -7,7 +7,7 @@
 # is on, PREFECT_BIND PREFECT_PORT PREFECT_LISTEN_HOST PREFECT_LISTEN_PORT
 # PREFECT_LOCAL MAX_PARALLEL, API_PREFECT_URL (where the API reaches Prefect,
 # empty when it is off), and UI_ENABLED with, when it is on, UI_BIND
-# UI_PORT UI_LISTEN_HOST UI_LISTEN_PORT UI_SIGN_IN.
+# UI_PORT UI_ORIGIN UI_LISTEN_HOST UI_LISTEN_PORT UI_SIGN_IN.
 
 # Git Bash on Windows rewrites any argument that looks like a Unix path
 # into a Windows one before running a command - so podman was being told
@@ -131,6 +131,10 @@ if [[ "$UI_ENABLED" == true ]]; then
         exit 1
     fi
     UI_PORT="${BLT_UI_PORT:-8090}"
+    # The address browsers use for it. The UI's server refuses a form post
+    # (sign-in included) from any other origin, and without this it
+    # assumes https.
+    UI_ORIGIN="${BLT_UI_ORIGIN:-http://localhost:${UI_PORT}}"
     UI_SIGN_IN=on
     [[ "${BLT_UI_SIGN_IN:-on}" == "off" ]] && UI_SIGN_IN=off
     if [[ "$HOST_NETWORK" == true ]]; then
