@@ -246,7 +246,7 @@ wheels = [
 
 [[package]]
 name = "blt"
-version = "2026.11.6"
+version = "2026.11.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -258,6 +258,7 @@ dependencies = [
 api = [
     { name = "alembic" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "sqlmodel" },
     { name = "uvicorn", extra = ["standard"] },
@@ -291,6 +292,7 @@ requires-dist = [
     { name = "blt", extras = ["collector"], marker = "extra == 'prefect'" },
     { name = "commvault-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.4.0" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
+    { name = "httpx", marker = "extra == 'api'", specifier = ">=0.27" },
     { name = "netbackup-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?tag=v0.2.0" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.4" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.2" },
