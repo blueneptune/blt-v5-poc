@@ -1,6 +1,6 @@
 [project]
 name = "blt"
-version = "2026.11.06"
+version = "2026.11.06.1"
 description = "Commvault job-history collector: per-CommCell collection script, FastAPI ingest API, Postgres store."
 requires-python = ">=3.12"
 # Only what both halves share (the API schemas in blt.schemas). Everything
@@ -20,6 +20,8 @@ api = [
     "sqlmodel>=0.0.22",
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
+    # blt.api.prefect talks to Prefect's REST API with it.
+    "httpx>=0.27",
 ]
 collector = [
     "commvault-sdk",
