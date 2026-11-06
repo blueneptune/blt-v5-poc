@@ -175,9 +175,13 @@ def test_the_ui_stays_local_when_the_rest_is_opened(tmp_path: Path) -> None:
     # ... unless it is asked for, on its own setting.
     found = containers(render(tmp_path, "BLT_UI_BIND_ADDRESS=0.0.0.0\nBLT_UI_PORT=9000\n"))
     assert found["ui"]["ports"] == [{"containerPort": 3000, "hostPort": 9000, "hostIP": "0.0.0.0"}]
-    assert {e["name"]: e.get("value") for e in found["ui"]["env"]}["ORIGIN"] == "http://localhost:9000"
+    assert ui_origin(found) == "http://localhost:9000"
     found = containers(render(tmp_path, "BLT_UI_ORIGIN=https://blt.example.test\n"))
-    assert {e["name"]: e.get("value") for e in found["ui"]["env"]}["ORIGIN"] == "https://blt.example.test"
+    assert ui_origin(found) == "https://blt.example.test"
+
+
+def ui_origin(found: dict) -> str:
+    return {e["name"]: e.get("value") for e in found["ui"]["env"]}["ORIGIN"]
 
 
 def test_prefect_stays_on_this_machine_unless_asked(tmp_path: Path) -> None:
