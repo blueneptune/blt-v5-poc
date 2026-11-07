@@ -19,14 +19,38 @@ const test = base.extend<{ errors: string[] }>({
 	]
 });
 
-test('the side panel has an Administration section', async ({ page }) => {
+test('the side panel has an Administration group, open on its pages', async ({ page }) => {
 	await page.goto('/');
 	const nav = page.getByRole('navigation');
-	await expect(nav.getByText('Administration')).toBeVisible();
+	const group = nav.getByRole('button', { name: 'Administration' });
+	await expect(group).toHaveAttribute('aria-expanded', 'false');
+	await expect(nav.getByRole('link', { name: 'Schedules' })).toHaveCount(0);
+	await group.click();
+	await expect(group).toHaveAttribute('aria-expanded', 'true');
 	await nav.getByRole('link', { name: 'Schedules' }).click();
 	await expect(page.getByRole('heading', { name: 'Schedules' })).toBeVisible();
+	// Open by itself on its pages, and foldable there.
+	await expect(group).toHaveAttribute('aria-expanded', 'true');
+	await expect(nav.getByRole('link', { name: 'Schedules' })).toHaveAttribute('aria-current', 'page');
+	await group.click();
+	await expect(nav.getByRole('link', { name: 'Runs' })).toHaveCount(0);
 	await page.goto('/admin');
 	await expect(page).toHaveURL(/\/admin\/sources$/);
+	await expect(nav.getByRole('link', { name: 'Sources' }).last()).toHaveAttribute('aria-current', 'page');
+});
+
+test('on a phone: one Admin link, and tabs for its pages', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 800 });
+	await page.goto('/');
+	const side = page.getByRole('navigation').first();
+	await expect(side.getByRole('link', { name: 'Admin', exact: true })).toBeVisible();
+	await expect(side.getByRole('link', { name: 'Schedules' })).toHaveCount(0);
+	await side.getByRole('link', { name: 'Admin', exact: true }).click();
+	const tabs = page.getByRole('navigation', { name: 'Administration' });
+	await expect(tabs.getByRole('link', { name: 'Sources' })).toHaveAttribute('aria-current', 'page');
+	await tabs.getByRole('link', { name: 'Runs' }).click();
+	await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+	await expect(tabs.getByRole('link', { name: 'Runs' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('sources: listed without secrets, and switched on and off', async ({ page }) => {

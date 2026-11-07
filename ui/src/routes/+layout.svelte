@@ -2,13 +2,26 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { ModeWatcher, toggleMode } from 'mode-watcher';
-	import { Moon, Sun, LockOpen, LogOut } from '@lucide/svelte';
+	import { ChevronRight, Moon, Sun, LockOpen, LogOut } from '@lucide/svelte';
+	import { isActive } from '$lib/nav';
 
 	let { children, data } = $props();
 
-	function active(href: string): boolean {
-		return href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
-	}
+	const active = (href: string) => isActive(page.url.pathname, href);
+	const link = (on: boolean) =>
+		`rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
+			on
+				? 'bg-accent text-accent-foreground'
+				: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+		}`;
+
+	// A group is open while one of its pages is; folding it is the
+	// user's until they go somewhere else in it or out of it.
+	let folded = $state<Record<string, boolean>>({});
+	$effect(() => {
+		page.url.pathname;
+		folded = {};
+	});
 </script>
 
 <svelte:head>
@@ -48,24 +61,50 @@
 		</div>
 
 		<nav class="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-1 md:flex-col md:pb-0">
-			{#each data.nav as item, i (item.href)}
-				{#if item.section && item.section !== data.nav[i - 1]?.section}
-					<p
-						class="text-muted-foreground hidden px-3 pt-4 pb-1 text-xs font-medium tracking-wide uppercase md:block"
+			{#each data.nav as item (item.href)}
+				{#if item.children}
+					{@const open = folded[item.href] === undefined ? active(item.href) : !folded[item.href]}
+					<!-- Phone: one link; the group's pages are tabs on its pages. -->
+					<a
+						href={item.href}
+						aria-current={active(item.href) ? 'page' : undefined}
+						class="md:hidden {link(active(item.href))}">{item.short ?? item.label}</a
 					>
-						{item.section}
-					</p>
+					<div class="hidden md:block">
+						<button
+							type="button"
+							aria-expanded={open}
+							aria-controls="nav-{item.href.slice(1)}"
+							onclick={() => (folded = { ...folded, [item.href]: open })}
+							class="flex w-full items-center gap-1 {link(false)} {active(item.href)
+								? 'text-foreground'
+								: ''}"
+						>
+							{item.label}
+							<ChevronRight
+								class="ml-auto size-4 transition-transform {open ? 'rotate-90' : ''}"
+								aria-hidden="true"
+							/>
+						</button>
+						{#if open}
+							<div id="nav-{item.href.slice(1)}" class="mt-1 ml-3 flex flex-col gap-1 border-l pl-2">
+								{#each item.children as child (child.href)}
+									<a
+										href={child.href}
+										aria-current={active(child.href) ? 'page' : undefined}
+										class={link(active(child.href))}>{child.label}</a
+									>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<a
+						href={item.href}
+						aria-current={active(item.href) ? 'page' : undefined}
+						class={link(active(item.href))}>{item.label}</a
+					>
 				{/if}
-				<a
-					href={item.href}
-					aria-current={active(item.href) ? 'page' : undefined}
-					class="rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors
-						{active(item.href)
-						? 'bg-accent text-accent-foreground'
-						: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}"
-				>
-					{#if item.section}<span class="md:hidden">{item.section === 'Administration' ? 'Admin · ' : `${item.section} · `}</span>{/if}{item.label}
-				</a>
 			{/each}
 		</nav>
 
