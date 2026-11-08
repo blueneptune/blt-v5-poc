@@ -6,6 +6,11 @@ named as blt stores the primary's data. It holds the address, an API key
 and the primary's CA certificate when it is not publicly signed. An API
 key does not renew, so as for Rubrik there is nothing to write back.
 
+- netbackup_jobs_primary    - one primary's jobs (blt-netbackup-jobs-
+                              primary/per-primary).
+- netbackup_collect_jobs    - every primary block's jobs, one flow run
+                              each, at once (blt-netbackup-collect-jobs/
+                              every-15-minutes).
 - netbackup_storage_primary - one primary's storage (blt-netbackup-
                               storage-primary/per-primary).
 - netbackup_collect_storage - every primary block, one flow run each, at
@@ -17,8 +22,8 @@ key does not renew, so as for Rubrik there is nothing to write back.
                               before it has a block (blt-netbackup-fetch-
                               ca/by-hand).
 
-Jobs are collected from NetBackup later; storage comes first
-(docs/storage.md).
+The API key needs read access to jobs as well as storage
+(docs/netbackup.md).
 """
 
 from __future__ import annotations
@@ -42,6 +47,9 @@ from pydantic import Field, SecretStr
 
 from blt.collector.lock import run_lock
 from blt.netbackup.check import check_primary, fetch_ca_certificates, verifies
+from blt.netbackup.collect import run_netbackup_collection
+from blt.netbackup.source import NetBackupJobs
+from blt.netbackup.store import NetBackupStore
 from blt.storage.netbackup import netbackup_storage
 from blt.storage.store import StorageStore
 
@@ -50,6 +58,7 @@ from .rubrik import BltApiSettings
 
 BLOCK_TYPE_SLUG = "blt-netbackup-primary"
 STORAGE_ONE = "blt-netbackup-storage-primary/per-primary"
+JOBS_ONE = "blt-netbackup-jobs-primary/per-primary"
 LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
 
 
@@ -88,6 +97,32 @@ class NetBackupPrimaryBlock(Block):
                 ca_bundle=ca,
             ) as nbu:
                 yield nbu
+
+
+def jobs_primary(name: str, block: NetBackupPrimaryBlock, *, force_full: bool = False) -> str:
+    """One primary's job collection, under the primary's own jobs lock."""
+    with run_lock(LOCKS, f"netbackup-{name}.jobs") as held:
+        if not held:
+            logger.warning("A job run for NetBackup {} is already running, skipping.", name)
+            return "skipped: already running"
+        api = BltApiSettings()  # type: ignore[call-arg]
+        with block.client() as nbu, api.client() as blt:
+            run = run_netbackup_collection(
+                NetBackupJobs(nbu), NetBackupStore(blt, name), force_full=force_full
+            )
+    return f"run {run.id}: {run.status}, {run.jobs_collected} jobs ({run.mode})"
+
+
+@flow(
+    name="blt-netbackup-jobs-primary",
+    flow_run_name="netbackup-jobs-{primary}",
+    retries=1,
+    retry_delay_seconds=120,
+)
+def netbackup_jobs_primary(primary: str, full: bool = False) -> str:
+    with logs_to_prefect(), concurrency(SLOTS, occupy=1, strict=False):
+        block = cast(NetBackupPrimaryBlock, NetBackupPrimaryBlock.load(primary))
+        return jobs_primary(primary, block, force_full=full)
 
 
 def storage_primary(name: str, block: NetBackupPrimaryBlock) -> str:
@@ -135,12 +170,13 @@ def collectable_primaries() -> list[str]:
 
 
 def _start_run(deployment: str, primary: str) -> str:
+    label = "netbackup-jobs" if deployment == JOBS_ONE else "netbackup-storage"
     run = cast(
         FlowRun,
         run_deployment(
             deployment,
             parameters={"primary": primary},
-            flow_run_name=f"netbackup-storage-{primary}",
+            flow_run_name=f"{label}-{primary}",
             timeout=0,
         ),
     )
@@ -161,6 +197,23 @@ def netbackup_collect_storage(
         return {}
     return fan_out(
         names, STORAGE_ONE, "collect NetBackup storage", wait_minutes=wait_minutes, start=_start_run
+    )
+
+
+@flow(name="blt-netbackup-collect-jobs")
+def netbackup_collect_jobs(
+    primaries: list[str] | None = None, wait_minutes: float = 14
+) -> dict[str, str]:
+    """Jobs from every NetBackup primary block (or the ones named), all at
+    once, each in its own flow run."""
+    names = primaries or collectable_primaries()
+    if not names:
+        # Checked here: fan_out given no names would fall back to the
+        # CommCell blocks.
+        get_run_logger().warning("No NetBackup primary blocks - see docs/netbackup.md")
+        return {}
+    return fan_out(
+        names, JOBS_ONE, "collect NetBackup jobs", wait_minutes=wait_minutes, start=_start_run
     )
 
 

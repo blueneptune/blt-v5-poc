@@ -52,8 +52,10 @@ def test_every_deployment_points_at_a_flow_that_exists() -> None:
         "collect_storage/hourly",
         "inventory_commcell/per-commcell",
         "netbackup_check/by-hand",
+        "netbackup_collect_jobs/every-15-minutes",
         "netbackup_collect_storage/hourly",
         "netbackup_fetch_ca/by-hand",
+        "netbackup_jobs_primary/per-primary",
         "netbackup_storage_primary/per-primary",
         "rubrik_collect_account/per-account",
         "rubrik_collect_inventory/twice-daily",
@@ -245,3 +247,6 @@ def test_the_parents_start_deployments_that_exist() -> None:
         for d in deployments
     }
     assert {flows.COLLECT_ONE, flows.INVENTORY_ONE} <= by_flow
+    from blt.flows import netbackup
+
+    assert {netbackup.JOBS_ONE, netbackup.STORAGE_ONE} <= by_flow

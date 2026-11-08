@@ -814,6 +814,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/netbackup/{source_name}/last-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where the last job collection got to
+         * @description The primary's watermark and its most recent job run. An unknown
+         *     primary is not an error: no watermark means do an initial run.
+         */
+        get: operations["last_run_v1_sources_netbackup__source_name__last_run_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/netbackup/{source_name}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a job collection run
+         * @description Opens a run (status `running`); send its `id` with each batch.
+         *     The primary is created on its first run.
+         */
+        post: operations["start_run_v1_sources_netbackup__source_name__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/netbackup/{source_name}/runs/{run_id}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a job collection run
+         * @description Records how the run went. A succeeded run becomes the new
+         *     watermark.
+         */
+        post: operations["finish_run_v1_sources_netbackup__source_name__runs__run_id__finish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/netbackup/{source_name}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List jobs
+         * @description Jobs, most recently updated first.
+         */
+        get: operations["list_jobs_v1_sources_netbackup__source_name__jobs_get"];
+        put?: never;
+        /**
+         * Store a batch of jobs
+         * @description Inserts new jobs and updates known ones, keyed by `job_id`. A job
+         *     collected earlier than what is stored is left alone.
+         */
+        post: operations["upsert_jobs_v1_sources_netbackup__source_name__jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/netbackup/{source_name}/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One job
+         * @description One job by its id, with NetBackup's full record in `raw`.
+         */
+        get: operations["get_job_v1_sources_netbackup__source_name__jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/netbackup/{source_name}/storage": {
         parameters: {
             query?: never;
@@ -1917,6 +2025,359 @@ export interface components {
             message: string;
         };
         /**
+         * NetBackupJobBatch
+         * @description Jobs collected in one go, sent during a run.
+         * @example {
+         *       "collected_at": "2026-11-08T14:02:00Z",
+         *       "jobs": [
+         *         {
+         *           "backup_id": "app01.example.com_1794150000",
+         *           "client_name": "app01.example.com",
+         *           "end_time": "2026-11-08T13:21:00Z",
+         *           "is_active": false,
+         *           "job_id": 48211,
+         *           "job_type": "BACKUP",
+         *           "last_update_time": "2026-11-08T13:21:00Z",
+         *           "policy_name": "vm-gold",
+         *           "start_time": "2026-11-08T13:00:00Z",
+         *           "state": "DONE",
+         *           "status": 0,
+         *           "storage_unit": "msdp-stu-01"
+         *         }
+         *       ],
+         *       "run_id": 12
+         *     }
+         */
+        NetBackupJobBatch: {
+            /**
+             * Run Id
+             * @description The run these belong to (`POST .../runs`).
+             */
+            run_id?: number | null;
+            /**
+             * Collected At
+             * Format: date-time
+             * @description When the collector read them.
+             */
+            collected_at: string;
+            /**
+             * Jobs
+             * @description The jobs.
+             */
+            jobs: components["schemas"]["NetBackupJobIn"][];
+        };
+        /**
+         * NetBackupJobIn
+         * @description One NetBackup job as of one collection.
+         */
+        NetBackupJobIn: {
+            /**
+             * Job Id
+             * @description NetBackup's job id, unique within its primary.
+             */
+            job_id: number;
+            /**
+             * Parent Job Id
+             * @description The job this one belongs to; NetBackup gives a job its own id as parent when it has none.
+             */
+            parent_job_id?: number | null;
+            /**
+             * Job Type
+             * @description What sort of work, in NetBackup's words: BACKUP, DUPLICATE, REPLICATE, IMPORT, RESTORE, IMAGEDELETE, DBBACKUP, ...
+             */
+            job_type?: string | null;
+            /**
+             * State
+             * @description Where it is: QUEUED, ACTIVE, REQUEUED, SUSPENDED, INCOMPLETE or DONE.
+             */
+            state: string;
+            /**
+             * Status
+             * @description NetBackup's status code, final once DONE: 0 succeeded, 1 partly, others failed (the code says why).
+             */
+            status?: number | null;
+            /**
+             * Is Active
+             * @description Not DONE yet.
+             */
+            is_active: boolean;
+            /**
+             * Policy Name
+             * @description The policy that ran it.
+             */
+            policy_name?: string | null;
+            /**
+             * Policy Type
+             * @description The policy's type: STANDARD, VMWARE, ORACLE, ...
+             */
+            policy_type?: string | null;
+            /**
+             * Schedule Name
+             * @description The policy schedule.
+             */
+            schedule_name?: string | null;
+            /**
+             * Schedule Type
+             * @description FULL, DIFFERENTIAL_INCREMENTAL_BACKUP, ...
+             */
+            schedule_type?: string | null;
+            /**
+             * Client Name
+             * @description The client it ran for.
+             */
+            client_name?: string | null;
+            /**
+             * Media Server
+             * @description The media server it wrote to (destination).
+             */
+            media_server?: string | null;
+            /**
+             * Storage Unit
+             * @description The storage unit it wrote to (destination).
+             */
+            storage_unit?: string | null;
+            /**
+             * Source Media Server
+             * @description For a copy: the media server it read from.
+             */
+            source_media_server?: string | null;
+            /**
+             * Source Storage Unit
+             * @description For a copy: the storage unit it read from.
+             */
+            source_storage_unit?: string | null;
+            /**
+             * Backup Id
+             * @description The image it made or worked on - the key to the catalog, and across primaries for a replicated image.
+             */
+            backup_id?: string | null;
+            /**
+             * Try Number
+             * @description Which try: above 1 for a retry.
+             */
+            try_number?: number | null;
+            /**
+             * Start Time
+             * @description When it started.
+             */
+            start_time?: string | null;
+            /**
+             * End Time
+             * @description When it ended, once DONE.
+             */
+            end_time?: string | null;
+            /**
+             * Last Update Time
+             * @description When NetBackup last changed it.
+             */
+            last_update_time?: string | null;
+            /**
+             * Kilobytes Transferred
+             * @description KiB written, as NetBackup counts it (may be an estimate).
+             */
+            kilobytes_transferred?: number | null;
+            /**
+             * Kilobytes Data Transferred
+             * @description KiB actually sent (NetBackup 10.5 / API 12.0 and later).
+             */
+            kilobytes_data_transferred?: number | null;
+            /**
+             * Kilobytes To Transfer
+             * @description KiB it expects to write in all.
+             */
+            kilobytes_to_transfer?: number | null;
+            /**
+             * Number Of Files
+             * @description Files it covered.
+             */
+            number_of_files?: number | null;
+            /**
+             * Percent Complete
+             * @description 0-100.
+             */
+            percent_complete?: number | null;
+            /**
+             * Raw
+             * @description NetBackup's job record, untouched.
+             */
+            raw?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * NetBackupJobOut
+         * @description A NetBackup job as blt holds it: its latest state.
+         */
+        NetBackupJobOut: {
+            /**
+             * Job Id
+             * @description NetBackup's job id, unique within its primary.
+             */
+            job_id: number;
+            /**
+             * Parent Job Id
+             * @description The job this one belongs to; NetBackup gives a job its own id as parent when it has none.
+             */
+            parent_job_id?: number | null;
+            /**
+             * Job Type
+             * @description What sort of work, in NetBackup's words: BACKUP, DUPLICATE, REPLICATE, IMPORT, RESTORE, IMAGEDELETE, DBBACKUP, ...
+             */
+            job_type?: string | null;
+            /**
+             * State
+             * @description Where it is: QUEUED, ACTIVE, REQUEUED, SUSPENDED, INCOMPLETE or DONE.
+             */
+            state: string;
+            /**
+             * Status
+             * @description NetBackup's status code, final once DONE: 0 succeeded, 1 partly, others failed (the code says why).
+             */
+            status?: number | null;
+            /**
+             * Is Active
+             * @description Not DONE yet.
+             */
+            is_active: boolean;
+            /**
+             * Policy Name
+             * @description The policy that ran it.
+             */
+            policy_name?: string | null;
+            /**
+             * Policy Type
+             * @description The policy's type: STANDARD, VMWARE, ORACLE, ...
+             */
+            policy_type?: string | null;
+            /**
+             * Schedule Name
+             * @description The policy schedule.
+             */
+            schedule_name?: string | null;
+            /**
+             * Schedule Type
+             * @description FULL, DIFFERENTIAL_INCREMENTAL_BACKUP, ...
+             */
+            schedule_type?: string | null;
+            /**
+             * Client Name
+             * @description The client it ran for.
+             */
+            client_name?: string | null;
+            /**
+             * Media Server
+             * @description The media server it wrote to (destination).
+             */
+            media_server?: string | null;
+            /**
+             * Storage Unit
+             * @description The storage unit it wrote to (destination).
+             */
+            storage_unit?: string | null;
+            /**
+             * Source Media Server
+             * @description For a copy: the media server it read from.
+             */
+            source_media_server?: string | null;
+            /**
+             * Source Storage Unit
+             * @description For a copy: the storage unit it read from.
+             */
+            source_storage_unit?: string | null;
+            /**
+             * Backup Id
+             * @description The image it made or worked on - the key to the catalog, and across primaries for a replicated image.
+             */
+            backup_id?: string | null;
+            /**
+             * Try Number
+             * @description Which try: above 1 for a retry.
+             */
+            try_number?: number | null;
+            /**
+             * Start Time
+             * @description When it started.
+             */
+            start_time?: string | null;
+            /**
+             * End Time
+             * @description When it ended, once DONE.
+             */
+            end_time?: string | null;
+            /**
+             * Last Update Time
+             * @description When NetBackup last changed it.
+             */
+            last_update_time?: string | null;
+            /**
+             * Kilobytes Transferred
+             * @description KiB written, as NetBackup counts it (may be an estimate).
+             */
+            kilobytes_transferred?: number | null;
+            /**
+             * Kilobytes Data Transferred
+             * @description KiB actually sent (NetBackup 10.5 / API 12.0 and later).
+             */
+            kilobytes_data_transferred?: number | null;
+            /**
+             * Kilobytes To Transfer
+             * @description KiB it expects to write in all.
+             */
+            kilobytes_to_transfer?: number | null;
+            /**
+             * Number Of Files
+             * @description Files it covered.
+             */
+            number_of_files?: number | null;
+            /**
+             * Percent Complete
+             * @description 0-100.
+             */
+            percent_complete?: number | null;
+            /**
+             * Raw
+             * @description NetBackup's job record, untouched.
+             */
+            raw?: {
+                [key: string]: unknown;
+            };
+            /**
+             * First Seen At
+             * Format: date-time
+             * @description When blt first collected it.
+             */
+            first_seen_at: string;
+            /**
+             * Last Collected At
+             * Format: date-time
+             * @description When blt last collected it.
+             */
+            last_collected_at: string;
+            /**
+             * Last Seen Run Id
+             * @description The run that last collected it.
+             */
+            last_seen_run_id?: number | null;
+        };
+        /**
+         * NetBackupLastRun
+         * @description Where a primary's collection got to.
+         */
+        NetBackupLastRun: {
+            /**
+             * Primary
+             * @description blt's name for the primary.
+             */
+            primary: string;
+            /**
+             * Watermark
+             * @description When the last succeeded run started; none means do an initial run.
+             */
+            watermark?: string | null;
+            /** @description The most recent run. */
+            last_run?: components["schemas"]["NetBackupRunOut"] | null;
+        };
+        /**
          * NetBackupPrimaryIn
          * @description A NetBackup primary to add. It starts with collection off, so it
          *     can be checked first.
@@ -1962,6 +2423,117 @@ export interface components {
              * @default false
              */
             collect: boolean;
+        };
+        /**
+         * NetBackupRunFinish
+         * @description How a run ended.
+         * @example {
+         *       "finished_at": "2026-11-08T14:03:10Z",
+         *       "jobs_collected": 37,
+         *       "status": "succeeded"
+         *     }
+         */
+        NetBackupRunFinish: {
+            /**
+             * Status
+             * @description succeeded or failed.
+             * @enum {string}
+             */
+            status: "succeeded" | "failed";
+            /**
+             * Finished At
+             * Format: date-time
+             * @description When it ended.
+             */
+            finished_at: string;
+            /**
+             * Jobs Collected
+             * @description Jobs sent.
+             * @default 0
+             */
+            jobs_collected: number;
+            /**
+             * Error
+             * @description Why it failed.
+             */
+            error?: string | null;
+        };
+        /**
+         * NetBackupRunOut
+         * @description A collection run, as blt holds it.
+         */
+        NetBackupRunOut: {
+            /**
+             * Id
+             * @description The run's id.
+             */
+            id: number;
+            /**
+             * Mode
+             * @description initial, delta or full.
+             * @enum {string}
+             */
+            mode: "initial" | "delta" | "full";
+            /**
+             * Status
+             * @description running, succeeded or failed.
+             * @enum {string}
+             */
+            status: "running" | "succeeded" | "failed";
+            /**
+             * Started At
+             * Format: date-time
+             * @description When the collector started.
+             */
+            started_at: string;
+            /**
+             * Finished At
+             * @description When it ended.
+             */
+            finished_at?: string | null;
+            /**
+             * Lookup Seconds
+             * @description How far back it looked.
+             */
+            lookup_seconds: number;
+            /**
+             * Jobs Collected
+             * @description Jobs it sent.
+             */
+            jobs_collected: number;
+            /**
+             * Error
+             * @description Why it failed.
+             */
+            error?: string | null;
+        };
+        /**
+         * NetBackupRunStart
+         * @description What a collector says when it opens a run.
+         * @example {
+         *       "lookup_seconds": 2700,
+         *       "mode": "delta",
+         *       "started_at": "2026-11-08T14:02:00Z"
+         *     }
+         */
+        NetBackupRunStart: {
+            /**
+             * Mode
+             * @description initial, delta or full.
+             * @enum {string}
+             */
+            mode: "initial" | "delta" | "full";
+            /**
+             * Started At
+             * Format: date-time
+             * @description When the collector started; a succeeded run's start is the next watermark.
+             */
+            started_at: string;
+            /**
+             * Lookup Seconds
+             * @description How far before `started_at` it looked for changes.
+             */
+            lookup_seconds: number;
         };
         /**
          * ObjectBatch
@@ -6077,6 +6649,314 @@ export interface operations {
                 };
             };
             /** @description Unknown account or run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    last_run_v1_sources_netbackup__source_name__last_run_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetBackupLastRun"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_run_v1_sources_netbackup__source_name__runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetBackupRunStart"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetBackupRunOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finish_run_v1_sources_netbackup__source_name__runs__run_id__finish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+                /** @description The run's `id`, as `POST .../runs` returned it. */
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetBackupRunFinish"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetBackupRunOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown primary or run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_jobs_v1_sources_netbackup__source_name__jobs_get: {
+        parameters: {
+            query?: {
+                /** @description Only jobs still going (true) or done (false). */
+                active?: boolean | null;
+                /** @description Only these job types, any case; repeat for several: `?job_type=BACKUP&job_type=DUPLICATE`. */
+                job_type?: string[] | null;
+                /** @description NetBackup's status code: 0, 1, 58, ... */
+                status?: number | null;
+                /** @description Part of the client's name, any case. */
+                client_name?: string | null;
+                /** @description The policy, exactly. */
+                policy_name?: string | null;
+                /** @description The image's backup id. */
+                backup_id?: string | null;
+                /** @description Only jobs NetBackup changed after this time. */
+                updated_after?: string | null;
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetBackupJobOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown primary */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_jobs_v1_sources_netbackup__source_name__jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetBackupJobBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsertResult"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_v1_sources_netbackup__source_name__jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+                /** @description NetBackup's job id. */
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetBackupJobOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown primary or job */
             404: {
                 headers: {
                     [name: string]: unknown;

@@ -4054,6 +4054,628 @@
         }
       }
     },
+    "/v1/sources/netbackup/{source_name}/last-run": {
+      "get": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "Where the last job collection got to",
+        "description": "The primary's watermark and its most recent job run. An unknown\nprimary is not an error: no watermark means do an initial run.",
+        "operationId": "last_run_v1_sources_netbackup__source_name__last_run_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetBackupLastRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources/netbackup/{source_name}/runs": {
+      "post": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "Open a job collection run",
+        "description": "Opens a run (status `running`); send its `id` with each batch.\nThe primary is created on its first run.",
+        "operationId": "start_run_v1_sources_netbackup__source_name__runs_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetBackupRunStart"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetBackupRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources/netbackup/{source_name}/runs/{run_id}/finish": {
+      "post": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "Close a job collection run",
+        "description": "Records how the run went. A succeeded run becomes the new\nwatermark.",
+        "operationId": "finish_run_v1_sources_netbackup__source_name__runs__run_id__finish_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "The run's `id`, as `POST .../runs` returned it.",
+              "title": "Run Id"
+            },
+            "description": "The run's `id`, as `POST .../runs` returned it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetBackupRunFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetBackupRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown primary or run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources/netbackup/{source_name}/jobs": {
+      "post": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "Store a batch of jobs",
+        "description": "Inserts new jobs and updates known ones, keyed by `job_id`. A job\ncollected earlier than what is stored is left alone.",
+        "operationId": "upsert_jobs_v1_sources_netbackup__source_name__jobs_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetBackupJobBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "List jobs",
+        "description": "Jobs, most recently updated first.",
+        "operationId": "list_jobs_v1_sources_netbackup__source_name__jobs_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs still going (true) or done (false).",
+              "title": "Active"
+            },
+            "description": "Only jobs still going (true) or done (false)."
+          },
+          {
+            "name": "job_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only these job types, any case; repeat for several: `?job_type=BACKUP&job_type=DUPLICATE`.",
+              "title": "Job Type"
+            },
+            "description": "Only these job types, any case; repeat for several: `?job_type=BACKUP&job_type=DUPLICATE`."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "NetBackup's status code: 0, 1, 58, ...",
+              "title": "Status"
+            },
+            "description": "NetBackup's status code: 0, 1, 58, ..."
+          },
+          {
+            "name": "client_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of the client's name, any case.",
+              "title": "Client Name"
+            },
+            "description": "Part of the client's name, any case."
+          },
+          {
+            "name": "policy_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The policy, exactly.",
+              "title": "Policy Name"
+            },
+            "description": "The policy, exactly."
+          },
+          {
+            "name": "backup_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The image's backup id.",
+              "title": "Backup Id"
+            },
+            "description": "The image's backup id."
+          },
+          {
+            "name": "updated_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only jobs NetBackup changed after this time.",
+              "title": "Updated After"
+            },
+            "description": "Only jobs NetBackup changed after this time."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NetBackupJobOut"
+                  },
+                  "title": "Response List Jobs V1 Sources Netbackup  Source Name  Jobs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown primary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sources/netbackup/{source_name}/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "One job",
+        "description": "One job by its id, with NetBackup's full record in `raw`.",
+        "operationId": "get_job_v1_sources_netbackup__source_name__jobs__job_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "NetBackup's job id.",
+              "examples": [
+                48211
+              ],
+              "title": "Job Id"
+            },
+            "description": "NetBackup's job id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetBackupJobOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown primary or job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/netbackup/{source_name}/storage": {
       "post": {
         "tags": [
@@ -6118,6 +6740,730 @@
         "title": "LogLine",
         "description": "One line of a flow run's log."
       },
+      "NetBackupJobBatch": {
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "The run these belong to (`POST .../runs`)."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When the collector read them."
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/NetBackupJobIn"
+            },
+            "type": "array",
+            "title": "Jobs",
+            "description": "The jobs."
+          }
+        },
+        "type": "object",
+        "required": [
+          "collected_at",
+          "jobs"
+        ],
+        "title": "NetBackupJobBatch",
+        "description": "Jobs collected in one go, sent during a run.",
+        "examples": [
+          {
+            "collected_at": "2026-11-08T14:02:00Z",
+            "jobs": [
+              {
+                "backup_id": "app01.example.com_1794150000",
+                "client_name": "app01.example.com",
+                "end_time": "2026-11-08T13:21:00Z",
+                "is_active": false,
+                "job_id": 48211,
+                "job_type": "BACKUP",
+                "last_update_time": "2026-11-08T13:21:00Z",
+                "policy_name": "vm-gold",
+                "start_time": "2026-11-08T13:00:00Z",
+                "state": "DONE",
+                "status": 0,
+                "storage_unit": "msdp-stu-01"
+              }
+            ],
+            "run_id": 12
+          }
+        ]
+      },
+      "NetBackupJobIn": {
+        "properties": {
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id",
+            "description": "NetBackup's job id, unique within its primary."
+          },
+          "parent_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Job Id",
+            "description": "The job this one belongs to; NetBackup gives a job its own id as parent when it has none."
+          },
+          "job_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Type",
+            "description": "What sort of work, in NetBackup's words: BACKUP, DUPLICATE, REPLICATE, IMPORT, RESTORE, IMAGEDELETE, DBBACKUP, ..."
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "Where it is: QUEUED, ACTIVE, REQUEUED, SUSPENDED, INCOMPLETE or DONE."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "NetBackup's status code, final once DONE: 0 succeeded, 1 partly, others failed (the code says why)."
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Not DONE yet."
+          },
+          "policy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Name",
+            "description": "The policy that ran it."
+          },
+          "policy_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Type",
+            "description": "The policy's type: STANDARD, VMWARE, ORACLE, ..."
+          },
+          "schedule_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Name",
+            "description": "The policy schedule."
+          },
+          "schedule_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Type",
+            "description": "FULL, DIFFERENTIAL_INCREMENTAL_BACKUP, ..."
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name",
+            "description": "The client it ran for."
+          },
+          "media_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Server",
+            "description": "The media server it wrote to (destination)."
+          },
+          "storage_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Unit",
+            "description": "The storage unit it wrote to (destination)."
+          },
+          "source_media_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Media Server",
+            "description": "For a copy: the media server it read from."
+          },
+          "source_storage_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Storage Unit",
+            "description": "For a copy: the storage unit it read from."
+          },
+          "backup_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Id",
+            "description": "The image it made or worked on - the key to the catalog, and across primaries for a replicated image."
+          },
+          "try_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Try Number",
+            "description": "Which try: above 1 for a retry."
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time",
+            "description": "When it started."
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time",
+            "description": "When it ended, once DONE."
+          },
+          "last_update_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Update Time",
+            "description": "When NetBackup last changed it."
+          },
+          "kilobytes_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kilobytes Transferred",
+            "description": "KiB written, as NetBackup counts it (may be an estimate)."
+          },
+          "kilobytes_data_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kilobytes Data Transferred",
+            "description": "KiB actually sent (NetBackup 10.5 / API 12.0 and later)."
+          },
+          "kilobytes_to_transfer": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kilobytes To Transfer",
+            "description": "KiB it expects to write in all."
+          },
+          "number_of_files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number Of Files",
+            "description": "Files it covered."
+          },
+          "percent_complete": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Complete",
+            "description": "0-100."
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw",
+            "description": "NetBackup's job record, untouched."
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "state",
+          "is_active"
+        ],
+        "title": "NetBackupJobIn",
+        "description": "One NetBackup job as of one collection."
+      },
+      "NetBackupJobOut": {
+        "properties": {
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id",
+            "description": "NetBackup's job id, unique within its primary."
+          },
+          "parent_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Job Id",
+            "description": "The job this one belongs to; NetBackup gives a job its own id as parent when it has none."
+          },
+          "job_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Type",
+            "description": "What sort of work, in NetBackup's words: BACKUP, DUPLICATE, REPLICATE, IMPORT, RESTORE, IMAGEDELETE, DBBACKUP, ..."
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "Where it is: QUEUED, ACTIVE, REQUEUED, SUSPENDED, INCOMPLETE or DONE."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "NetBackup's status code, final once DONE: 0 succeeded, 1 partly, others failed (the code says why)."
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "description": "Not DONE yet."
+          },
+          "policy_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Name",
+            "description": "The policy that ran it."
+          },
+          "policy_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Type",
+            "description": "The policy's type: STANDARD, VMWARE, ORACLE, ..."
+          },
+          "schedule_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Name",
+            "description": "The policy schedule."
+          },
+          "schedule_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Type",
+            "description": "FULL, DIFFERENTIAL_INCREMENTAL_BACKUP, ..."
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name",
+            "description": "The client it ran for."
+          },
+          "media_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Server",
+            "description": "The media server it wrote to (destination)."
+          },
+          "storage_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Unit",
+            "description": "The storage unit it wrote to (destination)."
+          },
+          "source_media_server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Media Server",
+            "description": "For a copy: the media server it read from."
+          },
+          "source_storage_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Storage Unit",
+            "description": "For a copy: the storage unit it read from."
+          },
+          "backup_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Id",
+            "description": "The image it made or worked on - the key to the catalog, and across primaries for a replicated image."
+          },
+          "try_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Try Number",
+            "description": "Which try: above 1 for a retry."
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time",
+            "description": "When it started."
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time",
+            "description": "When it ended, once DONE."
+          },
+          "last_update_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Update Time",
+            "description": "When NetBackup last changed it."
+          },
+          "kilobytes_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kilobytes Transferred",
+            "description": "KiB written, as NetBackup counts it (may be an estimate)."
+          },
+          "kilobytes_data_transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kilobytes Data Transferred",
+            "description": "KiB actually sent (NetBackup 10.5 / API 12.0 and later)."
+          },
+          "kilobytes_to_transfer": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kilobytes To Transfer",
+            "description": "KiB it expects to write in all."
+          },
+          "number_of_files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number Of Files",
+            "description": "Files it covered."
+          },
+          "percent_complete": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Complete",
+            "description": "0-100."
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw",
+            "description": "NetBackup's job record, untouched."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When blt first collected it."
+          },
+          "last_collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Collected At",
+            "description": "When blt last collected it."
+          },
+          "last_seen_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen Run Id",
+            "description": "The run that last collected it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "state",
+          "is_active",
+          "first_seen_at",
+          "last_collected_at"
+        ],
+        "title": "NetBackupJobOut",
+        "description": "A NetBackup job as blt holds it: its latest state."
+      },
+      "NetBackupLastRun": {
+        "properties": {
+          "primary": {
+            "type": "string",
+            "title": "Primary",
+            "description": "blt's name for the primary."
+          },
+          "watermark": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watermark",
+            "description": "When the last succeeded run started; none means do an initial run."
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NetBackupRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most recent run."
+          }
+        },
+        "type": "object",
+        "required": [
+          "primary"
+        ],
+        "title": "NetBackupLastRun",
+        "description": "Where a primary's collection got to."
+      },
       "NetBackupPrimaryIn": {
         "properties": {
           "name": {
@@ -6181,6 +7527,180 @@
             "api_key": "A1b2...",
             "name": "nbu-prod-01",
             "url": "nbu01.example.com"
+          }
+        ]
+      },
+      "NetBackupRunFinish": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "succeeded or failed."
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Finished At",
+            "description": "When it ended."
+          },
+          "jobs_collected": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Jobs Collected",
+            "description": "Jobs sent.",
+            "default": 0
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Why it failed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "finished_at"
+        ],
+        "title": "NetBackupRunFinish",
+        "description": "How a run ended.",
+        "examples": [
+          {
+            "finished_at": "2026-11-08T14:03:10Z",
+            "jobs_collected": 37,
+            "status": "succeeded"
+          }
+        ]
+      },
+      "NetBackupRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "The run's id."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "delta",
+              "full"
+            ],
+            "title": "Mode",
+            "description": "initial, delta or full."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "running, succeeded or failed."
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "When the collector started."
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At",
+            "description": "When it ended."
+          },
+          "lookup_seconds": {
+            "type": "integer",
+            "title": "Lookup Seconds",
+            "description": "How far back it looked."
+          },
+          "jobs_collected": {
+            "type": "integer",
+            "title": "Jobs Collected",
+            "description": "Jobs it sent."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Why it failed."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "mode",
+          "status",
+          "started_at",
+          "lookup_seconds",
+          "jobs_collected"
+        ],
+        "title": "NetBackupRunOut",
+        "description": "A collection run, as blt holds it."
+      },
+      "NetBackupRunStart": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "delta",
+              "full"
+            ],
+            "title": "Mode",
+            "description": "initial, delta or full."
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "When the collector started; a succeeded run's start is the next watermark."
+          },
+          "lookup_seconds": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Lookup Seconds",
+            "description": "How far before `started_at` it looked for changes."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "started_at",
+          "lookup_seconds"
+        ],
+        "title": "NetBackupRunStart",
+        "description": "What a collector says when it opens a run.",
+        "examples": [
+          {
+            "lookup_seconds": 2700,
+            "mode": "delta",
+            "started_at": "2026-11-08T14:02:00Z"
           }
         ]
       },
@@ -9873,6 +11393,10 @@
     {
       "name": "rubrik",
       "description": "Rubrik Security Cloud accounts: watermark, runs, and jobs (RSC *activity series*). See docs/rubrik.md."
+    },
+    {
+      "name": "netbackup",
+      "description": "NetBackup primary servers: job collection - watermark, runs, and jobs (the activity monitor). Storage is under `storage`. See docs/netbackup.md."
     }
   ]
 }

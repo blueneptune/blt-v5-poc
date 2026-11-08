@@ -5,10 +5,11 @@
                                              API key is read from NBU_API_KEY
     blt-netbackup show [<name>...]           what the blocks hold, key hidden
     blt-netbackup storage <name>             one storage collection, from this host
+    blt-netbackup jobs <name> [--full]       one job collection, from this host
 
 The API key comes from the environment, never the command line, so it
 stays out of shell history and process lists. `add` and `show` talk to
-Prefect (PREFECT_API_URL); `storage` also needs blt's API (BLT_API_URL
+Prefect (PREFECT_API_URL); `storage` and `jobs` also need blt's API (BLT_API_URL
 and BLT_API_KEY, from the environment or config/blt.env).
 """
 
@@ -67,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
     p_show.add_argument("names", nargs="*")
     p_storage = commands.add_parser("storage", help="one storage collection")
     p_storage.add_argument("name")
+    p_jobs = commands.add_parser("jobs", help="one job collection")
+    p_jobs.add_argument("name")
+    p_jobs.add_argument("--full", action="store_true", help="read back 30 days")
     args = parser.parse_args(argv)
     configure_logging()
 
@@ -82,10 +86,13 @@ def main(argv: list[str] | None = None) -> int:
         for name in names:
             print(summary(name, _load(name)))
         return 0
-    from blt.flows.netbackup import storage_primary
+    from blt.flows.netbackup import jobs_primary, storage_primary
 
     try:
-        print(storage_primary(args.name, _load(args.name)))
+        if args.command == "jobs":
+            print(jobs_primary(args.name, _load(args.name), force_full=args.full))
+        else:
+            print(storage_primary(args.name, _load(args.name)))
     except SDKError as exc:
         print(f"{args.name}: {exc}", file=sys.stderr)
         return 1
