@@ -23,6 +23,7 @@ from blt.common.mapping import KINDS, STATES
 from .docs import UNAUTHORIZED, not_found
 from .jobs import CommonJob
 from .models import Commcell, Job
+from .netbackup import NetBackupJob, NetBackupPrimary
 from .rubrik import RubrikAccount, RubrikJob
 from .sources import Source
 
@@ -298,6 +299,15 @@ def jobs_router(
                 .where(
                     RubrikAccount.source_id == source.id,
                     RubrikJob.series_key == job.product_job_key,
+                )
+            ).first()
+        elif source.type == "netbackup":
+            product = session.exec(
+                select(NetBackupJob)
+                .join(NetBackupPrimary, col(NetBackupPrimary.id) == NetBackupJob.primary_id)
+                .where(
+                    NetBackupPrimary.source_id == source.id,
+                    NetBackupJob.job_id == int(job.product_job_key),
                 )
             ).first()
         return CommonJobDetail(

@@ -56,7 +56,8 @@ On cv-toaster: one dedupe pool on the CommServe's own MediaAgent, 1 TiB,
 ## NetBackup
 
 primary -> media server -> storage server -> disk pool -> storage unit.
-NetBackup is a source in blt for storage only so far (jobs come later):
+NetBackup is a source in blt for storage and, since 2026-11-08, jobs
+([netbackup.md](netbackup.md)):
 one Prefect block per primary, of type **blt NetBackup primary** - the
 address, an API key, and the primary's CA certificate when it is not
 publicly signed. `blt-netbackup-collect-storage/hourly` (:27) starts

@@ -35,7 +35,7 @@ def database_url(monkeypatch: pytest.MonkeyPatch) -> str:
 
     engine = create_engine(url)
     with engine.begin() as connection:
-        for schema in ("commvault", "rubrik", "common"):
+        for schema in ("commvault", "rubrik", "netbackup", "common"):
             connection.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         connection.execute(text("DROP SCHEMA public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))

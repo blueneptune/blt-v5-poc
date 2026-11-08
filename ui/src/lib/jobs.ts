@@ -24,7 +24,7 @@ export const STATES = [
 	'missing',
 	'unknown'
 ] as const;
-export const PRODUCTS = ['commvault', 'rubrik'] as const;
+export const PRODUCTS = ['commvault', 'rubrik', 'netbackup'] as const;
 
 /** How far back the list looks: the filter bar's choices. */
 export const WINDOWS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30, all: 0 } as const;

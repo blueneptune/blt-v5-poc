@@ -117,6 +117,11 @@ TAGS = [
         "description": "Rubrik Security Cloud accounts: watermark, runs, and jobs (RSC "
         "*activity series*). See docs/rubrik.md.",
     },
+    {
+        "name": "netbackup",
+        "description": "NetBackup primary servers: job collection - watermark, runs, and jobs "
+        "(the activity monitor). Storage is under `storage`. See docs/netbackup.md.",
+    },
 ]
 
 
@@ -150,6 +155,14 @@ RubrikAccountName = Annotated[
         description="blt's name for the RSC account - its Prefect block's name, not "
         "the account's address. Made the first time a run is started for it.",
         examples=["work"],
+    ),
+]
+NetBackupPrimaryName = Annotated[
+    str,
+    Path(
+        description="blt's name for the NetBackup primary - its Prefect block's name, not "
+        "necessarily the primary's host name. Made the first time a run is started for it.",
+        examples=["nbu-work-01"],
     ),
 ]
 RunId = Annotated[int, Path(description="The run's `id`, as `POST .../runs` returned it.")]

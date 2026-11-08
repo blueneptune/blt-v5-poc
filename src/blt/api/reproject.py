@@ -12,10 +12,11 @@ from typing import Any
 from sqlalchemy import Engine, exists
 from sqlmodel import Session, SQLModel, col, select
 
-from blt.common.mapping import commvault_job, rubrik_job
+from blt.common.mapping import commvault_job, netbackup_job, rubrik_job
 
 from . import jobs as common_jobs
 from .models import Commcell, Job
+from .netbackup import NetBackupJob, NetBackupPrimary
 from .rubrik import RubrikAccount, RubrikJob
 
 _PAGE = 1000
@@ -66,6 +67,19 @@ def reproject(engine: Engine, log: Callable[[str], None] = print) -> int:
             session.commit()
             log(f"rubrik {account.name}: {count} jobs")
             total += count
+        for primary in list(session.exec(select(NetBackupPrimary))):
+            count = 0
+            for rows in _pages(
+                session,
+                NetBackupJob,
+                col(NetBackupJob.primary_id),
+                primary.id,
+                col(NetBackupJob.job_id),
+            ):
+                count += common_jobs.project(session, primary.source_id, rows, netbackup_job)
+                session.commit()
+            log(f"netbackup {primary.name}: {count} jobs")
+            total += count
     return total
 
 
@@ -78,4 +92,5 @@ def needs_first_projection(engine: Engine) -> bool:
         return bool(
             session.exec(select(exists().select_from(Job))).one()
             or session.exec(select(exists().select_from(RubrikJob))).one()
+            or session.exec(select(exists().select_from(NetBackupJob))).one()
         )

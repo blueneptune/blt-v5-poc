@@ -204,3 +204,143 @@ def rubrik_job(row: Mapping[str, Any]) -> dict[str, Any]:
         "attempt": row.get("attempt_number"),
         "last_collected_at": row["last_collected_at"],
     }
+
+
+# --- NetBackup ---------------------------------------------------------
+# States and job types: the enums in NetBackup 10.2's API (admin.yaml,
+# GET /admin/jobs). A job not DONE takes its state from `state`; a DONE
+# job from its status code: 0 succeeded, 1 partly, 150 stopped by an
+# administrator, others failed. Status texts: the codes seen most, worded
+# as NetBackup's status code reference words them.
+
+NETBACKUP_ACTIVE_STATES = _lower(
+    {
+        "queued": ("QUEUED",),
+        "running": ("ACTIVE",),
+        "waiting": ("REQUEUED", "SUSPENDED", "INCOMPLETE", "WAITING_FOR_RETRY"),
+    }
+)
+
+NETBACKUP_KINDS = _lower(
+    {
+        "backup": ("BACKUP", "ARCHIVE", "DBBACKUP", "SNAPSHOT", "RMAN_CATALOG", "TRIAL_BACKUP"),
+        "restore": (
+            "RESTORE",
+            "DBRECOVER",
+            "INSTANT_RECOVERY",
+            "ACTIVATE_IR",
+            "DEACTIVATE_IR",
+            "REACTIVATE_IR",
+            "STOP_IR",
+            "INSTANT_ACCESS",
+        ),
+        "copy": (
+            "DUPLICATE",
+            "REPLICATE",
+            "IMPORT",
+            "REPLICA_IMPORT",
+            "SNAPDUPE",
+            "SNAPREPLICATE",
+            "SNAPIMPORT",
+            "VAULT",
+            "CLOUD_SNAPSHOT_REPLICATE",
+        ),
+        "maintenance": (
+            "IMAGEDELETE",
+            "INDEXCLEANUP",
+            "LABEL",
+            "ERASE",
+            "TPCLEAN",
+            "TPFORMAT",
+            "TPREQ",
+            "VMPHYSINV",
+            "DQTS",
+            "MCONTENTS",
+            "DEPLOYMENT",
+            "LOCKVM",
+            "APP_STATE_CAPTURE",
+            "PREPARING_FOR_BACKUP",
+        ),
+        "scan": ("VERIFY", "INDEXING", "SNAPINDEX"),
+    }
+)
+
+NETBACKUP_STATUS_TEXT = {
+    0: "the requested operation was successfully completed",
+    1: "the requested operation was partially successful",
+    2: "none of the requested files were backed up",
+    13: "file read failed",
+    23: "socket read failed",
+    24: "socket write failed",
+    25: "cannot connect on socket",
+    41: "network connection timed out",
+    42: "network read failed",
+    48: "client hostname could not be found",
+    50: "client process aborted",
+    54: "timed out connecting to client",
+    57: "client connection refused",
+    58: "can't connect to client",
+    59: "access to the client was not allowed",
+    71: "none of the files in the file list exist",
+    84: "media write error",
+    96: "unable to allocate new media for backup, storage unit has none available",
+    129: "disk storage unit is full",
+    150: "termination requested by administrator",
+    156: "snapshot error encountered",
+    190: "found no images or media matching the selection criteria",
+    191: "no images were successfully processed",
+    196: "client backup was not attempted because backup window closed",
+    213: "no storage units available for use",
+    219: "the required storage unit is unavailable",
+    800: "resource request failed",
+    2074: "disk volume is down",
+}
+
+
+def netbackup_state(state: str | None, status: int | None) -> str:
+    if (state or "").strip().upper() != "DONE":
+        return _lookup(NETBACKUP_ACTIVE_STATES, state, "unknown")
+    if status is None:
+        return "unknown"
+    if status == 0:
+        return "succeeded"
+    if status == 1:
+        return "partial"
+    if status == 150:
+        return "cancelled"
+    if status == 196:
+        return "skipped"
+    return "failed"
+
+
+def netbackup_job(row: Mapping[str, Any]) -> dict[str, Any]:
+    state = netbackup_state(row.get("state"), row.get("status"))
+    done = (row.get("state") or "").upper() == "DONE"
+    code = row.get("status")
+    product_status = (row.get("state") or "") + (f" (status {code})" if done else "")
+    message = None
+    if done and code not in (None, 0):
+        text = NETBACKUP_STATUS_TEXT.get(code)
+        message = f"status {code}: {text}" if text else f"status {code}"
+    kib = row.get("kilobytes_data_transferred")
+    if kib is None:
+        kib = row.get("kilobytes_transferred")
+    return {
+        "product_job_key": str(row["job_id"]),
+        "kind": _lookup(NETBACKUP_KINDS, row.get("job_type"), "other"),
+        "state": state,
+        "product_status": product_status,
+        "is_active": state in ACTIVE_STATES,
+        "started_at": row.get("start_time"),
+        "ended_at": row.get("end_time") if done else None,
+        "updated_at": row.get("last_update_time"),
+        "asset_name": row.get("client_name"),
+        "asset_type": row.get("policy_type"),
+        # The policy is what makes it run (an SLP may copy it on).
+        "protection": row.get("policy_name"),
+        "bytes_transferred": kib * 1024 if kib is not None else None,
+        "bytes_protected": None,
+        "message": message,
+        "attempt": row.get("try_number"),
+        "last_collected_at": row["last_collected_at"],
+    }

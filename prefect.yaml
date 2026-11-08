@@ -94,6 +94,23 @@ deployments:
     work_pool:
       name: blt
 
+  # NetBackup: every primary block's jobs every 15 minutes - NetBackup
+  # forgets finished jobs after a few days, so blt keeps close behind.
+  - name: every-15-minutes
+    description: Jobs (the activity monitor) from every NetBackup primary block.
+    entrypoint: blt.flows.netbackup:netbackup_collect_jobs
+    work_pool:
+      name: blt
+    schedules:
+      - cron: "2,17,32,47 * * * *"
+        timezone: UTC
+
+  - name: per-primary
+    description: Jobs from one NetBackup primary. Started by blt-netbackup-collect-jobs/every-15-minutes; full=true reads back 30 days.
+    entrypoint: blt.flows.netbackup:netbackup_jobs_primary
+    work_pool:
+      name: blt
+
   # NetBackup: every primary block's storage hourly, with Commvault's.
   - name: hourly
     description: Storage (disk pools, capacity and use) from every NetBackup primary block.
