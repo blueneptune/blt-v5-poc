@@ -2,7 +2,8 @@
 # Build the images and (re)start the "blt" pod: Postgres, the API and the
 # web UI, and with BLT_PREFECT=true in config/blt.env the Prefect server
 # and worker.
-# Safe to re-run; job data lives in the blt-pgdata volume and survives it.
+# Safe to re-run; job data lives in the blt-pgdata volume and survives it,
+# and the Prefect server's slot leases in blt-prefect-home.
 #
 # deploy/kube/up.sh starts the same pod from a Kubernetes manifest; this
 # script stays until that has proven itself.
@@ -65,6 +66,7 @@ if [[ "$PREFECT_ENABLED" == true ]]; then
         -e "PREFECT_LISTEN_PORT=${PREFECT_LISTEN_PORT}" \
         -e "PREFECT_SERVER_API_AUTH_STRING=${PREFECT_AUTH}" \
         -e "PREFECT_SERVER_UI_ENABLED=false" \
+        -v blt-prefect-home:/var/lib/prefect \
         localhost/blt-prefect-server
     podman run -d --replace --pod blt --name blt-prefect-worker \
         -e "PREFECT_API_URL=http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}/api" \

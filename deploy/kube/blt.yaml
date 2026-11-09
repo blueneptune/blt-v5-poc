@@ -37,6 +37,19 @@ spec:
       storage: 10Gi
 ---
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # The Prefect server's leases on the collection slots, so they outlive
+  # a restart (deploy/prefect/server/Containerfile). Unused without
+  # Prefect. The same volume deploy/up.sh uses.
+  name: blt-prefect-home
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
 kind: Pod
 metadata:
   name: blt
@@ -49,6 +62,9 @@ spec:
     - name: pgdata
       persistentVolumeClaim:
         claimName: blt-pgdata
+    - name: prefect-home
+      persistentVolumeClaim:
+        claimName: blt-prefect-home
   containers:
     - name: postgres
       image: docker.io/library/postgres:17

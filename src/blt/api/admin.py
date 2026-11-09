@@ -22,7 +22,7 @@ whether each one is set.
 import re
 import uuid
 from collections.abc import Callable, Iterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
@@ -30,7 +30,14 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
-from blt.queues import DEFAULT_QUEUE, SOURCE_PARAMETERS, WORK_POOL, check_collector, queue_for
+from blt.queues import (
+    DEFAULT_QUEUE,
+    SLOT_LIMIT,
+    SOURCE_PARAMETERS,
+    WORK_POOL,
+    check_collector,
+    queue_for,
+)
 
 from .docs import UNAUTHORIZED
 from .prefect import PrefectApi, PrefectError
@@ -320,6 +327,78 @@ class FlowRunDetail(FlowRunOut):
     logs_truncated: bool = Field(description="More lines than were returned.")
 
 
+class SlotsOut(BaseModel):
+    """The collection slots: how many per-source runs may collect at once,
+    and how many Prefect counts as taken."""
+
+    name: str = Field(description="The Prefect global concurrency limit.")
+    limit: int = Field(description="Slots there are (BLT_MAX_PARALLEL).")
+    active: int = Field(description="Slots Prefect counts as taken.")
+
+
+class StuckRunOut(FlowRunOut):
+    """A run that has been running, starting or cancelling for too long."""
+
+    stuck_minutes: int = Field(description="Minutes in its state so far.")
+
+
+class RunHealthOut(BaseModel):
+    """Whether runs are getting through: the collection slots against the
+    runs that could be holding them, and runs that look stuck."""
+
+    slots: SlotsOut | None = Field(
+        description="The collection slots; none until blt's worker has started once."
+    )
+    collecting: int = Field(
+        description="Per-source runs in RUNNING: at most this many can hold a slot."
+    )
+    leaked_slots: int = Field(
+        description="Slots taken beyond the runs that could hold them: held by runs that "
+        "are gone. Clearing gives them back."
+    )
+    stuck: list[StuckRunOut] = Field(
+        description="Runs RUNNING longer than stuck_after_minutes, or PENDING or CANCELLING "
+        "longer than 10 minutes, the longest first."
+    )
+    stuck_after_minutes: int = Field(description="How long a run may run before it counts.")
+    healthy: bool = Field(description="No leaked slots and no stuck runs.")
+
+
+class ClearStuckIn(BaseModel):
+    """Stuck runs to cancel - the ids a health check listed - and the rule
+    it used, so a run that has since moved on is left alone."""
+
+    run_ids: list[uuid.UUID] = Field(
+        default_factory=list, max_length=2000, description="Runs to cancel."
+    )
+    stuck_after_minutes: int = Field(
+        default=120,
+        ge=10,
+        le=10080,
+        description="The minutes the health check counted a RUNNING run stuck after.",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "run_ids": ["0f4b5c3e-2a1d-4e6f-9b8a-7c6d5e4f3a2b"],
+                    "stuck_after_minutes": 120,
+                }
+            ]
+        }
+    }
+
+
+class ClearStuckOut(BaseModel):
+    """What clearing did."""
+
+    cancelled: list[uuid.UUID] = Field(description="The runs cancelled.")
+    skipped: int = Field(description="Runs asked for that were no longer stuck, or gone.")
+    slots_before: int | None = Field(description="Slots counted as taken before.")
+    slots_after: int | None = Field(description="And after.")
+
+
 RunState = Literal[
     "SCHEDULED",
     "PENDING",
@@ -331,6 +410,13 @@ RunState = Literal[
     "CRASHED",
     "PAUSED",
 ]
+
+# What makes a run stuck (GET /admin/runs/health).
+ACTIVE_STATES = ["RUNNING", "PENDING", "CANCELLING"]
+STUCK_AFTER_MINUTES = 120
+WAITING_STUCK_MINUTES = 10
+# Active runs read for a health check, at most.
+ACTIVE_LIMIT = 2000
 
 LEVELS = {10: "DEBUG", 20: "INFO", 30: "WARNING", 40: "ERROR", 50: "CRITICAL"}
 LOG_LIMIT = 2000
@@ -732,6 +818,120 @@ def admin_router(
         flows, deployments = names(prefect, runs)
         return [run_out(r, flows, deployments) for r in runs]
 
+    # --- run health -------------------------------------------------------
+
+    def active_runs(prefect: PrefectApi) -> list[dict[str, Any]]:
+        found: list[dict[str, Any]] = []
+        while len(found) < ACTIVE_LIMIT:
+            page = guarded(
+                partial(
+                    prefect.flow_runs,
+                    state_types=ACTIVE_STATES,
+                    sort="EXPECTED_START_TIME_ASC",
+                    limit=200,
+                    offset=len(found),
+                )
+            )
+            found.extend(page)
+            if len(page) < 200:
+                break
+        return found
+
+    def slots(prefect: PrefectApi) -> SlotsOut | None:
+        limit = guarded(lambda: prefect.concurrency_limit(SLOT_LIMIT))
+        if limit is None:
+            return None
+        return SlotsOut(
+            name=SLOT_LIMIT, limit=int(limit.get("limit") or 0), active=int(limit["active_slots"])
+        )
+
+    def collecting(runs: list[dict[str, Any]]) -> int:
+        return sum(
+            1
+            for r in runs
+            if is_source_run(r)
+            and ((r.get("state") or {}).get("type") or r.get("state_type")) == "RUNNING"
+        )
+
+    StuckAfter = Annotated[
+        int,
+        Query(
+            ge=10,
+            le=10080,
+            description="Minutes a run may be RUNNING before it counts as stuck.",
+        ),
+    ]
+
+    @router.get("/runs/health", summary="Are runs getting through?")
+    def run_health(prefect: PrefectDep, stuck_after_minutes: StuckAfter = 120) -> RunHealthOut:
+        """The collection slots against the runs that could hold them, and
+        the runs that look stuck. A slot is leaked when a run that held it
+        is gone - its worker restarted, or the Prefect server did while it
+        kept them only in memory - and runs then queue for it for ever."""
+        now = datetime.now(UTC)
+        runs = active_runs(prefect)
+        slot_state = slots(prefect)
+        busy = collecting(runs)
+        stuck = sorted(
+            (
+                (minutes, r)
+                for r in runs
+                if (minutes := stuck_minutes(r, stuck_after_minutes, now)) is not None
+            ),
+            key=lambda pair: -pair[0],
+        )
+        out: list[StuckRunOut] = []
+        if stuck:
+            flows, deployments = names(prefect, [r for _, r in stuck])
+            out = [
+                StuckRunOut(**run_out(r, flows, deployments).model_dump(), stuck_minutes=m)
+                for m, r in stuck
+            ]
+        leaked = max(0, slot_state.active - busy) if slot_state else 0
+        return RunHealthOut(
+            slots=slot_state,
+            collecting=busy,
+            leaked_slots=leaked,
+            stuck=out,
+            stuck_after_minutes=stuck_after_minutes,
+            healthy=not leaked and not out,
+        )
+
+    @router.post("/runs/clear-stuck", summary="Cancel stuck runs and give back leaked slots")
+    def clear_stuck(body: ClearStuckIn, prefect: PrefectDep) -> ClearStuckOut:
+        """Cancels the runs asked for that are still stuck by the same
+        rule - at once, since no worker is running them - and then, if
+        Prefect counts more slots taken than there are runs collecting,
+        brings the count down to those runs. It never goes below them, so
+        a run that holds a slot keeps it."""
+        now = datetime.now(UTC)
+        cancelled: list[uuid.UUID] = []
+        for run_id in dict.fromkeys(body.run_ids):
+            run = guarded(partial(prefect.flow_run, run_id))
+            if run is None or stuck_minutes(run, body.stuck_after_minutes, now) is None:
+                continue
+            guarded(
+                partial(
+                    prefect.force_cancel,
+                    run_id,
+                    "Cleared as stuck from Administration -> Schedules.",
+                )
+            )
+            cancelled.append(run_id)
+        before = slots(prefect)
+        after = before.active if before else None
+        if before:
+            busy = collecting(active_runs(prefect))
+            if before.active > busy:
+                guarded(lambda: prefect.set_active_slots(SLOT_LIMIT, busy))
+                after = busy
+        return ClearStuckOut(
+            cancelled=cancelled,
+            skipped=len(dict.fromkeys(body.run_ids)) - len(cancelled),
+            slots_before=before.active if before else None,
+            slots_after=after,
+        )
+
     RunId = Annotated[uuid.UUID, Path(description="The flow run's id.")]
 
     @router.get("/runs/{run_id}", summary="A flow run and its log")
@@ -773,6 +973,36 @@ def admin_router(
         return run_out(run, flows, deployments)
 
     return router
+
+
+def _when(value: Any) -> datetime | None:
+    if not value:
+        return None
+    when = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    return when if when.tzinfo else when.replace(tzinfo=UTC)
+
+
+def stuck_minutes(run: dict[str, Any], stuck_after: int, now: datetime) -> int | None:
+    """Minutes a run has been stuck in its state, or None if it is not:
+    RUNNING for longer than stuck_after minutes, PENDING or CANCELLING
+    (no worker took it up, or none is there to stop it) for longer than
+    WAITING_STUCK_MINUTES."""
+    state = run.get("state") or {}
+    kind = state.get("type") or run.get("state_type")
+    if kind not in ACTIVE_STATES:
+        return None
+    since = _when(run.get("start_time")) if kind == "RUNNING" else None
+    since = since or _when(state.get("timestamp"))
+    if since is None:
+        return None
+    minutes = int((now - since) / timedelta(minutes=1))
+    limit = stuck_after if kind == "RUNNING" else WAITING_STUCK_MINUTES
+    return minutes if minutes >= limit else None
+
+
+def is_source_run(run: dict[str, Any]) -> bool:
+    """A run for one source: the runs that take a collection slot."""
+    return any(key in (run.get("parameters") or {}) for key in SOURCE_PARAMETERS)
 
 
 def run_out(run: dict[str, Any], flows: dict[str, str], deployments: dict[str, str]) -> FlowRunOut:

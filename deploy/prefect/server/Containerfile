@@ -8,5 +8,14 @@ COPY deploy/prefect/server/start.py /opt/blt/start.py
 # No Prefect UI: blt's own UI manages sources, schedules and runs
 # (docs/admin.md). Only the API is served, behind basic auth.
 ENV PREFECT_SERVER_UI_ENABLED=false
+# Collection slots are leased to the runs holding them. Prefect keeps the
+# leases in memory by default, so a server restart forgot who held a slot
+# while still counting it taken - and every run after waited for ever for
+# one. On disk, in a volume (deploy/up.sh, deploy/kube/blt.yaml, the
+# cluster's PVC), they outlive a restart, and a slot whose run is gone
+# comes back when its lease runs out (5 minutes).
+ENV PREFECT_HOME=/var/lib/prefect \
+    PREFECT_SERVER_CONCURRENCY_LEASE_STORAGE=prefect.server.concurrency.lease_storage.filesystem
+RUN mkdir -p /var/lib/prefect
 EXPOSE 4200
 CMD ["python", "/opt/blt/start.py"]

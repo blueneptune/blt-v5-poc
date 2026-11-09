@@ -97,9 +97,23 @@ def containers(documents: list[dict]) -> dict[str, dict]:
 
 def test_the_manifest_publishes_each_service_on_its_own_address(tmp_path: Path) -> None:
     documents = render(tmp_path)
-    assert [d["kind"] for d in documents] == ["Secret", "PersistentVolumeClaim", "Pod"]
+    kinds = [(d["kind"], d["metadata"]["name"]) for d in documents]
+    assert kinds == [
+        ("Secret", "blt-secrets"),
+        ("PersistentVolumeClaim", "blt-pgdata"),
+        ("PersistentVolumeClaim", "blt-prefect-home"),
+        ("Pod", "blt"),
+    ]
     found = containers(documents)
     assert list(found) == ["postgres", "api", "ui", "prefect-server", "prefect-worker"]
+    # The server's slot leases outlive a restart (deploy/prefect/server/Containerfile).
+    volumes = {
+        v["name"]: v["persistentVolumeClaim"]["claimName"] for v in documents[-1]["spec"]["volumes"]
+    }
+    assert volumes["prefect-home"] == "blt-prefect-home"
+    assert found["prefect-server"]["volumeMounts"] == [
+        {"name": "prefect-home", "mountPath": "/var/lib/prefect"}
+    ]
     ports = {name: c.get("ports") for name, c in found.items()}
     assert ports["api"] == [{"containerPort": 8000, "hostPort": 8188, "hostIP": "127.0.0.1"}]
     assert ports["postgres"] == [{"containerPort": 5432, "hostPort": 5544, "hostIP": "127.0.0.1"}]
@@ -371,3 +385,77 @@ def test_blt_s_own_worker_leaves_remote_collectors_runs_alone() -> None:
     assert "--work-queue default" in own
     assert '--work-queue "$COLLECTOR"' in remote
     assert "BLT_COLLECTOR" in start
+
+
+def run_ssh_config(tmp_path: Path, env: str) -> subprocess.CompletedProcess[str]:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(env)
+    return subprocess.run(
+        ["bash", "deploy/collector.sh", "ssh-config"],
+        cwd=ROOT,
+        env={**clean_environment(), "BLT_ENV_FILE": str(env_file)},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_a_command_in_blt_env_stops_the_scripts_before_it_runs(tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    pasted = f"for db in blt prefect; do\n  touch {marker} # secret-ish\ndone\n"
+    result = run_ssh_config(tmp_path, ENV + "\n# a comment\n" + pasted)
+    lines = len(ENV.splitlines()) + 2
+    assert result.returncode == 1
+    assert f"line {lines + 1},{lines + 2},{lines + 3} is not a setting" in result.stderr
+    assert "secret-ish" not in result.stderr and "touch" not in result.stderr
+    assert not marker.exists()
+
+
+def test_settings_comments_export_and_windows_line_ends_are_fine(tmp_path: Path) -> None:
+    env = "# blt\r\n\r\n   # indented comment\r\nexport BLT_MAX_PARALLEL=2\r\n" + ENV.replace(
+        "\n", "\r\n"
+    )
+    result = run_ssh_config(tmp_path, env)
+    assert result.returncode == 0, result.stderr
+    assert "RemoteForward" in result.stdout
+
+
+def test_the_prefect_server_keeps_its_slot_leases_on_the_volume() -> None:
+    server = (ROOT / "deploy/prefect/server/Containerfile").read_text()
+    assert "PREFECT_HOME=/var/lib/prefect" in server
+    assert "lease_storage.filesystem" in server
+    up = (ROOT / "deploy/up.sh").read_text()
+    assert "-v blt-prefect-home:/var/lib/prefect" in up
+    worker = (ROOT / "deploy/prefect/worker/Containerfile").read_text()
+    assert "PREFECT_FLOWS_HEARTBEAT_FREQUENCY=30" in worker
+    start = (ROOT / "deploy/prefect/worker/start.sh").read_text()
+    own = start.rsplit("exec prefect worker start", 1)[0].split("\nfi\n", 2)[-1]
+    assert "python -m blt.flows.automations" in own  # blt's own worker, not a collector
+
+
+def test_maintenance_runs_inside_the_api_container(tmp_path: Path) -> None:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(ENV)
+    log = tmp_path / "podman.log"
+    podman = tmp_path / "podman"
+    podman.write_text(f'#!/bin/sh\necho "$*" >> {log}\ncase "$1" in container) echo true ;; esac\n')
+    podman.chmod(0o755)
+    base = {
+        **clean_environment(),
+        "BLT_ENV_FILE": str(env_file),
+        "BLT_MAINTENANCE_PODMAN": str(podman),
+    }
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "deploy/maintenance.sh", *args],
+            cwd=ROOT,
+            env=base,
+            capture_output=True,
+            text=True,
+        )
+
+    assert run("unstick", "--dry-run").returncode == 0
+    calls = log.read_text().splitlines()
+    assert calls[-1] == "exec blt-api python -m blt.api.maintenance unstick --dry-run"
+    assert "key-1" not in log.read_text()  # the key stays in the container
+    assert run("restart-everything").returncode == 2

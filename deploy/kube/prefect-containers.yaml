@@ -16,6 +16,8 @@
           valueFrom: {secretKeyRef: {name: blt-secrets, key: PREFECT_AUTH}}
       ports:
         - {containerPort: ${PREFECT_LISTEN_PORT}, hostPort: ${PREFECT_PORT}, hostIP: "${PREFECT_BIND}"}
+      volumeMounts:
+        - {name: prefect-home, mountPath: /var/lib/prefect}
 
     - name: prefect-worker
       image: localhost/blt-prefect-worker:latest

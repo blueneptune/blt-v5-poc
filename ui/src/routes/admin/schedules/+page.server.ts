@@ -4,10 +4,16 @@ import { reason, refused, requireAdmin } from '$lib/server/admin';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const result = await locals.api.GET('/v1/admin/deployments');
-	return result.data
-		? { deployments: result.data, problem: null }
-		: { deployments: [], problem: reason(result.error, result.response) };
+	const [result, health] = await Promise.all([
+		locals.api.GET('/v1/admin/deployments'),
+		locals.api.GET('/v1/admin/runs/health')
+	]);
+	return {
+		deployments: result.data ?? [],
+		problem: result.data ? null : reason(result.error, result.response),
+		// Only a panel: the page works without it.
+		health: health.data ?? null
+	};
 };
 
 const id = (form: FormData) => String(form.get('id') ?? '');
@@ -22,6 +28,19 @@ export const actions: Actions = {
 				? await locals.api.POST('/v1/admin/deployments/{deployment_id}/pause', params)
 				: await locals.api.POST('/v1/admin/deployments/{deployment_id}/resume', params);
 		if (!result.data) return refused(result, { id: id(form) });
+	},
+
+	clearStuck: async ({ locals, request }) => {
+		requireAdmin(locals.user);
+		const form = await request.formData();
+		const result = await locals.api.POST('/v1/admin/runs/clear-stuck', {
+			body: {
+				run_ids: form.getAll('run').map(String),
+				stuck_after_minutes: Number(form.get('stuck_after_minutes') ?? 120)
+			}
+		});
+		if (!result.data) return refused(result, { cleared: null });
+		return { cleared: result.data };
 	},
 
 	run: async ({ locals, request }) => {

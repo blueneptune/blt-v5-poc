@@ -70,6 +70,10 @@ SLOTS="${BLT_MAX_PARALLEL:-4}"
 prefect --no-prompt global-concurrency-limit update blt-commcell-runs --limit "$SLOTS" >/dev/null 2>&1 \
     || prefect --no-prompt global-concurrency-limit create blt-commcell-runs --limit "$SLOTS"
 prefect --no-prompt deploy --all --prefect-file /app/prefect.yaml
+# Runs whose process is gone are marked Crashed instead of RUNNING for
+# ever (blt.flows.automations). Not worth refusing to start over.
+python -m blt.flows.automations \
+    || echo "Could not set up the blt-crash-silent-runs automation; carrying on." >&2
 # Only the default work queue: any other is a remote collector's
 # (blt.queues), and its runs are for sources only it can reach.
 exec prefect worker start --pool "$POOL" --type process --work-queue default

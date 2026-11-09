@@ -49,7 +49,7 @@ from blt.collector.lock import run_lock
 from blt.collector.settings import CollectorSettings
 from blt.collector.source import CommvaultJobs
 from blt.collector.store import BltStore
-from blt.queues import queue_for
+from blt.queues import SLOT_LIMIT, queue_for
 from blt.storage.collect import collect_commvault_storage
 from blt.storage.store import StorageStore
 
@@ -58,7 +58,7 @@ from .blocks import BLOCK_TYPE_SLUG, BlockTokenStore, settings_from_blocks
 LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
 # How many CommCells may collect at once, across every flow: a global
 # concurrency limit the worker creates on start (BLT_MAX_PARALLEL).
-SLOTS = "blt-commcell-runs"
+SLOTS = SLOT_LIMIT
 COLLECT_ONE = "blt-collect-commcell/per-commcell"
 INVENTORY_ONE = "blt-inventory-commcell/per-commcell"
 STORAGE_ONE = "blt-storage-commcell/per-commcell"

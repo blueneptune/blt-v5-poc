@@ -46,7 +46,7 @@ from prefect.deployments import run_deployment
 from pydantic import Field, SecretStr
 
 from blt.collector.lock import run_lock
-from blt.netbackup.check import check_primary, fetch_ca_certificates, verifies
+from blt.netbackup.check import answers, check_primary, fallback_url, fetch_ca_answering, verifies
 from blt.netbackup.collect import run_netbackup_collection
 from blt.netbackup.source import NetBackupJobs
 from blt.netbackup.store import NetBackupStore
@@ -238,7 +238,14 @@ def netbackup_check(primary: str) -> str:
         passed = sum(c.ok for c in checks)
         summary = f"{passed} of {len(checks)} checks passed"
         if not checks[0].ok:
-            raise RuntimeError(f"Could not sign in to {primary}: {checks[0].detail}")
+            problem = f"Could not sign in to {primary}: {checks[0].detail}"
+            other = fallback_url(block.url)
+            if other and not answers(block.url) and answers(other):
+                problem += (
+                    f". Its API answers at {other} instead (NetBackup 10.5 can serve it on 443 "
+                    "only): change its address to that."
+                )
+            raise RuntimeError(problem)
         logger.info(summary)
         return summary
 
@@ -247,9 +254,15 @@ def netbackup_check(primary: str) -> str:
 def netbackup_fetch_ca(url: str) -> str:
     """Asks the primary at `url` for its CA certificate and logs each one
     it gives - PEM, subject, SHA-256 fingerprint - and whether it verifies
-    the primary's TLS certificate at this address. Signs in to nothing."""
+    the primary's TLS certificate at this address. Signs in to nothing.
+    If the default port 1556 does not answer it tries 443, and says so."""
     with logs_to_prefect():
-        certificates = fetch_ca_certificates(url)
+        asked = url
+        url, certificates, why = fetch_ca_answering(url)
+        if why:
+            logger.warning("{} did not answer ({}); {} did.", asked, why, url)
+            # The add page reads this line and takes the address (lib/admin.ts).
+            logger.info("Answered at {} - use this address.", url)
         if not certificates:
             raise RuntimeError(f"{url} gave no CA certificate")
         logger.info("{} gave {} CA certificate(s)", url, len(certificates))

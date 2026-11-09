@@ -417,6 +417,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/runs/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Are runs getting through?
+         * @description The collection slots against the runs that could hold them, and
+         *     the runs that look stuck. A slot is leaked when a run that held it
+         *     is gone - its worker restarted, or the Prefect server did while it
+         *     kept them only in memory - and runs then queue for it for ever.
+         */
+        get: operations["run_health_v1_admin_runs_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/runs/clear-stuck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel stuck runs and give back leaked slots
+         * @description Cancels the runs asked for that are still stuck by the same
+         *     rule - at once, since no worker is running them - and then, if
+         *     Prefect counts more slots taken than there are runs collecting,
+         *     brings the count down to those runs. It never goes below them, so
+         *     a run that holds a slot keeps it.
+         */
+        post: operations["clear_stuck_v1_admin_runs_clear_stuck_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/runs/{run_id}": {
         parameters: {
             query?: never;
@@ -1046,6 +1093,56 @@ export interface components {
              * @description Fetch it from this remote collector; none: blt's own worker.
              */
             collector?: string | null;
+        };
+        /**
+         * ClearStuckIn
+         * @description Stuck runs to cancel - the ids a health check listed - and the rule
+         *     it used, so a run that has since moved on is left alone.
+         * @example {
+         *       "run_ids": [
+         *         "0f4b5c3e-2a1d-4e6f-9b8a-7c6d5e4f3a2b"
+         *       ],
+         *       "stuck_after_minutes": 120
+         *     }
+         */
+        ClearStuckIn: {
+            /**
+             * Run Ids
+             * @description Runs to cancel.
+             */
+            run_ids?: string[];
+            /**
+             * Stuck After Minutes
+             * @description The minutes the health check counted a RUNNING run stuck after.
+             * @default 120
+             */
+            stuck_after_minutes: number;
+        };
+        /**
+         * ClearStuckOut
+         * @description What clearing did.
+         */
+        ClearStuckOut: {
+            /**
+             * Cancelled
+             * @description The runs cancelled.
+             */
+            cancelled: string[];
+            /**
+             * Skipped
+             * @description Runs asked for that were no longer stuck, or gone.
+             */
+            skipped: number;
+            /**
+             * Slots Before
+             * @description Slots counted as taken before.
+             */
+            slots_before: number | null;
+            /**
+             * Slots After
+             * @description And after.
+             */
+            slots_after: number | null;
         };
         /**
          * CollectorOut
@@ -3824,6 +3921,40 @@ export interface components {
             error?: string | null;
         };
         /**
+         * RunHealthOut
+         * @description Whether runs are getting through: the collection slots against the
+         *     runs that could be holding them, and runs that look stuck.
+         */
+        RunHealthOut: {
+            /** @description The collection slots; none until blt's worker has started once. */
+            slots: components["schemas"]["SlotsOut"] | null;
+            /**
+             * Collecting
+             * @description Per-source runs in RUNNING: at most this many can hold a slot.
+             */
+            collecting: number;
+            /**
+             * Leaked Slots
+             * @description Slots taken beyond the runs that could hold them: held by runs that are gone. Clearing gives them back.
+             */
+            leaked_slots: number;
+            /**
+             * Stuck
+             * @description Runs RUNNING longer than stuck_after_minutes, or PENDING or CANCELLING longer than 10 minutes, the longest first.
+             */
+            stuck: components["schemas"]["StuckRunOut"][];
+            /**
+             * Stuck After Minutes
+             * @description How long a run may run before it counts.
+             */
+            stuck_after_minutes: number;
+            /**
+             * Healthy
+             * @description No leaked slots and no stuck runs.
+             */
+            healthy: boolean;
+        };
+        /**
          * RunNowIn
          * @description A run to start now.
          * @example {
@@ -4001,6 +4132,28 @@ export interface components {
              * @description False: this schedule is switched off.
              */
             active: boolean;
+        };
+        /**
+         * SlotsOut
+         * @description The collection slots: how many per-source runs may collect at once,
+         *     and how many Prefect counts as taken.
+         */
+        SlotsOut: {
+            /**
+             * Name
+             * @description The Prefect global concurrency limit.
+             */
+            name: string;
+            /**
+             * Limit
+             * @description Slots there are (BLT_MAX_PARALLEL).
+             */
+            limit: number;
+            /**
+             * Active
+             * @description Slots Prefect counts as taken.
+             */
+            active: number;
         };
         /**
          * SourceBlockOut
@@ -4370,6 +4523,90 @@ export interface components {
              * @description Targets of the source this complete batch no longer lists, now not present.
              */
             gone: number;
+        };
+        /**
+         * StuckRunOut
+         * @description A run that has been running, starting or cancelling for too long.
+         */
+        StuckRunOut: {
+            /**
+             * Id
+             * Format: uuid
+             * @description The flow run's id.
+             */
+            id: string;
+            /**
+             * Name
+             * @description Its name.
+             */
+            name: string;
+            /**
+             * Flow Name
+             * @description The flow.
+             */
+            flow_name: string | null;
+            /**
+             * Deployment Id
+             * @description The deployment that started it.
+             */
+            deployment_id: string | null;
+            /**
+             * Deployment Name
+             * @description That deployment's name.
+             */
+            deployment_name: string | null;
+            /**
+             * State Type
+             * @description SCHEDULED, PENDING, RUNNING, COMPLETED, FAILED, ...
+             */
+            state_type: string | null;
+            /**
+             * State Name
+             * @description Prefect's name for the state.
+             */
+            state_name: string | null;
+            /**
+             * Message
+             * @description The state's message, if any.
+             */
+            message?: string | null;
+            /**
+             * Parameters
+             * @description What it was run with.
+             */
+            parameters: {
+                [key: string]: unknown;
+            };
+            /**
+             * Auto Scheduled
+             * @description Started by its schedule, not by hand.
+             */
+            auto_scheduled: boolean;
+            /**
+             * Expected Start Time
+             * @description When it was due.
+             */
+            expected_start_time?: string | null;
+            /**
+             * Start Time
+             * @description When it started.
+             */
+            start_time?: string | null;
+            /**
+             * End Time
+             * @description When it ended.
+             */
+            end_time?: string | null;
+            /**
+             * Total Run Time
+             * @description Seconds.
+             */
+            total_run_time: number;
+            /**
+             * Stuck Minutes
+             * @description Minutes in its state so far.
+             */
+            stuck_minutes: number;
         };
         /**
          * SummaryRow
@@ -5515,6 +5752,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FlowRunOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    run_health_v1_admin_runs_health_get: {
+        parameters: {
+            query?: {
+                /** @description Minutes a run may be RUNNING before it counts as stuck. */
+                stuck_after_minutes?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunHealthOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    clear_stuck_v1_admin_runs_clear_stuck_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearStuckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearStuckOut"];
                 };
             };
             /** @description Missing or invalid `X-API-Key` */

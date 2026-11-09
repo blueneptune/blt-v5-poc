@@ -153,6 +153,37 @@ function startCheck(primary: string): Run {
 	]);
 }
 
+// Run health: as on the desktop on 2026-11-09 - every slot held by runs
+// that are gone, and runs stuck waiting - until it is cleared.
+const stuckFlow = 'blt-netbackup-jobs-primary';
+const health = {
+	slots: { name: 'blt-commcell-runs', limit: 4, active: 4 },
+	stuck: [5, 6, 7].map((hours, i) => ({
+		id: id(3),
+		name: `netbackup-jobs-nbu0${i + 1}`,
+		flow_name: stuckFlow,
+		deployment_id: null,
+		deployment_name: null,
+		state_type: 'RUNNING',
+		state_name: 'Running',
+		message: null,
+		parameters: { primary: `nbu0${i + 1}` },
+		auto_scheduled: true,
+		expected_start_time: iso(hours * 60),
+		start_time: iso(hours * 60),
+		end_time: null,
+		total_run_time: 0,
+		stuck_minutes: hours * 60
+	})),
+	stuck_after_minutes: 120
+};
+
+function healthOut() {
+	const collecting = 0;
+	const leaked = Math.max(0, health.slots.active - collecting);
+	return { ...health, collecting, leaked_slots: leaked, healthy: !leaked && !health.stuck.length };
+}
+
 type Answer = [number, unknown];
 
 export function admin(method: string, path: string, q: URLSearchParams, body: any): Answer | null {
@@ -200,10 +231,20 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 	}
 	if (rest === '/netbackup/ca-certificate' && method === 'POST') {
 		const url = String(body.url).includes('://') ? body.url : `https://${body.url}:1556/netbackup`;
+		// A NetBackup 10.5 primary that serves its API only on 443.
+		const only443 = url.includes('nbu443');
+		const answered = only443 ? url.replace(':1556/', ':443/') : url;
+		const moved: [string, string][] = only443
+			? [
+					['WARNING', `${url} did not answer (timed out); ${answered} did.`],
+					['INFO', `Answered at ${answered} - use this address.`]
+				]
+			: [];
 		return [
 			201,
 			addRun(flow('blt-netbackup-fetch-ca'), { url }, 'fetch-ca', [
-				['INFO', `${url} gave 1 CA certificate(s)`],
+				...moved,
+				['INFO', `${answered} gave 1 CA certificate(s)`],
 				['INFO', `CA certificate 1: CN=nbatd,OU=root@nbu01,O=vx - SHA-256 ${FINGERPRINT}`],
 				['INFO', PEM],
 				['INFO', "CA certificate 1 verifies this primary's TLS certificate."]
@@ -231,6 +272,16 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 		if (deployment[2] === 'runs') return [201, addRun(found, body.parameters ?? {}, `run-${counter}`, [['INFO', `Started with ${JSON.stringify(body.parameters ?? {})}`]])];
 		found.paused = deployment[2] === 'pause';
 		return [200, { paused: found.paused }];
+	}
+
+	if (rest === '/runs/health' && method === 'GET') return [200, healthOut()];
+	if (rest === '/runs/clear-stuck' && method === 'POST') {
+		const asked: string[] = body.run_ids ?? [];
+		const cancelled = health.stuck.filter((r) => asked.includes(r.id)).map((r) => r.id);
+		health.stuck = health.stuck.filter((r) => !cancelled.includes(r.id));
+		const before = health.slots.active;
+		health.slots.active = 0;
+		return [200, { cancelled, skipped: asked.length - cancelled.length, slots_before: before, slots_after: 0 }];
 	}
 
 	if (rest === '/runs') {

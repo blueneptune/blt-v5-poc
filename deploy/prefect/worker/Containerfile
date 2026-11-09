@@ -20,4 +20,8 @@ COPY deploy/prefect/worker/start.sh /usr/local/bin/blt-worker-start
 RUN uv sync --frozen --no-dev --extra prefect && chmod +x /usr/local/bin/blt-worker-start
 
 ENV PATH="/app/.venv/bin:$PATH"
+# A heartbeat from each flow run every 30 s (Prefect's default is 180): a
+# run whose process died is marked Crashed soon after
+# (blt.flows.automations), here and on remote collectors alike.
+ENV PREFECT_FLOWS_HEARTBEAT_FREQUENCY=30
 CMD ["blt-worker-start"]

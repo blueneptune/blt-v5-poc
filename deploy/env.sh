@@ -22,6 +22,19 @@ if [[ ! -f "$BLT_ENV_FILE" ]]; then
     echo "${BLT_ENV_FILE} not found - copy config/blt.env.example and fill it in." >&2
     exit 1
 fi
+# It is read as shell, so anything else in it runs too - a command pasted
+# into it as a scratch pad would run on every deploy. Only settings,
+# comments and blank lines: stop on anything else, naming the line but not
+# showing it (it may hold a password).
+BAD_LINES="$(tr -d '\r' < "$BLT_ENV_FILE" \
+    | grep -nvE '^[[:space:]]*(#.*)?$|^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=' \
+    | cut -d: -f1 | paste -sd, -)" || true
+if [[ -n "$BAD_LINES" ]]; then
+    echo "${BLT_ENV_FILE}: line ${BAD_LINES} is not a setting (NAME=value), a comment or blank." >&2
+    echo "It is read as shell, so it would run: remove or comment it out, then run this again." >&2
+    exit 1
+fi
+unset BAD_LINES
 # Read with any carriage returns removed: a blt.env saved by a Windows
 # editor would otherwise put one on the end of the API key and the
 # database password, and the API could then never log in to Postgres.
