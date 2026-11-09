@@ -271,3 +271,16 @@ current work.
       pause; the product's interval is the finest a source can get;
     - Administration shows each source's next run, and a per-source
       pause next to the Collect switch.
+
+25. **Remote collectors - done 2026-11-09** (docs/remote-collector.md).
+    Each source names the collector that reaches it; its runs go to that
+    collector's Prefect work queue. `deploy/collector.sh` puts a collector
+    on a tools server over ssh, with an `ssh -R` tunnel back to a podman
+    desktop. Regions (omaha, uk, asia) are one collector each, and may
+    have several machines. Still to do:
+    - a per-source lock held in Prefect, not on one machine, so two
+      machines of one collector never run the same source at once;
+    - `collector.sh` for blt on the cluster (straight to its ingresses);
+    - keeping the tunnel up without a terminal (autossh, or a systemd
+      user unit in WSL);
+    - an API key that may only collect, for collectors (with Zitadel).

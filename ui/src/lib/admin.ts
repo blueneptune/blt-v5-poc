@@ -159,3 +159,53 @@ export function parameterValues(fields: ParameterField[], form: FormData): Recor
 	}
 	return values;
 }
+
+/** A worker that collects (GET /v1/admin/collectors), as these pages use it. */
+export interface Collector {
+	name: string;
+	own: boolean;
+	status: 'online' | 'offline' | 'paused' | 'never seen';
+	last_polled?: string | null;
+	sources: string[];
+}
+
+/** blt's own worker's work queue; a source naming no collector uses it. */
+export const OWN_COLLECTOR = 'default';
+
+/** What to call a collector on these pages. */
+export function collectorLabel(name: string | null | undefined): string {
+	return !name || name === OWN_COLLECTOR ? 'blt’s own worker' : name;
+}
+
+/** The job-state colour (lib/jobs.ts stateClass) a collector's status wears. */
+export function collectorTone(status: Collector['status']): string {
+	switch (status) {
+		case 'online':
+			return 'succeeded';
+		case 'offline':
+			return 'failed';
+		case 'paused':
+			return 'warning';
+		default:
+			return 'other';
+	}
+}
+
+/** The choices for a source's collector: blt's own worker first (value
+ * ''), then every remote one by name - with the source's current one
+ * even if no collector of that name has ever been seen. */
+export function collectorChoices(
+	collectors: Collector[],
+	current?: string | null
+): { value: string; label: string }[] {
+	const remote = collectors.filter((c) => !c.own).map((c) => c.name);
+	if (current && current !== OWN_COLLECTOR && !remote.includes(current)) remote.push(current);
+	const status = new Map(collectors.map((c) => [c.name, c.status]));
+	return [
+		{ value: '', label: collectorLabel(null) },
+		...remote.sort().map((name) => ({
+			value: name,
+			label: `${name} (${status.get(name) ?? 'never seen'})`
+		}))
+	];
+}

@@ -53,7 +53,7 @@ from blt.netbackup.store import NetBackupStore
 from blt.storage.netbackup import netbackup_storage
 from blt.storage.store import StorageStore
 
-from .flows import SLOTS, fan_out, logs_to_prefect
+from .flows import SLOTS, fan_out, logs_to_prefect, source_queue
 from .rubrik import BltApiSettings
 
 BLOCK_TYPE_SLUG = "blt-netbackup-primary"
@@ -80,6 +80,11 @@ class NetBackupPrimaryBlock(Block):
     )
     verify_tls: bool = True
     collect: bool = Field(default=True, description="Collected by the scheduled flows.")
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it (its Prefect work queue; "
+        "docs/remote-collector.md). Empty: blt's own worker.",
+    )
 
     @contextmanager
     def client(self) -> Iterator[NetBackupClient]:
@@ -178,6 +183,7 @@ def _start_run(deployment: str, primary: str) -> str:
             parameters={"primary": primary},
             flow_run_name=f"{label}-{primary}",
             timeout=0,
+            work_queue_name=source_queue(BLOCK_TYPE_SLUG, primary),
         ),
     )
     return str(run.id)

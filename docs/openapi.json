@@ -1387,6 +1387,50 @@
         ]
       }
     },
+    "/v1/admin/collectors": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "The workers that collect, and whether each is there",
+        "description": "blt's own worker and every remote collector: each work queue in\nblt's pool, and each collector a source names, with when it last\nasked for work and the sources it reaches.",
+        "operationId": "list_collectors_v1_admin_collectors_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CollectorOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Collectors V1 Admin Collectors Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/admin/deployments": {
       "get": {
         "tags": [
@@ -1437,7 +1481,7 @@
           "admin"
         ],
         "summary": "Run a deployment now",
-        "description": "Starts a run now, with these parameters over its defaults.",
+        "description": "Starts a run now, with these parameters over its defaults. A\nrun for one source (a `commcell`, `account` or `primary`\nparameter) goes to the collector that reaches that source.",
         "operationId": "run_now_v1_admin_deployments__deployment_id__runs_post",
         "security": [
           {
@@ -4833,6 +4877,18 @@
             "type": "string",
             "title": "Url",
             "description": "The primary, as for adding one."
+          },
+          "collector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collector",
+            "description": "Fetch it from this remote collector; none: blt's own worker."
           }
         },
         "type": "object",
@@ -4846,6 +4902,61 @@
             "url": "nbu01.example.com"
           }
         ]
+      },
+      "CollectorOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name: its work queue's (`default` for blt's own)."
+          },
+          "own": {
+            "type": "boolean",
+            "title": "Own",
+            "description": "blt's own worker, in the blt pod."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "online",
+              "offline",
+              "paused",
+              "never seen"
+            ],
+            "title": "Status",
+            "description": "online: it asked for work in the last minute or so. offline: not lately (a remote one's tunnel may be down). never seen: sources name it, but it has never asked for work."
+          },
+          "last_polled": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Polled",
+            "description": "When it last asked."
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources",
+            "description": "The sources it reaches, as type/name."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "own",
+          "status",
+          "sources"
+        ],
+        "title": "CollectorOut",
+        "description": "A worker that runs blt's flows: blt's own, or a remote collector."
       },
       "CommonJobDetail": {
         "properties": {
@@ -7512,6 +7623,21 @@
             "title": "Collect",
             "description": "Collected by the scheduled flows.",
             "default": false
+          },
+          "collector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collector",
+            "description": "The remote collector that reaches it (docs/remote-collector.md); none: blt's own worker.",
+            "examples": [
+              "tools01"
+            ]
           }
         },
         "type": "object",
@@ -10391,6 +10517,18 @@
             "title": "Collect",
             "description": "Collected by the scheduled flows."
           },
+          "collector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collector",
+            "description": "The remote collector that reaches it; none: blt's own worker."
+          },
           "address": {
             "anyOf": [
               {
@@ -10475,6 +10613,18 @@
             "title": "Collect",
             "description": "Collected by the scheduled flows."
           },
+          "collector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collector",
+            "description": "The remote collector that reaches it; an empty string: blt's own worker."
+          },
           "url": {
             "anyOf": [
               {
@@ -10528,7 +10678,7 @@
         },
         "type": "object",
         "title": "SourceBlockPatch",
-        "description": "What to change; anything left out stays as it is. Only `collect`\napplies to every source; the rest are NetBackup's.",
+        "description": "What to change; anything left out stays as it is. `collect` and\n`collector` apply to every source; the rest are NetBackup's.",
         "examples": [
           {
             "collect": true

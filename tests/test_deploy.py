@@ -250,3 +250,124 @@ def test_the_parents_start_deployments_that_exist() -> None:
     from blt.flows import netbackup
 
     assert {netbackup.JOBS_ONE, netbackup.STORAGE_ONE} <= by_flow
+
+
+# --- remote collectors (deploy/collector.sh, docs/remote-collector.md) ---
+
+FAKE = """#!/usr/bin/env bash
+# Records each call - its arguments, one per line, and what came on its
+# input - and answers the few questions collector.sh asks.
+{{ printf '%s\\n' "$@"; echo "--stdin--"; [[ -t 0 ]] || cat; echo "--end--"; }} >> {log}
+case "$*" in
+    *"image inspect"*) echo {image_id} ;;
+esac
+"""
+
+
+def fake(tmp_path: Path, name: str, image_id: str) -> Path:
+    path = tmp_path / name
+    path.write_text(FAKE.format(log=tmp_path / f"{name}.log", image_id=image_id))
+    path.chmod(0o755)
+    return path
+
+
+def collector(tmp_path: Path, *args: str, remote_image: str = "sha-old") -> str:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(ENV + "BLT_PREFECT_BIND_ADDRESS=127.0.0.1\n")
+    result = subprocess.run(
+        ["bash", "deploy/collector.sh", *args],
+        cwd=ROOT,
+        env={
+            **clean_environment(),
+            "BLT_ENV_FILE": str(env_file),
+            "BLT_COLLECTOR_SSH": str(fake(tmp_path, "ssh", remote_image)),
+            "BLT_COLLECTOR_PODMAN": str(fake(tmp_path, "podman", "sha-new")),
+        },
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+def calls(tmp_path: Path, name: str) -> list[tuple[list[str], str]]:
+    log = (tmp_path / f"{name}.log").read_text(errors="replace")  # the image is gzip
+    found = []
+    for chunk in log.split("--end--\n"):
+        if chunk:
+            args, _, stdin = chunk.partition("--stdin--\n")
+            found.append((args.splitlines(), stdin))
+    return found
+
+
+def test_a_collector_gets_its_settings_on_its_input_never_on_a_command_line(
+    tmp_path: Path,
+) -> None:
+    collector(tmp_path, "push", "tools-box", "tools01")
+    ssh = calls(tmp_path, "ssh")
+    commands = [args[-1] for args, _ in ssh]
+    assert all(args[0] == "tools-box" for args, _ in ssh)
+    # The image went over (it differed), then the settings, then the run.
+    assert commands[1] == "gunzip | podman load"
+    assert "collector-tools01.env" in commands[2] and commands[2].startswith("umask 077")
+    assert "--name blt-collector-tools01 --network host" in commands[3]
+    assert "--env-file ~/.config/blt/collector-tools01.env" in commands[3]
+    settings = dict(line.split("=", 1) for line in ssh[2][1].splitlines())
+    assert settings == {
+        "BLT_COLLECTOR": "tools01",
+        "PREFECT_API_URL": "http://127.0.0.1:14200/api",
+        "PREFECT_API_AUTH_STRING": "admin:ui-secret",
+        "BLT_API_URL": "http://127.0.0.1:18088",
+        "BLT_API_KEY": "key-1",
+        "BLT_MAX_PARALLEL": "4",
+    }
+    every_argument = "\n".join(
+        a for name in ("ssh", "podman") for c, _ in calls(tmp_path, name) for a in c
+    )
+    assert "ui-secret" not in every_argument and "key-1" not in every_argument
+
+
+def test_an_image_the_collector_has_is_not_sent_again(tmp_path: Path) -> None:
+    collector(tmp_path, "push", "tools-box", "tools01", remote_image="sha-new")
+    assert not any("podman load" in args[-1] for args, _ in calls(tmp_path, "ssh"))
+
+
+def test_the_tunnel_brings_prefect_and_the_api_to_the_collector_s_loopback(
+    tmp_path: Path,
+) -> None:
+    collector(tmp_path, "tunnel", "tools-box")
+    ((args, _),) = calls(tmp_path, "ssh")
+    assert args[0] == "-N" and args[-1] == "tools-box"
+    assert "ExitOnForwardFailure=yes" in args
+    forwards = [args[i + 1] for i, a in enumerate(args) if a == "-R"]
+    assert forwards == ["127.0.0.1:14200:127.0.0.1:4200", "127.0.0.1:18088:127.0.0.1:8188"]
+
+    config = collector(tmp_path, "ssh-config")
+    assert "RemoteForward 127.0.0.1:14200 127.0.0.1:4200" in config
+    assert "RemoteForward 127.0.0.1:18088 127.0.0.1:8188" in config
+
+
+@pytest.mark.parametrize("name", ["default", "Tools01", "-x", "a b"])
+def test_a_bad_collector_name_is_refused(tmp_path: Path, name: str) -> None:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(ENV)
+    result = subprocess.run(
+        ["bash", "deploy/collector.sh", "push", "tools-box", name],
+        cwd=ROOT,
+        env={**clean_environment(), "BLT_ENV_FILE": str(env_file), "BLT_COLLECTOR_SSH": "false"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1 and "collector's name" in result.stderr
+
+
+def test_blt_s_own_worker_leaves_remote_collectors_runs_alone() -> None:
+    start = (ROOT / "deploy/prefect/worker/start.sh").read_text()
+    own, remote = (
+        start.rsplit("exec prefect worker start", 1)[1],
+        start.split("exec prefect worker start", 1)[1],
+    )
+    assert "--work-queue default" in own
+    assert '--work-queue "$COLLECTOR"' in remote
+    assert "BLT_COLLECTOR" in start

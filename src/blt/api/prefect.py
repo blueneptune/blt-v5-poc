@@ -181,14 +181,34 @@ class PrefectApi:
         self._call("POST", f"/deployments/{deployment_id}/{action}")
 
     def create_flow_run(
-        self, deployment_id: uuid.UUID, parameters: dict[str, Any], name: str | None = None
+        self,
+        deployment_id: uuid.UUID,
+        parameters: dict[str, Any],
+        name: str | None = None,
+        work_queue_name: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"parameters": parameters}
         if name:
             body["name"] = name
+        if work_queue_name:
+            # Prefect makes the queue if the pool has none by that name.
+            body["work_queue_name"] = work_queue_name
         return self._call(  # type: ignore[no-any-return]
             "POST", f"/deployments/{deployment_id}/create_flow_run", body
         )
+
+    # --- work queues ------------------------------------------------------
+
+    def work_queues(self, pool: str) -> list[dict[str, Any]]:
+        """The pool's queues, with when a worker last asked each for work."""
+        try:
+            return self._call(  # type: ignore[no-any-return]
+                "POST", f"/work_pools/{pool}/queues/filter", {"limit": PAGE}
+            )
+        except PrefectError as error:
+            if error.status == 404:
+                return []  # no worker has started yet to make the pool
+            raise
 
     # --- flow runs --------------------------------------------------------
 

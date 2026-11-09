@@ -50,6 +50,8 @@ class FakePrefect:
         self.runs: dict[str, dict[str, Any]] = {}
         self.logs: dict[str, list[dict[str, Any]]] = {}
         self.calls: list[tuple[str, str, Any]] = []
+        # The blt pool's work queues; None: the pool does not exist yet.
+        self.queues: list[dict[str, Any]] | None = []
         self.add_deployment("blt-collect-jobs", "hourly", cron="7 * * * *")
         self.add_deployment("blt-netbackup-check", "by-hand", parameters={})
         self.add_deployment("blt-netbackup-fetch-ca", "by-hand", parameters={})
@@ -179,9 +181,14 @@ class FakePrefect:
                 run = self.runs[run_id]
                 run["parameters"] = {**deployment["parameters"], **body["parameters"]}
                 run["auto_scheduled"] = False
+                run["work_queue_name"] = body.get("work_queue_name") or "default"
                 if body.get("name"):
                     run["name"] = body["name"]
                 return httpx.Response(201, json=run)
+        if path == "/work_pools/blt/queues/filter":
+            if self.queues is None:
+                return httpx.Response(404, json={"detail": "Work pool not found"})
+            return httpx.Response(200, json=self.queues)
         if path == "/flows/filter":
             ids = body["flows"]["id"]["any_"]
             names = {i: n for n, i in self.flows.items()}
@@ -375,6 +382,102 @@ def test_without_the_worker_s_deployment_it_says_why(
     response = http.post("/v1/admin/netbackup/ca-certificate", json={"url": "nbu01"})
     assert response.status_code == 409
     assert "worker registers it" in response.json()["detail"]
+
+
+# --- remote collectors (docs/remote-collector.md) ------------------------
+
+
+def test_any_source_can_name_its_collector(http: TestClient, prefect: FakePrefect) -> None:
+    block_id = prefect.add_block("blt-commvault-commcell", "cv", {"base_url": "https://cv/api"})
+    assert http.get("/v1/admin/sources").json()[0]["collector"] is None
+
+    moved = http.patch("/v1/admin/sources/commvault/cv", json={"collector": "tools01"})
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["collector"] == "tools01"
+    assert prefect.documents[block_id]["data"]["collector"] == "tools01"
+
+    # Leaving it out leaves it; an empty string - or "default" - is blt's own.
+    http.patch("/v1/admin/sources/commvault/cv", json={"collect": False})
+    assert prefect.documents[block_id]["data"]["collector"] == "tools01"
+    back = http.patch("/v1/admin/sources/commvault/cv", json={"collector": ""}).json()
+    assert back["collector"] is None and prefect.documents[block_id]["data"]["collector"] is None
+    http.patch("/v1/admin/sources/commvault/cv", json={"collector": "default"})
+    assert prefect.documents[block_id]["data"]["collector"] is None
+
+    bad = http.patch("/v1/admin/sources/commvault/cv", json={"collector": "Tools 01"})
+    assert bad.status_code == 422
+
+
+def test_a_primary_added_with_a_collector_is_checked_by_it(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    added = http.post(
+        "/v1/admin/sources/netbackup",
+        json={"name": "nbu-prod", "url": "nbu-prod", "api_key": "k", "collector": "tools01"},
+    ).json()
+    assert added["collector"] == "tools01"
+    check = http.post("/v1/admin/sources/netbackup/nbu-prod/check").json()
+    assert prefect.runs[check["id"]]["work_queue_name"] == "tools01"
+
+    prefect.add_block("blt-netbackup-primary", "nbu-lab", {"url": "https://lab:1556/netbackup"})
+    check = http.post("/v1/admin/sources/netbackup/nbu-lab/check").json()
+    assert prefect.runs[check["id"]]["work_queue_name"] == "default"
+
+
+def test_a_ca_certificate_is_fetched_by_the_collector_asked(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    run = http.post(
+        "/v1/admin/netbackup/ca-certificate", json={"url": "nbu-prod", "collector": "tools01"}
+    ).json()
+    assert prefect.runs[run["id"]]["work_queue_name"] == "tools01"
+
+
+def test_run_now_for_one_source_goes_to_its_collector(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    prefect.flows["blt-netbackup-jobs-primary"] = _id()
+    per_primary = prefect.add_deployment("blt-netbackup-jobs-primary", "per-primary", parameters={})
+    prefect.add_block(
+        "blt-netbackup-primary", "nbu-prod", {"url": "https://p:1556/netbackup", "collector": "t1"}
+    )
+    run = http.post(
+        f"/v1/admin/deployments/{per_primary}/runs", json={"parameters": {"primary": "nbu-prod"}}
+    ).json()
+    assert prefect.runs[run["id"]]["work_queue_name"] == "t1"
+
+    # A parent (all sources at once) runs on blt's own worker, and fans
+    # out from there.
+    run = http.post(f"/v1/admin/deployments/{_hourly(prefect)}/runs", json={}).json()
+    assert prefect.runs[run["id"]]["work_queue_name"] == "default"
+
+
+def test_collectors_are_listed_with_whether_each_is_there(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    prefect.add_block("blt-commvault-commcell", "cv-lab", {"base_url": "https://cv/api"})
+    prefect.add_block("blt-netbackup-primary", "nbu-a", {"url": "u", "collector": "tools01"})
+    prefect.add_block("blt-rubrik-account", "rsc", {"access_token_uri": "u", "collector": "dmz"})
+    prefect.add_block("blt-netbackup-primary", "nbu-b", {"url": "u", "collector": "later"})
+    prefect.queues = [
+        {"name": "default", "status": "READY", "last_polled": "2026-11-09T07:00:00Z"},
+        {"name": "tools01", "status": "NOT_READY", "last_polled": "2026-11-09T05:00:00Z"},
+        {"name": "dmz", "status": "READY", "last_polled": "2026-11-09T07:00:01Z"},
+        {"name": "old", "status": "PAUSED", "is_paused": True, "last_polled": None},
+    ]
+    found = {c["name"]: c for c in http.get("/v1/admin/collectors").json()}
+    assert list(found) == ["default", "dmz", "later", "old", "tools01"]
+    assert found["default"]["own"] is True
+    assert found["default"]["sources"] == ["commvault/cv-lab"]
+    assert (found["default"]["status"], found["dmz"]["status"]) == ("online", "online")
+    assert found["tools01"]["status"] == "offline"
+    assert found["tools01"]["sources"] == ["netbackup/nbu-a"]
+    assert found["later"]["status"] == "never seen"  # named, never started
+    assert found["old"]["status"] == "never seen" and found["old"]["sources"] == []
+
+    prefect.queues = None  # no worker has started yet
+    only = http.get("/v1/admin/collectors").json()
+    assert {c["name"]: c["status"] for c in only}["default"] == "never seen"
 
 
 @pytest.mark.parametrize(

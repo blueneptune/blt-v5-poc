@@ -33,25 +33,32 @@ cluster's secret. A new password, or a new secret, signs everyone out.
 
 Every CommCell, Rubrik account and NetBackup primary - Prefect's blocks -
 with whether each secret is set, never its value. Any of them can be
-switched on and off for the scheduled flows.
+switched on and off for the scheduled flows, and given a **collector**:
+the worker that reaches it, blt's own or a remote one in the source's own
+network ([remote-collector.md](remote-collector.md)). Above the table,
+**Collectors** lists each worker, with whether it is online and how
+many sources it reaches.
 
 **A NetBackup primary** is added here end to end:
 
-1. **Name and address.** A host name is enough
+1. **Collected by** (only offered once a remote collector exists): the
+   collector that can reach it. Its CA is fetched, and it is checked,
+   from there.
+2. **Name and address.** A host name is enough
    (`https://<host>:1556/netbackup` is made from it).
-2. **Fetch its CA** (optional): a worker asks the primary for its CA
+3. **Fetch its CA** (optional): a worker asks the primary for its CA
    certificate - NetBackup gives it without signing in - and the page
    shows each one with its SHA-256 fingerprint and whether it verifies
    the primary at that address. Compare the fingerprint with the
    primary's own (`nbcertcmd -displayCACertDetail` on it) before **use
    it**. Or paste the PEM yourself.
-3. **API key** - for a read-only service account (below), never shown
+4. **API key** - for a read-only service account (below), never shown
    again once saved.
-4. **Save and check.** The block is saved with collection **off**, and a
+5. **Save and check.** The block is saved with collection **off**, and a
    check runs on a worker: sign-in and server version, storage, SLP images,
    jobs - one OK/FAIL line each, with why (a refused key, a permission the
    key's role lacks, an endpoint this NetBackup version does not have).
-5. **Turn on** collection once storage passes.
+6. **Turn on** collection once storage passes.
 
 Its page also takes a new key, address or CA certificate, and removes it
 (typing its name to confirm). CommCells and Rubrik accounts still get
@@ -103,7 +110,10 @@ browser --(signed-in session)--> blt UI (server side) --(X-API-Key)--> blt API /
 - Nothing reaches a backup product from the API: checks and CA fetches
   are flow runs (`blt-netbackup-check/by-hand`,
   `blt-netbackup-fetch-ca/by-hand`), so they work from whichever zone the
-  worker is in ([vision.md](vision.md), network zones).
+  worker is in ([vision.md](vision.md), network zones) - and each goes to
+  the source's own collector, as does a run-now for one source.
+- `GET /v1/admin/collectors` reads the work queues of the `blt` pool:
+  a worker that asked for work in the last minute or so is online.
 - A secret goes in once: the API passes it to Prefect and answers only
   with which secrets are set.
 - Prefect's server runs with `PREFECT_SERVER_UI_ENABLED=false` (set in its
@@ -113,6 +123,5 @@ browser --(signed-in session)--> blt UI (server side) --(X-API-Key)--> blt API /
 ## Not yet
 
 - Adding CommCells (with their token handover) and Rubrik accounts here.
-- Work pools and workers: whether a worker is connected.
 - Users and roles: one admin account until Zitadel.
 - The other UIs (Harbor, Rancher, Longhorn).

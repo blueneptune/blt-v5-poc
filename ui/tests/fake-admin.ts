@@ -10,6 +10,7 @@ type Source = components['schemas']['SourceBlockOut'];
 type Deployment = components['schemas']['DeploymentOut'];
 type Run = components['schemas']['FlowRunOut'];
 type Line = components['schemas']['LogLine'];
+type Collector = components['schemas']['CollectorOut'];
 
 let counter = 0;
 const id = (kind: number) => `00000000-0000-4000-9${kind}00-${(++counter).toString(16).padStart(12, '0')}`;
@@ -43,6 +44,24 @@ const sources: Source[] = [
 		updated: iso(600)
 	}
 ];
+
+// blt's own worker, and remote collectors for two regions: one there,
+// one whose tunnel is down.
+const queues: { name: string; status: Collector['status']; last_polled: string | null }[] = [
+	{ name: 'default', status: 'online', last_polled: iso(0) },
+	{ name: 'omaha', status: 'online', last_polled: iso(0) },
+	{ name: 'uk', status: 'offline', last_polled: iso(180) }
+];
+
+function collectors(): Collector[] {
+	return queues.map((q) => ({
+		...q,
+		own: q.name === 'default',
+		sources: sources
+			.filter((s) => (s.collector ?? 'default') === q.name)
+			.map((s) => `${s.type}/${s.name}`)
+	}));
+}
 
 const schema = (properties: Record<string, unknown>, required: string[] = []) => ({ properties, required });
 
@@ -141,6 +160,7 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 	const rest = path.slice('/v1/admin'.length);
 
 	if (rest === '/sources' && method === 'GET') return [200, sources];
+	if (rest === '/collectors' && method === 'GET') return [200, collectors()];
 	if (rest === '/sources/netbackup' && method === 'POST') {
 		if (!/^[a-z0-9][a-z0-9-]*$/.test(body.name)) return [422, { detail: [{ loc: ['body', 'name'], msg: 'Value error, Lower case letters, digits and dashes.' }] }];
 		if (sources.some((s) => s.type === 'netbackup' && s.name === body.name)) return [409, { detail: `A NetBackup source '${body.name}' exists` }];
@@ -153,6 +173,7 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 			address: `https://${host}:1556/netbackup`,
 			verify_tls: true,
 			has_ca_certificate: !!body.ca_certificate,
+			collector: body.collector ?? null,
 			secrets_set: body.api_key ? ['api_key'] : [],
 			updated: new Date().toISOString()
 		};
@@ -166,6 +187,7 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 		if (source[3]) return [201, startCheck(found.name)];
 		if (method === 'PATCH') {
 			if (body.collect !== undefined && body.collect !== null) found.collect = body.collect;
+			if (body.collector !== undefined && body.collector !== null) found.collector = body.collector || null;
 			if (body.ca_certificate === '') found.has_ca_certificate = false;
 			else if (body.ca_certificate) found.has_ca_certificate = true;
 			found.updated = new Date().toISOString();
