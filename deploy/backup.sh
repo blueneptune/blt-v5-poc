@@ -84,8 +84,11 @@ EOF
     echo "Logs: journalctl --user -u $UNIT.service"
 }
 
-# Dump one database to a .partial file, check pg_restore can read it, then
-# give it its name - so a dump that failed half way never counts as one.
+# Dump one database to a .partial file, check pg_restore can read all of
+# it, then give it its name - so a dump that failed half way never counts
+# as one. The check reads the whole dump (-f /dev/null), not only its
+# table of contents (--list): --list stops reading early, which also
+# breaks podman exec's input stream on some podman versions (WSL's).
 dump() {
     local db="$1" stamp="$2"
     local target="$BACKUP_DIR/${db}-nightly-${stamp}.dump"
@@ -94,7 +97,7 @@ dump() {
         echo "pg_dump of ${db} failed." >&2
         return 1
     fi
-    if ! podman exec -i "$CONTAINER" pg_restore --list < "$target.partial" > /dev/null; then
+    if ! podman exec -i "$CONTAINER" pg_restore -f /dev/null < "$target.partial" > /dev/null; then
         rm -f "$target.partial"
         echo "The dump of ${db} does not read back; not kept." >&2
         return 1

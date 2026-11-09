@@ -31,7 +31,7 @@ case "$*" in
         db="${@: -1}"
         [[ "$db" == "${FAKE_DUMP_FAILS:-}" ]] && exit 1
         echo "dump of $db" ;;
-    *"pg_restore --list"*) cat > /dev/null ;;
+    *"pg_restore -f /dev/null"*) cat > /dev/null ;;
     *) exit 99 ;;
 esac
 """
@@ -82,7 +82,7 @@ def test_both_databases_are_dumped_privately(tmp_path: Path) -> None:
     assert stat.S_IMODE(blt.stat().st_mode) == 0o600
     log = (tmp_path / "podman.log").read_text()
     assert "exec blt-postgres pg_dump -Fc -U blt -d blt" in log
-    assert log.count("pg_restore --list") == 2
+    assert log.count("pg_restore -f /dev/null") == 2
 
 
 def test_with_prefect_off_only_blt_is_dumped(tmp_path: Path) -> None:
