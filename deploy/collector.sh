@@ -96,7 +96,10 @@ push() {
     fi
     collector_env "$name" | "$SSH" "$host" \
         "umask 077 && mkdir -p ~/.config/blt && cat > ~/.config/blt/collector-${name}.env"
-    "$SSH" "$host" "podman run -d --replace --name blt-collector-${name} --network host \
+    # Remove then run, not --replace: podman 6 refuses --replace when there
+    # is nothing to replace.
+    "$SSH" "$host" "podman rm -f --ignore blt-collector-${name} >/dev/null; \
+podman run -d --name blt-collector-${name} --network host \
 --restart unless-stopped --env-file ~/.config/blt/collector-${name}.env ${IMAGE}" >/dev/null
     echo "Collector ${name} is running on ${host}."
     echo "It waits for the tunnel: deploy/collector.sh tunnel ${host}"

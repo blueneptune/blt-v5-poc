@@ -7,6 +7,8 @@
 # deploy/kube/up.sh starts the same pod from a Kubernetes manifest; this
 # script stays until that has proven itself.
 set -euo pipefail
+# Each container is removed and started afresh, not `podman run --replace`:
+# podman 6 refuses --replace when there is no container to replace.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -38,7 +40,8 @@ elif [[ "$UI_ENABLED" == true && "$HOST_NETWORK" != true ]] \
     exit 1
 fi
 
-podman run -d --replace --pod blt --name blt-postgres \
+podman rm -f --ignore blt-postgres >/dev/null
+podman run -d --pod blt --name blt-postgres \
     -e POSTGRES_USER=blt -e POSTGRES_DB=blt -e POSTGRES_PASSWORD \
     -e "PGPORT=${PG_LISTEN_PORT}" \
     -v blt-pgdata:/var/lib/postgresql/data \
@@ -47,7 +50,8 @@ podman run -d --replace --pod blt --name blt-postgres \
 
 # Containers in a pod share localhost, so the API reaches Postgres there.
 # BLT_PREFECT_AUTH is Prefect's basic auth, for the Administration pages.
-podman run -d --replace --pod blt --name blt-api \
+podman rm -f --ignore blt-api >/dev/null
+podman run -d --pod blt --name blt-api \
     -e BLT_API_KEY \
     -e "BLT_PREFECT_API_URL=${API_PREFECT_URL}" -e "BLT_PREFECT_AUTH=${PREFECT_AUTH:-}" \
     -e "BLT_LISTEN_HOST=${API_LISTEN_HOST}" -e "BLT_LISTEN_PORT=${API_LISTEN_PORT}" \
@@ -58,7 +62,8 @@ if [[ "$PREFECT_ENABLED" == true ]]; then
     # The server gives itself a database (prefect) on the same Postgres,
     # then serves its API - and no UI (PREFECT_SERVER_UI_ENABLED=false in
     # its image): blt's UI is where sources, schedules and runs are managed.
-    podman run -d --replace --pod blt --name blt-prefect-server \
+    podman rm -f --ignore blt-prefect-server >/dev/null
+    podman run -d --pod blt --name blt-prefect-server \
         -e "PG_HOST=127.0.0.1" -e "PG_PORT=${PG_LISTEN_PORT}" \
         -e POSTGRES_PASSWORD -e PREFECT_DB_PASSWORD \
         -e "PREFECT_LISTEN_HOST=${PREFECT_LISTEN_HOST}" \
@@ -66,7 +71,8 @@ if [[ "$PREFECT_ENABLED" == true ]]; then
         -e "PREFECT_SERVER_API_AUTH_STRING=${PREFECT_AUTH}" \
         -e "PREFECT_SERVER_UI_ENABLED=false" \
         localhost/blt-prefect-server
-    podman run -d --replace --pod blt --name blt-prefect-worker \
+    podman rm -f --ignore blt-prefect-worker >/dev/null
+    podman run -d --pod blt --name blt-prefect-worker \
         -e "PREFECT_API_URL=http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}/api" \
         -e "PREFECT_API_AUTH_STRING=${PREFECT_AUTH}" \
         -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
@@ -80,7 +86,8 @@ fi
 if [[ "$UI_ENABLED" == true ]]; then
     # It calls the API inside the pod, from its own server side: the key
     # never reaches a browser.
-    podman run -d --replace --pod blt --name blt-ui \
+    podman rm -f --ignore blt-ui >/dev/null
+    podman run -d --pod blt --name blt-ui \
         -e "HOST=${UI_LISTEN_HOST}" -e "PORT=${UI_LISTEN_PORT}" -e "ORIGIN=${UI_ORIGIN}" \
         -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
         -e BLT_API_KEY \
