@@ -121,6 +121,15 @@ test('a NetBackup primary: fetch its CA, save, and watch the check', async ({ pa
 	await expect(page.getByText('Collecting:')).toContainText('on');
 });
 
+test('a NetBackup primary that answers only on 443 is found there', async ({ page }) => {
+	await page.goto('/admin/sources/netbackup/new');
+	await page.getByLabel('Address').fill('nbu443.example.com');
+	await page.getByRole('button', { name: 'Fetch its CA' }).click();
+	await expect(page.getByText('Port 1556 did not answer, 443 did')).toBeVisible();
+	await expect(page.getByLabel('Address')).toHaveValue('https://nbu443.example.com:443/netbackup');
+	await expect(page.getByText(`SHA-256 ${FINGERPRINT}`).first()).toBeVisible();
+});
+
 test('a NetBackup primary with a bad name is refused with the reason', async ({ page }) => {
 	await page.goto('/admin/sources/netbackup/new');
 	await page.getByLabel('Name in blt').evaluate((input: HTMLInputElement) => input.removeAttribute('pattern'));
@@ -151,6 +160,25 @@ test('schedules: read as words, paused and resumed', async ({ page }) => {
 	await expect(row).toContainText('paused');
 	await row.getByRole('button', { name: 'Resume' }).click();
 	await expect(row).not.toContainText('paused');
+});
+
+test('stuck runs: shown, and cleared only once confirmed', async ({ page }) => {
+	await page.goto('/admin/schedules');
+	const panel = page.getByRole('region', { name: 'Run health' });
+	await expect(panel).toContainText('Runs are stuck');
+	await expect(panel).toContainText('4 of 4 collection slots are taken, but only 0 runs are collecting');
+	await expect(panel).toContainText('3 runs have been running for over 2 h');
+	await expect(panel.getByRole('row', { name: /netbackup-jobs-nbu03/ })).toContainText('7 h');
+
+	await panel.getByRole('button', { name: 'Clear stuck runs…' }).click();
+	await expect(panel).toContainText('This cancels the 3 runs above');
+	await panel.getByRole('button', { name: 'Keep them' }).click();
+	await expect(panel).toContainText('Runs are stuck');
+
+	await panel.getByRole('button', { name: 'Clear stuck runs…' }).click();
+	await panel.getByRole('button', { name: 'Yes, clear them' }).click();
+	await expect(panel.getByRole('status')).toHaveText('Cancelled 3 runs; slots taken 4 → 0.');
+	await expect(panel).toContainText('Runs are getting through: 0 of 4 collection slots taken, 0 collecting.');
 });
 
 test('run now: asks for what it needs, then shows the run', async ({ page }) => {

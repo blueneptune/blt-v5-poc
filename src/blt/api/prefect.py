@@ -269,6 +269,32 @@ class PrefectApi:
                 break
         return found
 
+    def force_cancel(self, run_id: uuid.UUID, message: str) -> None:
+        """Cancelled at once, without asking a worker to stop it: for a
+        run no worker is running any more."""
+        self._call(
+            "POST",
+            f"/flow_runs/{run_id}/set_state",
+            {
+                "state": {"type": "CANCELLED", "name": "Cancelled", "message": message},
+                "force": True,
+            },
+        )
+
+    # --- concurrency limits -----------------------------------------------
+
+    def concurrency_limit(self, name: str) -> dict[str, Any] | None:
+        """A global concurrency limit: its `limit` and `active_slots`."""
+        try:
+            return self._call("GET", f"/v2/concurrency_limits/{name}")  # type: ignore[no-any-return]
+        except PrefectError as error:
+            if error.status == 404:
+                return None
+            raise
+
+    def set_active_slots(self, name: str, active: int) -> None:
+        self._call("PATCH", f"/v2/concurrency_limits/{name}", {"active_slots": active})
+
     def cancel(self, run_id: uuid.UUID) -> dict[str, Any]:
         return self._call(  # type: ignore[no-any-return]
             "POST",

@@ -284,3 +284,17 @@ current work.
     - keeping the tunnel up without a terminal (autossh, or a systemd
       user unit in WSL);
     - an API key that may only collect, for collectors (with Zitadel).
+
+26. **Stuck runs - done 2026-11-09** (docs/admin.md, "Stuck runs"). On
+    the work desktop every run sat in RUNNING after an upgrade: the
+    Prefect server forgot who held the collection slots when it
+    restarted. Now its leases are on disk (`blt-prefect-home`), silent
+    runs are marked Crashed (`blt-crash-silent-runs`), and Schedules shows
+    run health with a confirmed **Clear stuck runs**
+    (`deploy/maintenance.sh` without the UI).
+
+27. **Jobs page** (asked for 2026-11-09):
+    - resizable columns, and a choice of columns - including fields blt
+      collects but does not show yet (list them for the user to pick);
+    - in a job's detail, "the product's own record" named for the source
+      it came from: the CommCell, the primary server, ...

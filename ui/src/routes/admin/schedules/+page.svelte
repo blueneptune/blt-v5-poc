@@ -3,6 +3,7 @@
 	import { Play } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import RunBadge from '$lib/components/RunBadge.svelte';
+	import RunHealth from '$lib/components/RunHealth.svelte';
 	import { cronText, parameterFields } from '$lib/admin';
 	import { ago, when } from '$lib/format';
 
@@ -11,6 +12,7 @@
 
 	const scheduled = $derived(data.deployments.filter((d) => d.schedules.length));
 	const byHand = $derived(data.deployments.filter((d) => !d.schedules.length));
+	const clearing = $derived(form && 'cleared' in form ? form : null);
 
 	function show(value: unknown): string {
 		if (value === null || value === undefined) return '';
@@ -29,6 +31,14 @@
 
 {#if data.problem}
 	<p class="text-destructive mt-6 text-sm" role="alert">Could not read the schedules: {data.problem}</p>
+{/if}
+
+{#if data.health}
+	<RunHealth
+		health={data.health}
+		cleared={clearing?.cleared ?? null}
+		message={clearing && 'message' in clearing ? (clearing.message as string) : null}
+	/>
 {/if}
 
 {#snippet table(rows: typeof data.deployments, heading: string)}

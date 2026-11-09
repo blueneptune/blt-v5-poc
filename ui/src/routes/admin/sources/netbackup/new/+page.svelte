@@ -3,13 +3,24 @@
 	import { Button } from '$lib/components/ui/button';
 	import RunLog from '$lib/components/RunLog.svelte';
 	import CollectorSelect from '$lib/components/CollectorSelect.svelte';
-	import { certificatesInLog, type FoundCertificate } from '$lib/admin';
+	import { answeredAtInLog, certificatesInLog, type FoundCertificate } from '$lib/admin';
 
 	let { data, form } = $props();
 
 	let ca = $state('');
 	let found = $state<FoundCertificate[]>([]);
 	let chosen = $state<string | null>(null);
+	let url = $state('');
+	let movedFrom = $state<string | null>(null);
+
+	function fetched(lines: { message: string }[]) {
+		found = certificatesInLog(lines);
+		const answered = answeredAtInLog(lines);
+		if (answered && answered !== url) {
+			movedFrom = url;
+			url = answered;
+		}
+	}
 
 	const input = 'bg-background mt-1 h-9 w-full rounded-md border px-3 text-sm';
 </script>
@@ -53,14 +64,20 @@
 	<div>
 		<label class="text-sm font-medium" for="url">Address</label>
 		<div class="flex gap-2">
-			<input id="url" name="url" required placeholder="nbu01.example.com" class={input} />
+			<input id="url" name="url" required bind:value={url} placeholder="nbu01.example.com" class={input} />
 			<Button type="submit" variant="outline" formaction="?/fetchCa" formnovalidate class="mt-1">
 				Fetch its CA
 			</Button>
 		</div>
 		<p class="text-muted-foreground mt-1 text-xs">
-			A host name is enough: blt adds https:// and :1556/netbackup.
+			A host name is enough: blt adds https:// and :1556/netbackup - or 443, if that is where its API
+			answers (some NetBackup 10.5 primaries).
 		</p>
+		{#if movedFrom !== null}
+			<p class="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300" role="status">
+				Port 1556 did not answer, 443 did: the address is now {url}.
+			</p>
+		{/if}
 	</div>
 
 	{#if form && 'caRun' in form && form.caRun}
@@ -68,7 +85,7 @@
 			<RunLog
 				runId={form.caRun}
 				height="max-h-48"
-				onupdate={(_, lines) => (found = certificatesInLog(lines))}
+				onupdate={(_, lines) => fetched(lines)}
 			/>
 			{#each found as certificate, i (i)}
 				<div class="bg-card rounded-xl border p-3 text-sm">

@@ -12,7 +12,14 @@ from netbackup_sdk import NetBackupClient
 from sdk_primer import AuthenticationError, ClientError, NotFoundError
 
 from blt.netbackup import check as check_module
-from blt.netbackup.check import check_primary, fetch_ca_certificates, fingerprint
+from blt.netbackup.check import (
+    answers,
+    check_primary,
+    fallback_url,
+    fetch_ca_answering,
+    fetch_ca_certificates,
+    fingerprint,
+)
 
 # Shaped like a certificate; the fingerprint only needs its base64 to decode.
 CERT = """-----BEGIN CERTIFICATE-----
@@ -138,3 +145,62 @@ def test_the_api_starts_these_flows_by_their_real_names() -> None:
         assert flow.name == flow_name
         entry = f"blt.flows.netbackup:{flow.fn.__name__}"
         assert [d["name"] for d in deployments if d["entrypoint"] == entry] == [deployment]
+
+
+@pytest.mark.parametrize(
+    ("url", "fallback"),
+    [
+        ("https://nbu01:1556/netbackup", "https://nbu01:443/netbackup"),
+        ("https://[fd00::5]:1556/netbackup", "https://[fd00::5]:443/netbackup"),
+        ("https://nbu01:443/netbackup", None),  # already there
+        ("https://nbu01:8443/netbackup", None),  # a port chosen on purpose
+    ],
+)
+def test_only_the_default_port_falls_back_to_443(url: str, fallback: str | None) -> None:
+    assert fallback_url(url) == fallback
+
+
+def _answer_on(monkeypatch: pytest.MonkeyPatch, ports: set[int]) -> list[str]:
+    asked: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        # httpx leaves an https address's default port, 443, out of its URL.
+        if (request.url.port or 443) not in ports:
+            raise httpx.ConnectTimeout("timed out", request=request)
+        return httpx.Response(200, json={"webRootCert": [CERT]})
+
+    real = httpx.Client
+
+    def client(**kwargs: Any) -> httpx.Client:
+        return real(transport=httpx.MockTransport(answer), timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(check_module.httpx, "Client", client)
+    return asked
+
+
+def test_a_primary_that_answers_only_on_443_is_found_there(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asked = _answer_on(monkeypatch, {443})
+    url, (found,), why = fetch_ca_answering("https://nbu01:1556/netbackup")
+    assert url == "https://nbu01:443/netbackup" and why == "timed out"
+    assert found.sha256 == fingerprint(CERT)
+    assert asked[0].startswith("https://nbu01:1556/") and asked[-1].startswith("https://nbu01/")
+    assert answers("https://nbu01:443/netbackup") and not answers("https://nbu01:1556/netbackup")
+
+
+def test_the_default_port_is_used_when_it_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked = _answer_on(monkeypatch, {443, 1556})
+    url, _, why = fetch_ca_answering("https://nbu01:1556/netbackup")
+    assert (url, why) == ("https://nbu01:1556/netbackup", None)
+    assert all(":1556/" in a for a in asked)
+
+
+def test_neither_port_answering_names_both(monkeypatch: pytest.MonkeyPatch) -> None:
+    _answer_on(monkeypatch, set())
+    with pytest.raises(RuntimeError, match=r"nbu01:1556.*nbu01:443"):
+        fetch_ca_answering("https://nbu01:1556/netbackup")
+    # A port chosen on purpose is not second-guessed.
+    with pytest.raises(httpx.ConnectTimeout):
+        fetch_ca_answering("https://nbu01:8443/netbackup")

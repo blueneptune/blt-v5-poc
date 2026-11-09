@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { certificatesInLog, collectorChoices, collectorLabel, collectorTone, cronText, isFinal, runTone, type Collector } from './admin';
+import { answeredAtInLog, certificatesInLog, collectorChoices, collectorLabel, collectorTone, cronText, isFinal, runTone, type Collector } from './admin';
 
 describe('schedules', () => {
 	it('read as words where they are simple', () => {
@@ -107,5 +107,19 @@ describe('collectors', () => {
 		expect(collectorLabel('uk')).toBe('uk');
 		expect(collectorTone('offline')).toBe('failed');
 		expect(collectorTone('never seen')).toBe('other');
+	});
+});
+
+describe('answeredAtInLog', () => {
+	it('takes the address the fetch fell back to', () => {
+		expect(
+			answeredAtInLog([
+				{ message: 'https://nbu01:1556/netbackup did not answer (timed out); https://nbu01:443/netbackup did.' },
+				{ message: 'Answered at https://nbu01:443/netbackup - use this address.' }
+			])
+		).toBe('https://nbu01:443/netbackup');
+	});
+	it('is null when the address asked answered', () => {
+		expect(answeredAtInLog([{ message: 'https://nbu01:1556/netbackup gave 1 CA certificate(s)' }])).toBeNull();
 	});
 });

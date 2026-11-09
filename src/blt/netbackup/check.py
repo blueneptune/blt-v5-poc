@@ -12,6 +12,9 @@ is its CA certificate.
   against yet - so each certificate comes with its SHA-256 fingerprint,
   to be compared with the primary's own before it is trusted, and a test
   of whether it actually verifies the primary's TLS certificate.
+- `fetch_ca_answering(url)` - the same, trying port 443 when the default
+  1556 does not answer: some NetBackup 10.5 primaries serve the API only
+  through their web server, on 443.
 """
 
 from __future__ import annotations
@@ -24,12 +27,16 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from netbackup_sdk import NetBackupClient
 from netbackup_sdk.client import tls_context
 from netbackup_sdk.versions import AUTO_ORDER, media_type
 from sdk_primer import AuthenticationError, NotFoundError, SDKError
+
+DEFAULT_PORT = 1556
+FALLBACK_PORT = 443
 
 PEM = re.compile(r"-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s]+-----END CERTIFICATE-----")
 
@@ -142,6 +149,49 @@ def fetch_ca_certificates(url: str, timeout: float = 20.0) -> list[CaCertificate
         print_ = fingerprint(pem)
         seen.setdefault(print_, CaCertificate(pem, print_, _subject(pem)))
     return list(seen.values())
+
+
+def fallback_url(url: str) -> str | None:
+    """The same primary on port 443, for an address on the default 1556:
+    NetBackup 10.5 can serve its API only through its web server. None
+    for an address on any other port - one chosen on purpose."""
+    parts = urlsplit(url)
+    if parts.port != DEFAULT_PORT or not parts.hostname:
+        return None
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    return urlunsplit((parts.scheme, f"{host}:{FALLBACK_PORT}", parts.path, "", ""))
+
+
+def fetch_ca_answering(
+    url: str, timeout: float = 20.0
+) -> tuple[str, list[CaCertificate], str | None]:
+    """fetch_ca_certificates, falling back to port 443 when the default
+    port does not answer at all. Gives the address that answered, its
+    certificates, and - if that is the fallback - why the first did not."""
+    try:
+        return url, fetch_ca_certificates(url, timeout), None
+    except httpx.TransportError as first:
+        other = fallback_url(url)
+        if other is None:
+            raise
+        why = str(first) or type(first).__name__
+        try:
+            return other, fetch_ca_certificates(other, timeout), why
+        except httpx.TransportError as second:
+            raise RuntimeError(
+                f"Neither answered: {url} ({why}), {other} ({str(second) or type(second).__name__})"
+            ) from second
+
+
+def answers(url: str, timeout: float = 10.0) -> bool:
+    """Whether a NetBackup API answers at this address at all (with
+    anything: /security/cacert needs no sign-in)."""
+    try:
+        with httpx.Client(verify=False, timeout=timeout) as http:  # noqa: S501 - only a probe
+            http.get(f"{url}/security/cacert")
+    except httpx.TransportError:
+        return False
+    return True
 
 
 def verifies(url: str, pem: str, timeout: float = 20.0) -> str | None:

@@ -20,6 +20,9 @@ from typing import Any
 
 DEFAULT_QUEUE = "default"
 WORK_POOL = "blt"
+# The global concurrency limit every per-source run takes a slot of, so
+# only so many collect at once (BLT_MAX_PARALLEL; blt.flows.flows).
+SLOT_LIMIT = "blt-commcell-runs"
 
 # As for block names: it becomes a work queue name and part of a
 # container name.

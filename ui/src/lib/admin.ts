@@ -86,6 +86,16 @@ export function certificatesInLog(lines: { message: string }[]): FoundCertificat
 	return found;
 }
 
+/** The address blt-netbackup-fetch-ca found the primary at, when that
+ * was not the one asked: port 443, the default 1556 not answering. */
+export function answeredAtInLog(lines: { message: string }[]): string | null {
+	for (const { message } of lines) {
+		const found = /^Answered at (https:\/\/\S+) - use this address\.?$/.exec(message);
+		if (found) return found[1];
+	}
+	return null;
+}
+
 export const SOURCE_LABELS: Record<string, string> = {
 	commvault: 'Commvault CommCell',
 	rubrik: 'Rubrik account',

@@ -45,7 +45,12 @@ many sources it reaches.
    collector that can reach it. Its CA is fetched, and it is checked,
    from there.
 2. **Name and address.** A host name is enough
-   (`https://<host>:1556/netbackup` is made from it).
+   (`https://<host>:1556/netbackup` is made from it). Some NetBackup
+   10.5 primaries serve the API only through their web server, on 443:
+   when 1556 does not answer, **Fetch its CA** tries 443, says so, and
+   puts that address in the form. Type `<host>:443` to go there
+   directly; a port you give is kept. A check of a saved primary that
+   cannot sign in on 1556 says when 443 answers instead.
 3. **Fetch its CA** (optional): a worker asks the primary for its CA
    certificate - NetBackup gives it without signing in - and the page
    shows each one with its SHA-256 fingerprint and whether it verifies
@@ -88,6 +93,47 @@ worker restarts. **Run now** opens a form from the flow's own
 parameters; a by-hand flow such as `blt-backfill/by-hand` is run from
 here with its CommCell's name. The schedules themselves are set in
 `prefect.yaml`.
+
+### Stuck runs
+
+Above the schedules, **Run health** says whether runs are getting
+through. Each per-source run takes one of the collection slots
+(`BLT_MAX_PARALLEL`, a Prefect global concurrency limit) while it
+collects. It warns when:
+
+- **slots are held by runs that are gone** - Prefect counts more slots
+  taken than there are runs collecting, so new runs queue for them for
+  ever (they show as RUNNING, doing nothing). Until 2026.11.09.2 a
+  restart of the Prefect server did this: it kept who held each slot
+  only in memory.
+- **runs are stuck** - RUNNING for over 2 hours, or PENDING or
+  CANCELLING for over 10 minutes.
+
+**Clear stuck runs** (confirmed first) cancels those runs at once - no
+worker is running them - and brings the slot count down to the runs
+still collecting, never below: a run that holds a slot keeps it. The
+next scheduled runs catch up. Without the UI:
+
+```bash
+deploy/maintenance.sh status             # exit 1 when runs are stuck
+deploy/maintenance.sh unstick --dry-run  # what it would do
+deploy/maintenance.sh unstick
+# on the cluster:
+kubectl -n blt exec deploy/blt-api -- python -m blt.api.maintenance status
+```
+
+Two things keep it from happening in the first place:
+
+- The Prefect server keeps its slot leases on disk, in the
+  `blt-prefect-home` volume (a PVC on the cluster), so they outlive a
+  restart; a slot whose run is gone comes back when its lease runs out,
+  within 5 minutes.
+- Each flow run sends a heartbeat every 30 s; the automation
+  `blt-crash-silent-runs`, which blt's worker sets up as it starts, marks
+  a run Crashed when it has been silent for 5 minutes (its process is
+  gone - a worker restart, a machine down). Remote collectors send
+  heartbeats too, so 5 minutes also rides out a short drop of their ssh
+  tunnel.
 
 ## Runs (Administration -> Runs)
 

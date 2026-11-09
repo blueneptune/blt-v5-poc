@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -52,6 +53,8 @@ class FakePrefect:
         self.calls: list[tuple[str, str, Any]] = []
         # The blt pool's work queues; None: the pool does not exist yet.
         self.queues: list[dict[str, Any]] | None = []
+        # The collection slots (a global concurrency limit); None: not made yet.
+        self.slot_limit: dict[str, Any] | None = None
         self.add_deployment("blt-collect-jobs", "hourly", cron="7 * * * *")
         self.add_deployment("blt-netbackup-check", "by-hand", parameters={})
         self.add_deployment("blt-netbackup-fetch-ca", "by-hand", parameters={})
@@ -214,6 +217,13 @@ class FakePrefect:
                 run["state"] = {**body["state"], "message": None}
                 return httpx.Response(201, json={"status": "ACCEPT"})
             return httpx.Response(200, json=run)
+        if path == "/v2/concurrency_limits/blt-commcell-runs":
+            if self.slot_limit is None:
+                return httpx.Response(404, json={"detail": "Concurrency Limit not found"})
+            if request.method == "PATCH":
+                self.slot_limit.update(body)
+                return httpx.Response(204)
+            return httpx.Response(200, json=self.slot_limit)
         if path == "/logs/filter":
             run_id = body["logs"]["flow_run_id"]["any_"][0]
             lines = self.logs.get(run_id, [])
@@ -592,3 +602,147 @@ def test_prefect_down_is_a_503_and_its_errors_a_502(prefect: FakePrefect) -> Non
 
 def test_admin_needs_the_api_key(http: TestClient) -> None:
     assert http.get("/v1/admin/sources", headers={"X-API-Key": "wrong"}).status_code == 401
+
+
+# --- run health --------------------------------------------------------------
+
+
+def _ago(minutes: int) -> str:
+    return (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+
+
+def _source_run(prefect: FakePrefect, state: str, minutes: int) -> str:
+    deployment = next(iter(prefect.deployments))
+    run_id = prefect.add_run(deployment, state, _ago(minutes), parameters={"primary": "nbu01"})
+    prefect.runs[run_id]["state"]["timestamp"] = _ago(minutes)
+    return run_id
+
+
+def test_run_health_is_healthy_with_nothing_running(http: TestClient, prefect: FakePrefect) -> None:
+    health = http.get("/v1/admin/runs/health").json()
+    assert health["slots"] is None and health["healthy"] is True
+    assert health["stuck"] == [] and health["leaked_slots"] == 0
+
+    prefect.slot_limit = {"limit": 4, "active_slots": 0}
+    assert http.get("/v1/admin/runs/health").json()["slots"] == {
+        "name": "blt-commcell-runs",
+        "limit": 4,
+        "active": 0,
+    }
+
+
+def test_runs_queued_behind_lost_slots_are_stuck_and_clearing_frees_them(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    # The desktop on 2026-11-09: the Prefect server restarted while runs
+    # held every slot, and each run since waits for one, RUNNING.
+    prefect.slot_limit = {"limit": 4, "active_slots": 4}
+    waiting = [_source_run(prefect, "RUNNING", 300 + i) for i in range(6)]
+    fresh = _source_run(prefect, "RUNNING", 5)
+    pending = _source_run(prefect, "PENDING", 30)
+    deployment = next(iter(prefect.deployments))
+    prefect.add_run(deployment, "RUNNING", _ago(400))  # no source: takes no slot
+
+    health = http.get("/v1/admin/runs/health").json()
+    assert health["healthy"] is False
+    assert health["collecting"] == 7  # the source runs RUNNING, waiters among them
+    stuck = {run["id"]: run for run in health["stuck"]}
+    assert set(waiting) | {pending} <= set(stuck) and fresh not in stuck
+    assert stuck[waiting[5]]["stuck_minutes"] >= 305
+    assert health["stuck"][0]["stuck_minutes"] >= health["stuck"][-1]["stuck_minutes"]
+
+    cleared = http.post(
+        "/v1/admin/runs/clear-stuck", json={"run_ids": [*waiting, pending, fresh, _id()]}
+    ).json()
+    assert set(cleared["cancelled"]) == set(waiting) | {pending}
+    assert cleared["skipped"] == 2  # still fresh, and not there at all
+    assert prefect.runs[fresh]["state"]["type"] == "RUNNING"
+    assert all(prefect.runs[r]["state"]["type"] == "CANCELLED" for r in waiting)
+    # One source run is left collecting: the count comes down to it, no lower.
+    assert (cleared["slots_before"], cleared["slots_after"]) == (4, 1)
+    assert prefect.slot_limit["active_slots"] == 1
+    forced = [b for m, p, b in prefect.calls if p.endswith("/set_state")]
+    assert forced and all(b["force"] is True for b in forced)
+
+
+def test_slots_held_by_no_run_are_leaked_and_cleared_without_cancelling(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    prefect.slot_limit = {"limit": 4, "active_slots": 3}
+    _source_run(prefect, "RUNNING", 2)
+    health = http.get("/v1/admin/runs/health").json()
+    assert (health["collecting"], health["leaked_slots"], health["healthy"]) == (1, 2, False)
+
+    cleared = http.post("/v1/admin/runs/clear-stuck", json={}).json()
+    assert cleared == {"cancelled": [], "skipped": 0, "slots_before": 3, "slots_after": 1}
+
+
+def test_a_run_is_stuck_after_the_minutes_asked_for(http: TestClient, prefect: FakePrefect) -> None:
+    run_id = _source_run(prefect, "RUNNING", 45)
+    assert http.get("/v1/admin/runs/health").json()["stuck"] == []
+    stuck = http.get("/v1/admin/runs/health", params={"stuck_after_minutes": 30}).json()["stuck"]
+    assert [r["id"] for r in stuck] == [run_id]
+    assert http.get("/v1/admin/runs/health", params={"stuck_after_minutes": 1}).status_code == 422
+    # Cleared by the rule it was listed under, not the default.
+    assert (
+        http.post("/v1/admin/runs/clear-stuck", json={"run_ids": [run_id]}).json()["cancelled"]
+        == []
+    )
+    assert http.post(
+        "/v1/admin/runs/clear-stuck", json={"run_ids": [run_id], "stuck_after_minutes": 30}
+    ).json()["cancelled"] == [run_id]
+
+
+# --- deploy/maintenance.sh (blt.api.maintenance) ------------------------------
+
+
+@pytest.fixture
+def maintenance(prefect: FakePrefect, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    from blt.api import maintenance as module
+
+    api = PrefectApi(
+        httpx.Client(
+            base_url="http://prefect/api/",
+            transport=httpx.MockTransport(prefect.handle),
+            auth=httpx.BasicAuth("admin", "pw"),
+        )
+    )
+    app = create_app(_settings(), prefect=api)
+    monkeypatch.setattr(
+        module,
+        "api_client",
+        lambda: TestClient(app, base_url="http://testserver/v1/admin/", headers={"X-API-Key": KEY}),
+    )
+    yield module
+
+
+def test_maintenance_status_says_whether_runs_get_through(
+    maintenance: Any, prefect: FakePrefect, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prefect.slot_limit = {"limit": 4, "active_slots": 0}
+    assert maintenance.main(["status"]) == 0
+    assert "Runs are getting through." in capsys.readouterr().out
+
+    prefect.slot_limit["active_slots"] = 4
+    stuck = _source_run(prefect, "RUNNING", 300)
+    assert maintenance.main(["status"]) == 1
+    out = capsys.readouterr().out
+    assert "4 of 4 taken; 1 runs collecting; 3 held by runs that are gone" in out
+    assert prefect.runs[stuck]["name"] in out and "Runs are stuck." in out
+
+
+def test_maintenance_unstick_dry_run_changes_nothing_then_clears(
+    maintenance: Any, prefect: FakePrefect, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prefect.slot_limit = {"limit": 4, "active_slots": 4}
+    stuck = [_source_run(prefect, "RUNNING", 300) for _ in range(2)]
+    assert maintenance.main(["unstick", "--dry-run"]) == 0
+    assert "Would cancel 2 runs" in capsys.readouterr().out
+    assert all(prefect.runs[r]["state"]["type"] == "RUNNING" for r in stuck)
+    assert prefect.slot_limit["active_slots"] == 4
+
+    assert maintenance.main(["unstick"]) == 0
+    assert "Cancelled 2 runs (0 had moved on); slots taken 4 -> 0." in capsys.readouterr().out
+    assert all(prefect.runs[r]["state"]["type"] == "CANCELLED" for r in stuck)
+    assert maintenance.main(["unstick"]) == 0
+    assert "Nothing to clear." in capsys.readouterr().out

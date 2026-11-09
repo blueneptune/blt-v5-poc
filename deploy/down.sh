@@ -2,7 +2,8 @@
 # Stop and remove the "blt" pod, however it was started (deploy/up.sh or
 # deploy/kube/up.sh). The blt-pgdata volume - the job data, and Prefect's
 # database - is left alone; remove it yourself with
-# `podman volume rm blt-pgdata`.
+# `podman volume rm blt-pgdata`. So is blt-prefect-home, the Prefect
+# server's slot leases.
 set -euo pipefail
 podman pod rm -f --ignore blt
 # deploy/kube/up.sh keeps the passwords in a podman secret.
