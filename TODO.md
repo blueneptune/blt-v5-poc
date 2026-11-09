@@ -254,3 +254,20 @@ current work.
     as kind `proof` or similar, in the engineering view (see
     docs/common-jobs.md, decision 3). Each domain's setup shown and agreed
     before anything is created on it.
+
+24. **Per-source collection timing** (asked for 2026-11-09, after the
+    image catalog work is under way). Today each kind of collection has
+    one schedule in `prefect.yaml` and every source with Collect on runs
+    at the same moment. With 20-30 sources that bunches the load, so:
+    - a **Collection schedule** on each source, set on its edit page:
+      "default" (the product's schedule), every N hours, or daily at a
+      time; plus an optional quiet window ("not between 22:00 and
+      04:00") for a domain's busy backup hours;
+    - an **automatic spread** for sources left on "default": each gets a
+      stable offset inside the interval (from its UUID), so 30 primaries
+      on "hourly" don't all start at :27;
+    - the parent flow still fires on the finest interval and skips any
+      source not due, so there is still one schedule per product to
+      pause; the product's interval is the finest a source can get;
+    - Administration shows each source's next run, and a per-source
+      pause next to the Collect switch.
