@@ -371,3 +371,35 @@ def test_blt_s_own_worker_leaves_remote_collectors_runs_alone() -> None:
     assert "--work-queue default" in own
     assert '--work-queue "$COLLECTOR"' in remote
     assert "BLT_COLLECTOR" in start
+
+
+def run_ssh_config(tmp_path: Path, env: str) -> subprocess.CompletedProcess[str]:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(env)
+    return subprocess.run(
+        ["bash", "deploy/collector.sh", "ssh-config"],
+        cwd=ROOT,
+        env={**clean_environment(), "BLT_ENV_FILE": str(env_file)},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_a_command_in_blt_env_stops_the_scripts_before_it_runs(tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    pasted = f"for db in blt prefect; do\n  touch {marker} # secret-ish\ndone\n"
+    result = run_ssh_config(tmp_path, ENV + "\n# a comment\n" + pasted)
+    lines = len(ENV.splitlines()) + 2
+    assert result.returncode == 1
+    assert f"line {lines + 1},{lines + 2},{lines + 3} is not a setting" in result.stderr
+    assert "secret-ish" not in result.stderr and "touch" not in result.stderr
+    assert not marker.exists()
+
+
+def test_settings_comments_export_and_windows_line_ends_are_fine(tmp_path: Path) -> None:
+    env = "# blt\r\n\r\n   # indented comment\r\nexport BLT_MAX_PARALLEL=2\r\n" + ENV.replace(
+        "\n", "\r\n"
+    )
+    result = run_ssh_config(tmp_path, env)
+    assert result.returncode == 0, result.stderr
+    assert "RemoteForward" in result.stdout
