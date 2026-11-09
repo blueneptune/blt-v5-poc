@@ -3,11 +3,14 @@ import { reason, refused, requireAdmin } from '$lib/server/admin';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
-	const result = await locals.api.GET('/v1/admin/sources');
+	const [result, collectors] = await Promise.all([
+		locals.api.GET('/v1/admin/sources'),
+		locals.api.GET('/v1/admin/collectors')
+	]);
 	if (!result.data) error(502, reason(result.error, result.response));
 	const source = result.data.find((s) => s.type === 'netbackup' && s.name === params.name);
 	if (!source) error(404, `No NetBackup primary ${params.name}`);
-	return { source, run: url.searchParams.get('run') };
+	return { source, collectors: collectors.data ?? [], run: url.searchParams.get('run') };
 };
 
 const path = (name: string) => ({ params: { path: { source_type: 'netbackup' as const, source_name: name } } });
@@ -31,6 +34,18 @@ export const actions: Actions = {
 		});
 		if (!result.data) return refused(result);
 		return { saved: collect ? 'Collection is on.' : 'Collection is off.' };
+	},
+
+	/** Which collector reaches it: '' is blt's own worker. */
+	collector: async ({ locals, params, request }) => {
+		requireAdmin(locals.user);
+		const collector = String((await request.formData()).get('collector') ?? '');
+		const result = await locals.api.PATCH('/v1/admin/sources/{source_type}/{source_name}', {
+			...path(params.name),
+			body: { collector }
+		});
+		if (!result.data) return refused(result);
+		return { saved: 'Saved. Check it again: the check runs from its collector.' };
 	},
 
 	/** Changes what was filled in; empty fields stay as they are. */

@@ -73,6 +73,11 @@ class CommvaultCommCell(Block):
         description="Collected by the scheduled flows. Off for an MSP's own login, which only "
         "lends its credentials to the customer blocks.",
     )
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it (its Prefect work queue; "
+        "docs/remote-collector.md). Empty: blt's own worker.",
+    )
     credentials: str | None = Field(
         default=None,
         description="Name of another block to take the URL, deployment and tokens from "

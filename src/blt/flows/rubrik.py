@@ -42,7 +42,7 @@ from blt.rubrik.collect import run_rubrik_collection, run_rubrik_inventory
 from blt.rubrik.source import RubrikInventory, RubrikJobs
 from blt.rubrik.store import RubrikStore
 
-from .flows import SLOTS, fan_out, logs_to_prefect
+from .flows import SLOTS, fan_out, logs_to_prefect, source_queue
 
 BLOCK_TYPE_SLUG = "blt-rubrik-account"
 COLLECT_ONE = "blt-rubrik-collect-account/per-account"
@@ -67,6 +67,11 @@ class RubrikAccountBlock(Block):
     )
     service_account_name: str | None = Field(default=None, description="name from the file.")
     collect: bool = Field(default=True, description="Collected by the scheduled flows.")
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it (its Prefect work queue; "
+        "docs/remote-collector.md). Empty: blt's own worker.",
+    )
     initial_lookback_hours: int = Field(
         default=24, description="First run: jobs changed in this many hours."
     )
@@ -194,6 +199,7 @@ def _start_run(deployment: str, account: str) -> str:
             parameters={"account": account},
             flow_run_name=f"{label}-{account}",
             timeout=0,
+            work_queue_name=source_queue(BLOCK_TYPE_SLUG, account),
         ),
     )
     return str(run.id)

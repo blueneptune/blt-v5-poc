@@ -23,11 +23,14 @@ import re
 import uuid
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from functools import partial
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field, SecretStr, field_validator
+
+from blt.queues import DEFAULT_QUEUE, SOURCE_PARAMETERS, WORK_POOL, check_collector, queue_for
 
 from .docs import UNAUTHORIZED
 from .prefect import PrefectApi, PrefectError
@@ -61,6 +64,10 @@ class SourceBlockOut(BaseModel):
     name: str = Field(description="The block's name: blt's name for the source.")
     block_id: uuid.UUID = Field(description="The Prefect block document's id.")
     collect: bool = Field(description="Collected by the scheduled flows.")
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it; none: blt's own worker.",
+    )
     address: str | None = Field(description="Where it is: its API's URL.")
     verify_tls: bool | None = Field(default=None, description="TLS certificates are checked.")
     has_ca_certificate: bool | None = Field(
@@ -116,6 +123,12 @@ class NetBackupPrimaryIn(BaseModel):
     )
     verify_tls: bool = Field(default=True, description="Check the primary's TLS certificate.")
     collect: bool = Field(default=False, description="Collected by the scheduled flows.")
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it (docs/remote-collector.md); none: "
+        "blt's own worker.",
+        examples=["tools01"],
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -142,12 +155,21 @@ class NetBackupPrimaryIn(BaseModel):
     def _ca(cls, value: str | None) -> str | None:
         return _check_pem(value)
 
+    @field_validator("collector")
+    @classmethod
+    def _collector(cls, value: str | None) -> str | None:
+        return check_collector(value)
+
 
 class SourceBlockPatch(BaseModel):
-    """What to change; anything left out stays as it is. Only `collect`
-    applies to every source; the rest are NetBackup's."""
+    """What to change; anything left out stays as it is. `collect` and
+    `collector` apply to every source; the rest are NetBackup's."""
 
     collect: bool | None = Field(default=None, description="Collected by the scheduled flows.")
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it; an empty string: blt's own worker.",
+    )
     url: str | None = Field(default=None, description="NetBackup: a new address.")
     api_key: SecretStr | None = Field(default=None, description="NetBackup: a new API key.")
     ca_certificate: str | None = Field(
@@ -164,6 +186,12 @@ class SourceBlockPatch(BaseModel):
     def _url(cls, value: str | None) -> str | None:
         return None if value is None else normalise_netbackup_url(value)
 
+    @field_validator("collector")
+    @classmethod
+    def _collector(cls, value: str | None) -> str | None:
+        # None: leave it; "": blt's own worker.
+        return None if value is None else (check_collector(value) or "")
+
     @field_validator("ca_certificate")
     @classmethod
     def _ca(cls, value: str | None) -> str | None:
@@ -174,6 +202,9 @@ class CaFetchIn(BaseModel):
     """A primary whose CA certificate to fetch."""
 
     url: str = Field(description="The primary, as for adding one.")
+    collector: str | None = Field(
+        default=None, description="Fetch it from this remote collector; none: blt's own worker."
+    )
 
     model_config = {"json_schema_extra": {"examples": [{"url": "nbu01.example.com"}]}}
 
@@ -181,6 +212,28 @@ class CaFetchIn(BaseModel):
     @classmethod
     def _url(cls, value: str) -> str:
         return normalise_netbackup_url(value)
+
+    @field_validator("collector")
+    @classmethod
+    def _collector(cls, value: str | None) -> str | None:
+        return check_collector(value)
+
+
+CollectorStatus = Literal["online", "offline", "paused", "never seen"]
+
+
+class CollectorOut(BaseModel):
+    """A worker that runs blt's flows: blt's own, or a remote collector."""
+
+    name: str = Field(description="Its name: its work queue's (`default` for blt's own).")
+    own: bool = Field(description="blt's own worker, in the blt pod.")
+    status: CollectorStatus = Field(
+        description="online: it asked for work in the last minute or so. offline: not lately "
+        "(a remote one's tunnel may be down). never seen: sources name it, but it has never "
+        "asked for work."
+    )
+    last_polled: datetime | None = Field(default=None, description="When it last asked.")
+    sources: list[str] = Field(description="The sources it reaches, as type/name.")
 
 
 class Schedule(BaseModel):
@@ -308,6 +361,7 @@ def source_out(document: dict[str, Any]) -> SourceBlockOut | None:
         address=data.get(address_field),
         verify_tls=data.get("verify_tls"),
         has_ca_certificate=bool(data.get("ca_certificate")) if kind == "netbackup" else None,
+        collector=data.get("collector") or None,
         secrets_set=secrets_set,
         updated=document.get("updated"),
     )
@@ -375,7 +429,11 @@ def admin_router(
         return document  # type: ignore[no-any-return]
 
     def start(
-        prefect: PrefectApi, flow: tuple[str, str], parameters: dict[str, Any], name: str
+        prefect: PrefectApi,
+        flow: tuple[str, str],
+        parameters: dict[str, Any],
+        name: str,
+        queue: str,
     ) -> FlowRunOut:
         deployment = guarded(lambda: prefect.deployment_by_name(*flow))
         if deployment is None:
@@ -384,7 +442,7 @@ def admin_router(
                 f"Prefect has no {flow[0]}/{flow[1]} deployment: the worker registers it when it "
                 "starts.",
             )
-        run = guarded(lambda: prefect.create_flow_run(deployment["id"], parameters, name))
+        run = guarded(lambda: prefect.create_flow_run(deployment["id"], parameters, name, queue))
         return run_out(run, {deployment["flow_id"]: flow[0]}, {str(deployment["id"]): flow[1]})
 
     SourceType = Annotated[SourceKind, Path(description="The product.")]
@@ -417,6 +475,7 @@ def admin_router(
             "ca_certificate": body.ca_certificate,
             "verify_tls": body.verify_tls,
             "collect": body.collect,
+            "collector": body.collector,
         }
         guarded(lambda: prefect.create_block(SLUG_OF["netbackup"], body.name, data))
         return source_out(find_source(prefect, "netbackup", body.name))  # type: ignore[return-value]
@@ -435,6 +494,8 @@ def admin_router(
         changes: dict[str, Any] = {}
         if body.collect is not None:
             changes["collect"] = body.collect
+        if body.collector is not None:
+            changes["collector"] = body.collector or None
         netbackup: dict[str, Any] = {
             "url": body.url,
             "api_key": body.api_key.get_secret_value() if body.api_key else None,
@@ -445,7 +506,7 @@ def admin_router(
         if given and source_type != "netbackup":
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"Only collect can be changed here for a {source_type} source.",
+                f"Only collect and collector can be changed here for a {source_type} source.",
             )
         if "ca_certificate" in given and given["ca_certificate"] == "":
             given["ca_certificate"] = None
@@ -476,8 +537,14 @@ def admin_router(
         """Starts blt-netbackup-check for the primary: it signs in with
         the block's key and tries each read blt makes (storage, SLP
         images, jobs), and logs what it found. Watch the run's log."""
-        find_source(prefect, "netbackup", source_name)
-        return start(prefect, NETBACKUP_CHECK, {"primary": source_name}, f"check-{source_name}")
+        document = find_source(prefect, "netbackup", source_name)
+        return start(
+            prefect,
+            NETBACKUP_CHECK,
+            {"primary": source_name},
+            f"check-{source_name}",
+            queue_for(document.get("data") or {}),
+        )
 
     @router.post(
         "/netbackup/ca-certificate",
@@ -490,7 +557,58 @@ def admin_router(
         fingerprint. Compare the fingerprint with the primary's own
         (`nbcertcmd -displayCACertDetail`) before trusting it."""
         host = urlsplit(body.url).hostname or "primary"
-        return start(prefect, NETBACKUP_CA, {"url": body.url}, f"fetch-ca-{host}")
+        return start(
+            prefect,
+            NETBACKUP_CA,
+            {"url": body.url},
+            f"fetch-ca-{host}",
+            body.collector or DEFAULT_QUEUE,
+        )
+
+    def source_queue(prefect: PrefectApi, parameters: dict[str, Any]) -> str | None:
+        for parameter, slug in SOURCE_PARAMETERS.items():
+            name = parameters.get(parameter)
+            if isinstance(name, str) and name:
+                document = guarded(partial(prefect.block_document, slug, name))
+                # No such source: the run fails on its own, saying so.
+                return queue_for((document or {}).get("data") or {})
+        return None
+
+    @router.get("/collectors", summary="The workers that collect, and whether each is there")
+    def list_collectors(prefect: PrefectDep) -> list[CollectorOut]:
+        """blt's own worker and every remote collector: each work queue in
+        blt's pool, and each collector a source names, with when it last
+        asked for work and the sources it reaches."""
+        documents = guarded(lambda: prefect.block_documents(list(BLOCK_TYPES)))
+        reaches: dict[str, list[str]] = {DEFAULT_QUEUE: []}
+        for document in documents:
+            if out := source_out(document):
+                reaches.setdefault(out.collector or DEFAULT_QUEUE, []).append(
+                    f"{out.type}/{out.name}"
+                )
+        queues = {q["name"]: q for q in guarded(lambda: prefect.work_queues(WORK_POOL))}
+        found = []
+        for name in sorted(set(reaches) | set(queues), key=lambda n: (n != DEFAULT_QUEUE, n)):
+            queue = queues.get(name)
+            status_: CollectorStatus
+            if queue is None or not queue.get("last_polled"):
+                status_ = "never seen"
+            elif queue.get("is_paused") or queue.get("status") == "PAUSED":
+                status_ = "paused"
+            elif queue.get("status") == "READY":
+                status_ = "online"
+            else:
+                status_ = "offline"
+            found.append(
+                CollectorOut(
+                    name=name,
+                    own=name == DEFAULT_QUEUE,
+                    status=status_,
+                    last_polled=(queue or {}).get("last_polled"),
+                    sources=sorted(reaches.get(name, [])),
+                )
+            )
+        return found
 
     # --- schedules --------------------------------------------------------
 
@@ -549,9 +667,14 @@ def admin_router(
         summary="Run a deployment now",
     )
     def run_now(deployment_id: DeploymentId, body: RunNowIn, prefect: PrefectDep) -> FlowRunOut:
-        """Starts a run now, with these parameters over its defaults."""
+        """Starts a run now, with these parameters over its defaults. A
+        run for one source (a `commcell`, `account` or `primary`
+        parameter) goes to the collector that reaches that source."""
         deployment = find_deployment(prefect, deployment_id)
-        run = guarded(lambda: prefect.create_flow_run(deployment_id, body.parameters))
+        queue = source_queue(prefect, {**(deployment.get("parameters") or {}), **body.parameters})
+        run = guarded(
+            lambda: prefect.create_flow_run(deployment_id, body.parameters, work_queue_name=queue)
+        )
         flows = guarded(lambda: prefect.flows([str(deployment["flow_id"])]))
         return run_out(run, flows, {str(deployment["id"]): deployment["name"]})
 

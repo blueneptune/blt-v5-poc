@@ -2,9 +2,10 @@
 	import { enhance } from '$app/forms';
 	import { Button } from '$lib/components/ui/button';
 	import RunLog from '$lib/components/RunLog.svelte';
+	import CollectorSelect from '$lib/components/CollectorSelect.svelte';
 	import { certificatesInLog, type FoundCertificate } from '$lib/admin';
 
-	let { form } = $props();
+	let { data, form } = $props();
 
 	let ca = $state('');
 	let found = $state<FoundCertificate[]>([]);
@@ -38,6 +39,16 @@
 		<input id="name" name="name" required pattern="[a-z0-9][a-z0-9\-]*" placeholder="nbu-prod-01" class={input} />
 		<p class="text-muted-foreground mt-1 text-xs">Lower case letters, digits and dashes.</p>
 	</div>
+
+	{#if data.collectors.some((c) => !c.own)}
+		<div>
+			<label class="text-sm font-medium" for="collector">Collected by</label>
+			<div class="mt-1"><CollectorSelect id="collector" collectors={data.collectors} /></div>
+			<p class="text-muted-foreground mt-1 text-xs">
+				The collector that can reach it. Its CA is fetched, and it is checked, from there too.
+			</p>
+		</div>
+	{/if}
 
 	<div>
 		<label class="text-sm font-medium" for="url">Address</label>

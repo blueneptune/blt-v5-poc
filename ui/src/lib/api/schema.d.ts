@@ -289,6 +289,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/collectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The workers that collect, and whether each is there
+         * @description blt's own worker and every remote collector: each work queue in
+         *     blt's pool, and each collector a source names, with when it last
+         *     asked for work and the sources it reaches.
+         */
+        get: operations["list_collectors_v1_admin_collectors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/deployments": {
         parameters: {
             query?: never;
@@ -321,7 +343,9 @@ export interface paths {
         put?: never;
         /**
          * Run a deployment now
-         * @description Starts a run now, with these parameters over its defaults.
+         * @description Starts a run now, with these parameters over its defaults. A
+         *     run for one source (a `commcell`, `account` or `primary`
+         *     parameter) goes to the collector that reaches that source.
          */
         post: operations["run_now_v1_admin_deployments__deployment_id__runs_post"];
         delete?: never;
@@ -1017,6 +1041,43 @@ export interface components {
              * @description The primary, as for adding one.
              */
             url: string;
+            /**
+             * Collector
+             * @description Fetch it from this remote collector; none: blt's own worker.
+             */
+            collector?: string | null;
+        };
+        /**
+         * CollectorOut
+         * @description A worker that runs blt's flows: blt's own, or a remote collector.
+         */
+        CollectorOut: {
+            /**
+             * Name
+             * @description Its name: its work queue's (`default` for blt's own).
+             */
+            name: string;
+            /**
+             * Own
+             * @description blt's own worker, in the blt pod.
+             */
+            own: boolean;
+            /**
+             * Status
+             * @description online: it asked for work in the last minute or so. offline: not lately (a remote one's tunnel may be down). never seen: sources name it, but it has never asked for work.
+             * @enum {string}
+             */
+            status: "online" | "offline" | "paused" | "never seen";
+            /**
+             * Last Polled
+             * @description When it last asked.
+             */
+            last_polled?: string | null;
+            /**
+             * Sources
+             * @description The sources it reaches, as type/name.
+             */
+            sources: string[];
         };
         /**
          * CommonJobDetail
@@ -2423,6 +2484,12 @@ export interface components {
              * @default false
              */
             collect: boolean;
+            /**
+             * Collector
+             * @description The remote collector that reaches it (docs/remote-collector.md); none: blt's own worker.
+             * @example tools01
+             */
+            collector?: string | null;
         };
         /**
          * NetBackupRunFinish
@@ -3963,6 +4030,11 @@ export interface components {
              */
             collect: boolean;
             /**
+             * Collector
+             * @description The remote collector that reaches it; none: blt's own worker.
+             */
+            collector?: string | null;
+            /**
              * Address
              * @description Where it is: its API's URL.
              */
@@ -3990,8 +4062,8 @@ export interface components {
         };
         /**
          * SourceBlockPatch
-         * @description What to change; anything left out stays as it is. Only `collect`
-         *     applies to every source; the rest are NetBackup's.
+         * @description What to change; anything left out stays as it is. `collect` and
+         *     `collector` apply to every source; the rest are NetBackup's.
          * @example {
          *       "collect": true
          *     }
@@ -4002,6 +4074,11 @@ export interface components {
              * @description Collected by the scheduled flows.
              */
             collect?: boolean | null;
+            /**
+             * Collector
+             * @description The remote collector that reaches it; an empty string: blt's own worker.
+             */
+            collector?: string | null;
             /**
              * Url
              * @description NetBackup: a new address.
@@ -5176,6 +5253,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_collectors_v1_admin_collectors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description Prefect is not set up for the API, or cannot be reached */

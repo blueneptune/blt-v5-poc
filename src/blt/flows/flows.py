@@ -39,6 +39,7 @@ from prefect.client.orchestration import get_client
 from prefect.client.schemas.objects import FlowRun, State
 from prefect.concurrency.sync import concurrency
 from prefect.deployments import run_deployment
+from prefect.states import Cancelled
 from sdk_primer import APIClient
 
 from blt.collector.collect import run_backfill, run_collection, run_inventory
@@ -48,6 +49,7 @@ from blt.collector.lock import run_lock
 from blt.collector.settings import CollectorSettings
 from blt.collector.source import CommvaultJobs
 from blt.collector.store import BltStore
+from blt.queues import queue_for
 from blt.storage.collect import collect_commvault_storage
 from blt.storage.store import StorageStore
 
@@ -183,8 +185,19 @@ StartRun = Callable[[str, str], str]
 ReadState = Callable[[str], State]
 
 
+def source_queue(block_type_slug: str, name: str) -> str:
+    """The work queue for one source's runs: its collector's, or the
+    default one blt's own worker takes (blt.queues)."""
+    with get_client(sync_client=True) as client:
+        document = client.read_block_document_by_name(
+            name, block_type_slug=block_type_slug, include_secrets=False
+        )
+    return queue_for(document.data)
+
+
 def _start_run(deployment: str, commcell: str) -> str:
-    """Start one CommCell's flow run and return its id, without waiting."""
+    """Start one CommCell's flow run, on the worker that reaches it, and
+    return its id without waiting."""
     label = _RUN_LABELS[deployment]
     # run_deployment is typed as possibly a coroutine; called from sync
     # code it is not.
@@ -195,6 +208,7 @@ def _start_run(deployment: str, commcell: str) -> str:
             parameters={"commcell": commcell},
             flow_run_name=f"{label}-{commcell}",
             timeout=0,
+            work_queue_name=source_queue(BLOCK_TYPE_SLUG, commcell),
         ),
     )
     return str(run.id)
@@ -208,6 +222,13 @@ def _read_state(run_id: str) -> State:
     return state
 
 
+def _cancel(run_id: str) -> None:
+    with get_client(sync_client=True) as client:
+        client.set_flow_run_state(
+            UUID(run_id), Cancelled(message="No worker picked it up in time."), force=True
+        )
+
+
 def fan_out(
     commcells: list[str] | None,
     deployment: str,
@@ -216,6 +237,7 @@ def fan_out(
     wait_minutes: float,
     start: StartRun = _start_run,
     read_state: ReadState = _read_state,
+    cancel: Callable[[str], None] = _cancel,
     poll_seconds: float = 10,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
@@ -225,6 +247,11 @@ def fan_out(
     Returns each CommCell's final state. Raises if any failed, or did
     not start; a run still going at the deadline is reported, not failed
     - it carries on, and its own result shows in the UI.
+
+    A run no worker has picked up by the deadline is cancelled, and
+    counts as failed: its collector is not running (a remote collector
+    whose tunnel is down, docs/remote-collector.md). Left alone, the runs
+    would pile up and all start at once when it is back.
     """
     names = commcells or collectable_commcells()
     log = get_run_logger()
@@ -243,9 +270,10 @@ def fan_out(
 
     deadline = clock() + wait_minutes * 60
     waiting = dict(runs)
+    latest: dict[str, State] = {}
     while waiting:
         for name, run_id in list(waiting.items()):
-            state = read_state(run_id)
+            state = latest[name] = read_state(run_id)
             if state.is_final():
                 label = state.name or state.type.value
                 outcome[name] = (
@@ -259,13 +287,25 @@ def fan_out(
         if not waiting or clock() >= deadline:
             break
         sleep(poll_seconds)
-    for name in waiting:
-        outcome[name] = f"still running after {wait_minutes:g} minutes"
+    for name, run_id in waiting.items():
+        # AwaitingRetry is a SCHEDULED state too, but that run did start:
+        # its collector is there.
+        if latest[name].is_scheduled() and latest[name].name != "AwaitingRetry":
+            try:
+                cancel(run_id)
+                done = "cancelled"
+            except Exception as exc:  # noqa: BLE001 - the report matters more
+                done = f"not cancelled: {exc}"
+            outcome[name] = (
+                f"not picked up in {wait_minutes:g} minutes - is its collector running? ({done})"
+            )
+        else:
+            outcome[name] = f"still running after {wait_minutes:g} minutes"
 
     failed = [
         n
         for n, result in outcome.items()
-        if result.startswith(("not started", "Failed", "Crashed", "Cancelled"))
+        if result.startswith(("not started", "not picked up", "Failed", "Crashed", "Cancelled"))
     ]
     if failed:
         raise RuntimeError(f"Could not {what} for {', '.join(failed)}: {outcome}")

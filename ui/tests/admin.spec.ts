@@ -55,13 +55,44 @@ test('on a phone: one Admin link, and tabs for its pages', async ({ page }) => {
 
 test('sources: listed without secrets, and switched on and off', async ({ page }) => {
 	await page.goto('/admin/sources');
-	const row = page.getByRole('row', { name: /work/ });
+	const row = page.getByRole('row', { name: /^work / });
 	await expect(row).toContainText('Rubrik account');
 	await expect(row).toContainText('client_secret');
 	const toggle = page.getByRole('switch', { name: 'Collect from work' });
 	await expect(toggle).toHaveAttribute('aria-checked', 'false');
 	await toggle.click();
 	await expect(toggle).toHaveAttribute('aria-checked', 'true');
+});
+
+test('collectors: each one shown with whether it is there, and a source moved to one', async ({ page }) => {
+	await page.goto('/admin/sources');
+	const panel = page.getByRole('region', { name: 'Collectors' });
+	await expect(panel.getByRole('listitem').filter({ hasText: 'blt’s own worker' })).toContainText('online');
+	await expect(panel.getByRole('listitem').filter({ hasText: 'uk' })).toContainText('offline');
+
+	const select = page.getByLabel('Collector for cv-toaster');
+	await expect(select).toHaveValue('');
+	await select.selectOption('omaha');
+	await expect(page.getByLabel('Collector for cv-toaster')).toHaveValue('omaha');
+	await expect(panel.getByRole('listitem').filter({ hasText: 'omaha' })).toContainText('1 source');
+
+	await page.getByLabel('Collector for cv-toaster').selectOption('');
+	await expect(page.getByLabel('Collector for cv-toaster')).toHaveValue('');
+});
+
+test('a NetBackup primary added for a remote collector keeps it', async ({ page }) => {
+	await page.goto('/admin/sources/netbackup/new');
+	await page.getByLabel('Collected by').selectOption('uk');
+	await page.getByLabel('Name in blt').fill('nbu-uk-01');
+	await page.getByLabel('Address').fill('nbu-uk.example.com');
+	await page.getByLabel('API key').fill('typed-by-the-admin');
+	await page.getByRole('button', { name: 'Save and check' }).click();
+	await expect(page).toHaveURL(/\/admin\/sources\/netbackup\/nbu-uk-01/);
+	await expect(page.getByLabel('Collected by')).toHaveValue('uk');
+	await page.getByLabel('Collected by').selectOption('');
+	await page.getByRole('button', { name: 'Set' }).click();
+	await expect(page.getByRole('status')).toContainText('the check runs from its collector');
+	await expect(page.getByLabel('Collected by')).toHaveValue('');
 });
 
 test('a NetBackup primary: fetch its CA, save, and watch the check', async ({ page }) => {

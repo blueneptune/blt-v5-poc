@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import RunLog from '$lib/components/RunLog.svelte';
 	import { when } from '$lib/format';
+	import CollectorSelect from '$lib/components/CollectorSelect.svelte';
 
 	let { data, form } = $props();
 	const source = $derived(data.source);
@@ -26,6 +27,13 @@
 	<dd>{source.has_ca_certificate ? 'kept' : 'none (publicly signed, or not verified)'}</dd>
 	<dt class="text-muted-foreground">Changed</dt>
 	<dd>{when(source.updated)}</dd>
+	<dt class="text-muted-foreground self-center">Collected by</dt>
+	<dd>
+		<form method="POST" action="?/collector" use:enhance class="flex items-center gap-2">
+			<CollectorSelect collectors={data.collectors} value={source.collector} label="Collected by" />
+			<Button type="submit" size="sm" variant="outline">Set</Button>
+		</form>
+	</dd>
 </dl>
 
 {#if form?.message}

@@ -11,7 +11,7 @@ import pytest
 from commvault_sdk import TokenSet
 from prefect import flow
 from prefect.client.schemas.objects import State
-from prefect.states import Completed, Failed, Running
+from prefect.states import AwaitingRetry, Completed, Failed, Late, Running
 from prefect.testing.utilities import prefect_test_harness
 from pydantic import SecretStr, ValidationError
 
@@ -187,6 +187,57 @@ def test_every_commcell_is_started_before_any_is_waited_for(prefect_server: None
     # Still running at the deadline is reported, not counted as failed.
     assert "'slow': 'still running after 1 minutes'" in message
     assert "'good': 'Completed'" in message
+
+
+def test_a_run_no_collector_picks_up_is_cancelled_at_the_deadline(prefect_server: None) -> None:
+    # "far" names a remote collector whose tunnel is down: its run is
+    # never picked up. Left, the runs would pile up and all start at once
+    # when the collector is back.
+    cancelled: list[str] = []
+    clock = iter(range(0, 10_000, 30))
+
+    @flow
+    def parent() -> dict[str, str]:
+        return flows.fan_out(
+            ["near", "far", "busy", "retrying"],
+            flows.COLLECT_ONE,
+            "collect jobs",
+            wait_minutes=1,
+            start=lambda _, name: f"run-{name}",
+            read_state=lambda run_id: {
+                "run-near": Completed(),
+                "run-busy": Running(),
+                # Ran, failed, waits to try again: SCHEDULED, but started.
+                "run-retrying": AwaitingRetry(),
+            }.get(run_id, Late()),
+            cancel=cancelled.append,
+            clock=lambda: next(clock),
+            sleep=lambda _: None,
+        )
+
+    state = parent(return_state=True)
+    assert state.is_failed()
+    message = str(state.result(raise_on_failure=False))
+    assert cancelled == ["run-far"]
+    assert "'far': 'not picked up in 1 minutes - is its collector running? (cancelled)'" in message
+    assert "'busy': 'still running after 1 minutes'" in message
+    assert "'retrying': 'still running after 1 minutes'" in message
+    assert "'near': 'Completed'" in message
+
+
+def test_a_source_s_runs_go_to_its_collector_s_queue(prefect_server: None) -> None:
+    from blt.flows.netbackup import BLOCK_TYPE_SLUG, NetBackupPrimaryBlock
+
+    NetBackupPrimaryBlock(
+        url="https://p:1556/netbackup", api_key=SecretStr("k"), collector="tools01"
+    ).save("queue-far", overwrite=True)
+    NetBackupPrimaryBlock(url="https://l:1556/netbackup", api_key=SecretStr("k")).save(
+        "queue-near", overwrite=True
+    )
+    assert flows.source_queue(BLOCK_TYPE_SLUG, "queue-far") == "tools01"
+    assert flows.source_queue(BLOCK_TYPE_SLUG, "queue-near") == "default"
+    CommvaultCommCell(collector="dmz").save("queue-cv", overwrite=True)
+    assert flows.source_queue(flows.BLOCK_TYPE_SLUG, "queue-cv") == "dmz"
 
 
 def test_set_changes_only_what_is_named_and_refuses_secrets() -> None:

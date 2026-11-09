@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { certificatesInLog, cronText, isFinal, runTone } from './admin';
+import { certificatesInLog, collectorChoices, collectorLabel, collectorTone, cronText, isFinal, runTone, type Collector } from './admin';
 
 describe('schedules', () => {
 	it('read as words where they are simple', () => {
@@ -77,5 +77,35 @@ describe('run-now parameters', () => {
 		form.set('param:commcell', 'x');
 		form.set('param:wait_minutes', 'soon');
 		expect(() => parameterValues(fields, form)).toThrow('must be a number');
+	});
+});
+
+describe('collectors', () => {
+	const collectors: Collector[] = [
+		{ name: 'default', own: true, status: 'online', sources: [] },
+		{ name: 'uk', own: false, status: 'offline', sources: ['netbackup/nbu-uk'] },
+		{ name: 'omaha', own: false, status: 'online', sources: [] }
+	];
+
+	it('offers blt’s own worker first, then the remote ones by name, with their status', () => {
+		expect(collectorChoices(collectors)).toEqual([
+			{ value: '', label: 'blt’s own worker' },
+			{ value: 'omaha', label: 'omaha (online)' },
+			{ value: 'uk', label: 'uk (offline)' }
+		]);
+	});
+
+	it('keeps a source’s collector even when none by that name has been seen', () => {
+		expect(collectorChoices(collectors, 'asia').map((c) => c.value)).toEqual(['', 'asia', 'omaha', 'uk']);
+		expect(collectorChoices(collectors, 'asia')[1].label).toBe('asia (never seen)');
+		expect(collectorChoices(collectors, 'default')).toHaveLength(3);
+	});
+
+	it('names blt’s own worker, and colours offline as a failure', () => {
+		expect(collectorLabel('default')).toBe('blt’s own worker');
+		expect(collectorLabel(null)).toBe('blt’s own worker');
+		expect(collectorLabel('uk')).toBe('uk');
+		expect(collectorTone('offline')).toBe('failed');
+		expect(collectorTone('never seen')).toBe('other');
 	});
 });
