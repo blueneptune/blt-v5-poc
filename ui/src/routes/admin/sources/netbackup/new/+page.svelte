@@ -11,6 +11,7 @@
 	let found = $state<FoundCertificate[]>([]);
 	let chosen = $state<string | null>(null);
 	let url = $state('');
+	let legacy = $state(false);
 	let movedFrom = $state<string | null>(null);
 
 	function fetched(lines: { message: string }[]) {
@@ -92,7 +93,10 @@
 					<p class="font-medium">{certificate.subject ?? `Certificate ${i + 1}`}</p>
 					<p class="text-muted-foreground mt-1 font-mono text-xs break-all">SHA-256 {certificate.sha256}</p>
 					<p class="mt-1 text-xs">
-						{#if certificate.verifies === true}
+						{#if certificate.legacy}
+							It verifies this primary's TLS certificate only with <strong>legacy key sizes</strong> accepted:
+							its key is below today's minimum (1024-bit, from an older install). Using it turns that on.
+						{:else if certificate.verifies === true}
 							It verifies this primary's TLS certificate.
 						{:else if certificate.verifies === false}
 							It does <strong>not</strong> verify this primary at this address.
@@ -107,7 +111,7 @@
 						size="sm"
 						variant={chosen === certificate.pem ? 'secondary' : 'default'}
 						class="mt-2"
-						onclick={() => ((ca = certificate.pem), (chosen = certificate.pem))}
+						onclick={() => ((ca = certificate.pem), (chosen = certificate.pem), (legacy = certificate.legacy))}
 					>
 						{chosen === certificate.pem ? 'Using this certificate' : 'The fingerprint matches: use it'}
 					</Button>
@@ -128,6 +132,18 @@
 		></textarea>
 		<p class="text-muted-foreground mt-1 text-xs">
 			Paste it, or fetch it above. Leave it empty only if the primary's certificate is publicly signed.
+		</p>
+	</div>
+
+	<div>
+		<label class="flex items-center gap-2 text-sm font-medium">
+			<input type="checkbox" name="legacy_keys" bind:checked={legacy} />
+			Accept legacy key sizes
+		</label>
+		<p class="text-muted-foreground mt-1 text-xs">
+			Only for a primary whose CA predates 2048-bit keys (1024-bit, often from a 2017-or-older install, kept
+			through upgrades). Its chain, expiry and host name are still checked. The lasting fix is a NetBackup CA
+			migration.
 		</p>
 	</div>
 

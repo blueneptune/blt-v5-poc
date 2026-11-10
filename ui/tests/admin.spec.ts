@@ -130,6 +130,29 @@ test('a NetBackup primary that answers only on 443 is found there', async ({ pag
 	await expect(page.getByText(`SHA-256 ${FINGERPRINT}`).first()).toBeVisible();
 });
 
+test('a NetBackup primary with a 2017 CA: legacy key sizes, turned on and off', async ({ page }) => {
+	await page.goto('/admin/sources/netbackup/new');
+	await page.getByLabel('Name in blt').fill('nbu-2017');
+	await page.getByLabel('Address').fill('nbu2017.example.com');
+	await page.getByLabel('API key').fill('k');
+	await page.getByRole('button', { name: 'Fetch its CA' }).click();
+	await expect(page.getByText('Using it turns that on')).toBeVisible();
+	await expect(page.getByLabel('Accept legacy key sizes')).not.toBeChecked();
+	await page.getByRole('button', { name: 'The fingerprint matches: use it' }).click();
+	await expect(page.getByLabel('Accept legacy key sizes')).toBeChecked();
+
+	await page.getByRole('button', { name: 'Save and check' }).click();
+	await expect(page).toHaveURL(/\/admin\/sources\/netbackup\/nbu-2017/);
+	await expect(page.getByText('accepted', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Stop accepting' }).click();
+	await expect(page.getByRole('status')).toHaveText(/no longer accepted/);
+	await expect(page.getByRole('button', { name: 'Accept', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Accept', exact: true }).click();
+
+	await page.goto('/admin/sources');
+	await expect(page.getByRole('row', { name: /nbu-2017/ })).toContainText('legacy TLS keys');
+});
+
 test('a NetBackup primary with a bad name is refused with the reason', async ({ page }) => {
 	await page.goto('/admin/sources/netbackup/new');
 	await page.getByLabel('Name in blt').evaluate((input: HTMLInputElement) => input.removeAttribute('pattern'));

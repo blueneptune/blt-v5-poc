@@ -300,3 +300,9 @@ current work.
       kept per browser (ui/src/lib/jobColumns.ts);
     - in a job's detail, "the product's own record" named for the source
       it came from: the CommCell, the primary server, ...
+
+28. **Legacy TLS keys - done 2026-11-09.** A 10.5.0.1 primary at work has
+    its 2017 NetBackup CA, 1024-bit, which OpenSSL 3 refuses. Each primary
+    may accept legacy key sizes (`legacy_keys`: security level 1, chain,
+    expiry and host name still checked). Follow-up for that site: a
+    NetBackup CA migration, then turn the setting off.

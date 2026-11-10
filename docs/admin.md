@@ -57,6 +57,14 @@ many sources it reaches.
    the primary at that address. Compare the fingerprint with the
    primary's own (`nbcertcmd -displayCACertDetail` on it) before **use
    it**. Or paste the PEM yourself.
+   A primary whose NetBackup CA has a **1024-bit key** - one made by an
+   older install (2017, say) and kept through every upgrade - is refused
+   by today's TLS ("CA certificate key too weak"). The fetch says when a
+   certificate verifies only with **legacy key sizes accepted**, and using
+   it ticks that box. It is that primary's own setting (its page can turn
+   it off again) and relaxes only the key size: the chain, expiry and host
+   name are still checked. The Sources list marks such a primary "legacy
+   TLS keys"; the lasting fix is a NetBackup CA migration to a 2048-bit CA.
 4. **API key** - for a read-only service account (below), never shown
    again once saved.
 5. **Save and check.** The block is saved with collection **off**, and a

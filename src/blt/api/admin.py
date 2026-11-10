@@ -77,6 +77,9 @@ class SourceBlockOut(BaseModel):
     )
     address: str | None = Field(description="Where it is: its API's URL.")
     verify_tls: bool | None = Field(default=None, description="TLS certificates are checked.")
+    legacy_keys: bool | None = Field(
+        default=None, description="NetBackup: legacy (1024-bit) TLS keys are accepted."
+    )
     has_ca_certificate: bool | None = Field(
         default=None, description="NetBackup: a CA certificate is kept for it."
     )
@@ -129,6 +132,12 @@ class NetBackupPrimaryIn(BaseModel):
         default=None, description="The primary's CA certificate (PEM), unless publicly signed."
     )
     verify_tls: bool = Field(default=True, description="Check the primary's TLS certificate.")
+    legacy_keys: bool = Field(
+        default=False,
+        description="Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary "
+        "whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still "
+        "checked.",
+    )
     collect: bool = Field(default=False, description="Collected by the scheduled flows.")
     collector: str | None = Field(
         default=None,
@@ -184,6 +193,13 @@ class SourceBlockPatch(BaseModel):
     )
     verify_tls: bool | None = Field(
         default=None, description="NetBackup: check the primary's TLS certificate."
+    )
+    legacy_keys: bool | None = Field(
+        default=None,
+        description="NetBackup: "
+        "Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary "
+        "whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still "
+        "checked.",
     )
 
     model_config = {"json_schema_extra": {"examples": [{"collect": True}]}}
@@ -446,6 +462,7 @@ def source_out(document: dict[str, Any]) -> SourceBlockOut | None:
         collect=data.get("collect", True) is not False,
         address=data.get(address_field),
         verify_tls=data.get("verify_tls"),
+        legacy_keys=bool(data.get("legacy_keys")) if kind == "netbackup" else None,
         has_ca_certificate=bool(data.get("ca_certificate")) if kind == "netbackup" else None,
         collector=data.get("collector") or None,
         secrets_set=secrets_set,
@@ -560,6 +577,7 @@ def admin_router(
             "api_key": body.api_key.get_secret_value(),
             "ca_certificate": body.ca_certificate,
             "verify_tls": body.verify_tls,
+            "legacy_keys": body.legacy_keys,
             "collect": body.collect,
             "collector": body.collector,
         }
@@ -587,6 +605,7 @@ def admin_router(
             "api_key": body.api_key.get_secret_value() if body.api_key else None,
             "ca_certificate": body.ca_certificate,
             "verify_tls": body.verify_tls,
+            "legacy_keys": body.legacy_keys,
         }
         given: dict[str, Any] = {k: v for k, v in netbackup.items() if v is not None}
         if given and source_type != "netbackup":

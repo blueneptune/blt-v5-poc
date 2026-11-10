@@ -86,6 +86,14 @@
 					<td class="px-4 py-2">{SOURCE_LABELS[source.type] ?? source.type}</td>
 					<td class="text-muted-foreground max-w-56 truncate px-4 py-2" title={source.address ?? ''}>
 						{source.address ?? '—'}
+						{#if source.legacy_keys}
+							<span
+								class="block text-xs font-medium text-amber-700 dark:text-amber-300"
+								title="Legacy (1024-bit) TLS keys are accepted for it: its CA predates 2048-bit keys"
+							>
+								legacy TLS keys
+							</span>
+						{/if}
 					</td>
 					<td class="px-4 py-2">
 						{#each source.secrets_set as secret (secret)}

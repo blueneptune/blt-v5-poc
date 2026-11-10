@@ -7828,6 +7828,12 @@
             "description": "Check the primary's TLS certificate.",
             "default": true
           },
+          "legacy_keys": {
+            "type": "boolean",
+            "title": "Legacy Keys",
+            "description": "Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still checked.",
+            "default": false
+          },
           "collect": {
             "type": "boolean",
             "title": "Collect",
@@ -10844,6 +10850,18 @@
             "title": "Verify Tls",
             "description": "TLS certificates are checked."
           },
+          "legacy_keys": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Keys",
+            "description": "NetBackup: legacy (1024-bit) TLS keys are accepted."
+          },
           "has_ca_certificate": {
             "anyOf": [
               {
@@ -10965,6 +10983,18 @@
             ],
             "title": "Verify Tls",
             "description": "NetBackup: check the primary's TLS certificate."
+          },
+          "legacy_keys": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Keys",
+            "description": "NetBackup: Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still checked."
           }
         },
         "type": "object",

@@ -34,8 +34,8 @@ describe('certificates in a log', () => {
 			{ message: 'CA certificate 2 does not verify it: hostname mismatch' }
 		]);
 		expect(found).toEqual([
-			{ pem: `${pem}\n`, sha256: 'AB:CD', subject: 'CN=NetBackup CA', verifies: true },
-			{ pem: `${pem}\n`, sha256: 'EF:01', subject: null, verifies: false }
+			{ pem: `${pem}\n`, sha256: 'AB:CD', subject: 'CN=NetBackup CA', verifies: true, legacy: false },
+			{ pem: `${pem}\n`, sha256: 'EF:01', subject: null, verifies: false, legacy: false }
 		]);
 	});
 });
@@ -121,5 +121,20 @@ describe('answeredAtInLog', () => {
 	});
 	it('is null when the address asked answered', () => {
 		expect(answeredAtInLog([{ message: 'https://nbu01:1556/netbackup gave 1 CA certificate(s)' }])).toBeNull();
+	});
+});
+
+describe('certificatesInLog, legacy key sizes', () => {
+	it('marks a certificate that verifies only with legacy key sizes', () => {
+		const [found] = certificatesInLog([
+			{ message: 'CA certificate 1: CN=nbatd - SHA-256 AB:CD' },
+			{ message: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----' },
+			{
+				message:
+					"CA certificate 1 verifies this primary's TLS certificate only with legacy key sizes accepted: certificate key too weak"
+			}
+		]);
+		expect(found.verifies).toBe(true);
+		expect(found.legacy).toBe(true);
 	});
 });
