@@ -195,6 +195,7 @@ test('a job: from the list to its page', async ({ page }) => {
 	await expect(page).toHaveURL(`/jobs/${job.id}`);
 	await expect(page.getByRole('heading', { name: job.asset_name! })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Collection' })).toBeVisible();
+	await expect(page.getByText(`${job.source_name}'s own record`)).toBeVisible();
 });
 
 test('a job that does not exist is a 404 page', async ({ page, errors }) => {

@@ -4,6 +4,7 @@
 	import { ArrowLeft } from '@lucide/svelte';
 	import StateBadge from '$lib/components/StateBadge.svelte';
 	import { ago, bytes, duration, when } from '$lib/format';
+	import { recordLabel } from '$lib/jobs';
 
 	let { data } = $props();
 	const job = $derived(data.job);
@@ -79,7 +80,7 @@
 
 <section class="bg-card mt-6 rounded-xl border p-4">
 	<details>
-		<summary class="cursor-pointer font-medium">The product's own record</summary>
+		<summary class="cursor-pointer font-medium">{recordLabel(job.source_type, job.source_name)}</summary>
 		<p class="text-muted-foreground mt-1 text-xs">As blt stores it; also at <code>{job.product_path}</code> in the API.</p>
 		<pre class="bg-muted mt-3 max-h-[32rem] overflow-auto rounded-lg p-3 text-xs">{JSON.stringify(job.product, null, 2)}</pre>
 	</details>

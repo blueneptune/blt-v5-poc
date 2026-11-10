@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FILTERS, apiQuery, filtersToQuery, parseFilters } from './jobs';
+import { DEFAULT_FILTERS, apiQuery, filtersToQuery, parseFilters, recordLabel } from './jobs';
 import { bytes, duration } from './format';
 
 const parse = (query: string) => parseFilters(new URLSearchParams(query));
@@ -62,5 +62,15 @@ describe('formatting', () => {
 	it('shows how long a job took', () => {
 		expect(duration('2026-11-02T12:00:00Z', '2026-11-02T13:05:30Z')).toBe('1h 5m');
 		expect(duration(null, null)).toBe('');
+	});
+});
+
+describe('recordLabel', () => {
+	it('names the source a job came from', () => {
+		expect(recordLabel('commvault', 'cv-toaster')).toBe("CommCell cv-toaster's own record");
+		expect(recordLabel('netbackup', 'eth00bck01')).toBe("Primary server eth00bck01's own record");
+		expect(recordLabel('rubrik', 'rsc-lab')).toBe("Rubrik account rsc-lab's own record");
+		expect(recordLabel('veeam', 'vbr01')).toBe("Source vbr01's own record");
+		expect(recordLabel('netbackup', null)).toBe("The primary server's own record");
 	});
 });
