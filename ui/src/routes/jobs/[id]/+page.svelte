@@ -51,7 +51,7 @@
 {/if}
 
 <div class="mt-6 grid gap-6 lg:grid-cols-3">
-	<section class="bg-card rounded-xl border p-4 lg:col-span-2">
+	<section class="bg-card rounded-xl border shadow-sm p-4 lg:col-span-2">
 		<h2 class="font-medium">Job</h2>
 		<dl class="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr_auto_1fr]">
 			{#each facts as [label, value] (label)}
@@ -61,7 +61,7 @@
 		</dl>
 	</section>
 
-	<section class="bg-card rounded-xl border p-4">
+	<section class="bg-card rounded-xl border shadow-sm p-4">
 		<h2 class="font-medium">Collection</h2>
 		<dl class="mt-3 space-y-2 text-sm">
 			<div><dt class="text-muted-foreground">First seen</dt><dd>{when(job.first_seen_at)}</dd></div>
@@ -78,7 +78,7 @@
 	</section>
 </div>
 
-<section class="bg-card mt-6 rounded-xl border p-4">
+<section class="bg-card mt-6 rounded-xl border shadow-sm p-4">
 	<details>
 		<summary class="cursor-pointer font-medium">{recordLabel(job.source_type, job.source_name)}</summary>
 		<p class="text-muted-foreground mt-1 text-xs">As blt stores it; also at <code>{job.product_path}</code> in the API.</p>

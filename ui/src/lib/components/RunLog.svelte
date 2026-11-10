@@ -79,7 +79,7 @@
 	const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 </script>
 
-<div class="bg-card rounded-xl border">
+<div class="bg-card rounded-xl border shadow-sm">
 	<div class="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-sm">
 		{#if run}
 			<RunBadge type={run.state_type} name={run.state_name} />

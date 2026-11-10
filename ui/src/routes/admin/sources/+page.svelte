@@ -78,7 +78,7 @@
 	</section>
 {/if}
 
-<div class="bg-card mt-6 overflow-x-auto rounded-xl border">
+<div class="bg-card mt-6 overflow-x-auto rounded-xl border shadow-sm">
 	<table class="w-full text-sm">
 		<thead class="text-muted-foreground border-b text-left text-xs">
 			<tr>
@@ -92,7 +92,7 @@
 				<th class="px-4 py-2 font-medium">Collecting</th>
 			</tr>
 		</thead>
-		<tbody>
+		<tbody class="striped">
 			{#each data.sources as source (source.block_id)}
 				<tr class="border-b last:border-0">
 					<td class="px-4 py-2 font-medium">

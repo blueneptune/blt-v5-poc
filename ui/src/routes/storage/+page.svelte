@@ -17,19 +17,19 @@
 </p>
 
 <div class="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Capacity</p>
 		<p class="mt-1 text-2xl font-semibold tabular-nums">{bytes(sum.capacity) || '0 B'}</p>
 	</div>
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Used</p>
 		<p class="mt-1 text-2xl font-semibold tabular-nums">{bytes(sum.used) || '0 B'}</p>
 	</div>
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Free</p>
 		<p class="mt-1 text-2xl font-semibold tabular-nums">{bytes(sum.free) || '0 B'}</p>
 	</div>
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Need attention</p>
 		<p class="mt-1 text-2xl font-semibold tabular-nums">{sum.attention}</p>
 		<p class="text-muted-foreground text-xs">of {data.targets.length} targets</p>
@@ -52,7 +52,7 @@
 {#each groups as group (group.name)}
 	<section class="mt-6">
 		<h2 class="text-sm font-medium">{group.name}</h2>
-		<div class="mt-2 overflow-x-auto rounded-xl border">
+		<div class="bg-card mt-2 overflow-x-auto rounded-xl border shadow-sm">
 			<table class="w-full min-w-[720px] text-sm">
 				<thead class="bg-muted/60 text-muted-foreground text-left text-xs">
 					<tr>
@@ -64,7 +64,7 @@
 						<th class="px-3 py-2 text-right font-medium">Full in</th>
 					</tr>
 				</thead>
-				<tbody>
+				<tbody class="striped">
 					{#each group.targets as target (target.id)}
 						<tr class="border-t">
 							<td class="px-3 py-2">

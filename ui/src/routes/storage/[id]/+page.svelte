@@ -18,31 +18,31 @@
 </p>
 
 <div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Used</p>
 		<p class="mt-1 text-2xl font-semibold tabular-nums">{bytes(t.latest?.used_bytes) || '–'}</p>
 		<div class="mt-2"><StorageMeter target={t} /></div>
 	</div>
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Free of capacity</p>
 		<p class="mt-1 text-2xl font-semibold tabular-nums">{bytes(t.latest?.free_bytes) || '–'}</p>
 		<p class="text-muted-foreground text-xs">of {bytes(t.latest?.capacity_bytes) || 'unknown'}</p>
 	</div>
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Full in</p>
 		<p class="mt-1 text-2xl font-semibold">{fullIn(t) || '–'}</p>
 		<p class="text-muted-foreground text-xs">
 			{#if t.trend}{bytes(Math.abs(t.trend.used_bytes_per_day))}/day {t.trend.used_bytes_per_day < 0 ? 'freed' : 'more'}, over {t.trend.days} days{:else}needs 6 hours of samples{/if}
 		</p>
 	</div>
-	<div class="bg-card rounded-xl border p-4">
+	<div class="bg-card rounded-xl border shadow-sm p-4">
 		<p class="text-muted-foreground text-xs">Deduplication</p>
 		<p class="mt-1 text-2xl font-semibold tabular-nums">{t.latest?.dedupe_ratio ? `${t.latest.dedupe_ratio}:1` : '–'}</p>
 		{#if t.latest?.logical_bytes}<p class="text-muted-foreground text-xs">{bytes(t.latest.logical_bytes)} of data in {bytes(t.latest.physical_bytes)}</p>{/if}
 	</div>
 </div>
 
-<section class="bg-card mt-6 rounded-xl border p-4">
+<section class="bg-card mt-6 rounded-xl border shadow-sm p-4">
 	<div class="flex flex-wrap items-center justify-between gap-2">
 		<h2 class="font-medium">Used over time</h2>
 		<div class="flex gap-1 text-sm" role="group" aria-label="Time range">
@@ -64,7 +64,7 @@
 				<thead class="text-muted-foreground text-left text-xs">
 					<tr><th class="py-1">When</th><th class="py-1 text-right">Used</th><th class="py-1 text-right">Free</th><th class="py-1 text-right">Capacity</th></tr>
 				</thead>
-				<tbody>
+				<tbody class="striped">
 					{#each [...data.samples].reverse() as s (s.collected_at)}
 						<tr class="border-t">
 							<td class="py-1">{when(s.collected_at)}</td>

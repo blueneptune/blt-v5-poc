@@ -41,7 +41,7 @@
 	<p class="text-destructive mt-6 text-sm" role="alert">Could not read the runs: {data.problem}</p>
 {/if}
 
-<div class="bg-card mt-4 overflow-x-auto rounded-xl border">
+<div class="bg-card mt-4 overflow-x-auto rounded-xl border shadow-sm">
 	<table class="w-full text-sm">
 		<thead class="text-muted-foreground border-b text-left text-xs">
 			<tr>
@@ -53,7 +53,7 @@
 				<th class="px-4 py-2 font-medium">By</th>
 			</tr>
 		</thead>
-		<tbody>
+		<tbody class="striped">
 			{#each data.runs as run (run.id)}
 				<tr class="border-b last:border-0">
 					<td class="px-4 py-2"><RunBadge type={run.state_type} name={run.state_name} /></td>
