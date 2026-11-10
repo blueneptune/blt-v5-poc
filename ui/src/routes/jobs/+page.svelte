@@ -2,7 +2,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onDestroy, onMount } from 'svelte';
-	import { Pin, PinOff, RefreshCw, Search } from '@lucide/svelte';
+	import { Columns3, Pin, PinOff, RefreshCw, Search } from '@lucide/svelte';
 	import StateBadge from '$lib/components/StateBadge.svelte';
 	import StateBar from '$lib/components/StateBar.svelte';
 	import { bytes, duration, when } from '$lib/format';
@@ -15,6 +15,21 @@
 		type JobFilters,
 		type Window
 	} from '$lib/jobs';
+	import {
+		JOB_COLUMNS,
+		MAX_WIDTH,
+		MIN_WIDTH,
+		defaultPrefs,
+		parsePrefs,
+		reduction,
+		resetWidth,
+		setWidth,
+		shownColumns,
+		toggleColumn,
+		widthOf,
+		type ColumnPrefs,
+		type JobColumn
+	} from '$lib/jobColumns';
 
 	let { data } = $props();
 
@@ -73,11 +88,66 @@
 		}
 	}
 
+	// Which columns are shown, and how wide: the viewer's own, kept in this
+	// browser (lib/jobColumns.ts). A column is resized by dragging its
+	// heading's right edge, or with the arrow keys there; a double-click (or
+	// Home) gives it back its own width.
+	const COLUMNS_KEY = 'blt.jobs.columns';
+	let prefs = $state<ColumnPrefs>(defaultPrefs());
+	onMount(() => {
+		try {
+			prefs = parsePrefs(localStorage.getItem(COLUMNS_KEY));
+		} catch {
+			// No storage: the usual columns.
+		}
+	});
+	function keep(next: ColumnPrefs) {
+		prefs = next;
+		try {
+			localStorage.setItem(COLUMNS_KEY, JSON.stringify(next));
+		} catch {
+			// Not remembered, but still works for this visit.
+		}
+	}
+	const columns = $derived(shownColumns(prefs));
+	const tableWidth = $derived(columns.reduce((sum, c) => sum + widthOf(prefs, c), 0));
+
+	let dragging: { id: string; x: number; width: number } | null = null;
+	function grab(event: PointerEvent, column: JobColumn) {
+		event.preventDefault();
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		dragging = { id: column.id, x: event.clientX, width: widthOf(prefs, column) };
+	}
+	function drag(event: PointerEvent) {
+		if (dragging) prefs = setWidth(prefs, dragging.id, dragging.width + event.clientX - dragging.x);
+	}
+	function drop() {
+		if (dragging) keep(prefs);
+		dragging = null;
+	}
+	function nudge(event: KeyboardEvent, column: JobColumn) {
+		const step = event.shiftKey ? 64 : 16;
+		const width = widthOf(prefs, column);
+		if (event.key === 'ArrowLeft') keep(setWidth(prefs, column.id, width - step));
+		else if (event.key === 'ArrowRight') keep(setWidth(prefs, column.id, width + step));
+		else if (event.key === 'Home') keep(resetWidth(prefs, column.id));
+		else return;
+		event.preventDefault();
+	}
+
+	let picking = $state(false);
+	let picker = $state<HTMLElement | null>(null);
+	function outside(event: MouseEvent) {
+		if (picking && picker && !picker.contains(event.target as Node)) picking = false;
+	}
+
 	const chip = (on: boolean) =>
 		`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
 			on ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent text-muted-foreground'
 		}`;
 </script>
+
+<svelte:window onclick={outside} onkeydown={(e) => e.key === 'Escape' && (picking = false)} />
 
 <!-- Pinned (wider screens): the page fits the window and only the table
      scrolls, under the bar and with its headings kept at its top. -->
@@ -93,6 +163,54 @@
 				>
 					By protection
 				</a>
+				{#if !data.grouped}
+					<div class="relative" bind:this={picker}>
+						<button
+							type="button"
+							onclick={() => (picking = !picking)}
+							class="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-md p-1.5 text-xs"
+							aria-expanded={picking}
+							aria-controls="job-columns"
+						>
+							<Columns3 class="size-4" /> Columns
+						</button>
+						{#if picking}
+							<div
+								id="job-columns"
+								class="bg-card text-card-foreground absolute right-0 z-30 mt-1 w-72 rounded-xl border p-2 shadow-lg"
+							>
+								<fieldset>
+									<legend class="text-muted-foreground px-2 pb-1 text-xs">Columns shown</legend>
+									<div class="max-h-[60svh] overflow-y-auto">
+										{#each JOB_COLUMNS as column (column.id)}
+											{@const on = prefs.shown.includes(column.id)}
+											<label class="hover:bg-accent flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5">
+												<input
+													type="checkbox"
+													class="mt-0.5"
+													checked={on}
+													disabled={on && prefs.shown.length === 1}
+													onchange={() => keep(toggleColumn(prefs, column.id))}
+												/>
+												<span>
+													<span class="block text-sm">{column.label}</span>
+													<span class="text-muted-foreground block text-xs">{column.description}</span>
+												</span>
+											</label>
+										{/each}
+									</div>
+								</fieldset>
+								<button
+									type="button"
+									class="text-muted-foreground hover:text-foreground mt-1 w-full rounded-md px-2 py-1.5 text-left text-xs underline"
+									onclick={() => keep(defaultPrefs())}
+								>
+									Back to the usual columns and widths
+								</button>
+							</div>
+						{/if}
+					</div>
+				{/if}
 				<button
 					type="button"
 					onclick={togglePin}
@@ -228,19 +346,45 @@
 		</div>
 	{:else}
 		<div class="bg-card mt-4 min-h-0 overflow-auto rounded-xl border">
-			<table class="w-full text-sm">
+			<!-- Fixed layout: each column is as wide as its <col> says; the last,
+			     empty one takes what a wide window has left over. -->
+			<table class="table-fixed text-sm" style="width: max(100%, {tableWidth}px)">
+				<colgroup>
+					{#each columns as column (column.id)}<col style="width: {widthOf(prefs, column)}px" />{/each}
+					<col />
+				</colgroup>
 				<thead
 					class="text-muted-foreground bg-card sticky top-0 z-10 text-left text-xs shadow-[inset_0_-1px_0_var(--border)]"
 				>
 					<tr>
-						<th class="px-3 py-2 font-medium">State</th>
-						<th class="px-3 py-2 font-medium">Asset</th>
-						<th class="px-3 py-2 font-medium">Protection</th>
-						<th class="px-3 py-2 font-medium">Source</th>
-						<th class="px-3 py-2 font-medium">Kind</th>
-						<th class="px-3 py-2 font-medium">Started</th>
-						<th class="px-3 py-2 font-medium">Took</th>
-						<th class="px-3 py-2 text-right font-medium">Written</th>
+						{#each columns as column (column.id)}
+							<!-- Named outright: its resize handle is not part of its name. -->
+							<th
+								aria-label={column.label}
+								class="relative truncate px-3 py-2 font-medium {column.align === 'right' ? 'text-right' : ''}"
+							>
+								{column.label}
+								<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+								<span
+									role="separator"
+									aria-orientation="vertical"
+									aria-label="Width of {column.label}"
+									aria-valuenow={widthOf(prefs, column)}
+									aria-valuemin={MIN_WIDTH}
+									aria-valuemax={MAX_WIDTH}
+									tabindex="0"
+									title="Drag to resize; double-click for its own width"
+									class="hover:bg-primary/30 focus-visible:bg-primary/40 absolute top-0 right-0 h-full w-2 cursor-col-resize touch-none outline-none select-none"
+									onpointerdown={(e) => grab(e, column)}
+									onpointermove={drag}
+									onpointerup={drop}
+									onpointercancel={drop}
+									ondblclick={() => keep(resetWidth(prefs, column.id))}
+									onkeydown={(e) => nudge(e, column)}
+								></span>
+							</th>
+						{/each}
+						<th aria-hidden="true"></th>
 					</tr>
 				</thead>
 				<tbody class="divide-y">
@@ -249,27 +393,17 @@
 							class="hover:bg-muted/50 cursor-pointer {job.state === 'failed' ? 'bg-red-50/60 dark:bg-red-950/20' : ''}"
 							onclick={() => goto(`/jobs/${job.id}`)}
 						>
-							<td class="px-3 py-2"><StateBadge state={job.state} title={job.product_status} /></td>
-							<td class="max-w-64 px-3 py-2">
-								<a href="/jobs/{job.id}" class="font-medium hover:underline" onclick={(e) => e.stopPropagation()}>
-									{job.asset_name ?? job.product_job_key}
-								</a>
-								{#if job.message}
-									<p class="text-muted-foreground truncate text-xs" title={job.message}>{job.message}</p>
-								{/if}
-							</td>
-							<td class="text-muted-foreground px-3 py-2 whitespace-nowrap">{job.protection ?? ''}</td>
-							<td class="px-3 py-2 whitespace-nowrap">
-								{job.source_name}
-								<span class="text-muted-foreground text-xs">{job.source_type}</span>
-							</td>
-							<td class="text-muted-foreground px-3 py-2">{job.kind}</td>
-							<td class="px-3 py-2 whitespace-nowrap tabular-nums">{when(job.started_at)}</td>
-							<td class="px-3 py-2 whitespace-nowrap tabular-nums">{duration(job.started_at, job.ended_at)}</td>
-							<td class="px-3 py-2 text-right whitespace-nowrap tabular-nums">{bytes(job.bytes_transferred)}</td>
+							{#each columns as column (column.id)}
+								<td class="truncate px-3 py-2 {column.align === 'right' ? 'text-right tabular-nums' : ''}">
+									{@render cell(job, column.id)}
+								</td>
+							{/each}
+							<td></td>
 						</tr>
 					{:else}
-						<tr><td colspan="8" class="text-muted-foreground px-3 py-6 text-center">No jobs match.</td></tr>
+						<tr>
+							<td colspan={columns.length + 1} class="text-muted-foreground px-3 py-6 text-center">No jobs match.</td>
+						</tr>
 					{/each}
 				</tbody>
 			</table>
@@ -291,3 +425,53 @@
 		</div>
 	{/if}
 </div>
+
+{#snippet cell(job: (typeof data.jobs)[number], id: string)}
+	{#if id === 'state'}
+		<StateBadge state={job.state} title={job.product_status} />
+	{:else if id === 'asset'}
+		<a
+			href="/jobs/{job.id}"
+			class="block truncate font-medium hover:underline"
+			title={job.asset_name ?? job.product_job_key}
+			onclick={(e) => e.stopPropagation()}
+		>
+			{job.asset_name ?? job.product_job_key}
+		</a>
+		{#if job.message && !prefs.shown.includes('message')}
+			<p class="text-muted-foreground truncate text-xs" title={job.message}>{job.message}</p>
+		{/if}
+	{:else if id === 'message'}
+		<span class="text-muted-foreground" title={job.message ?? ''}>{job.message ?? ''}</span>
+	{:else if id === 'asset_type'}
+		<span class="text-muted-foreground" title={job.asset_type ?? ''}>{job.asset_type ?? ''}</span>
+	{:else if id === 'protection'}
+		<span class="text-muted-foreground" title={job.protection ?? ''}>{job.protection ?? ''}</span>
+	{:else if id === 'source'}
+		{job.source_name} <span class="text-muted-foreground text-xs">{job.source_type}</span>
+	{:else if id === 'kind'}
+		<span class="text-muted-foreground">{job.kind}</span>
+	{:else if id === 'product_status'}
+		<span title={job.product_status}>{job.product_status}</span>
+	{:else if id === 'job_id'}
+		<span class="font-mono text-xs">{job.product_job_key}</span>
+	{:else if id === 'started'}
+		<span class="tabular-nums">{when(job.started_at)}</span>
+	{:else if id === 'ended'}
+		<span class="tabular-nums">{job.is_active ? 'running' : when(job.ended_at)}</span>
+	{:else if id === 'took'}
+		<span class="tabular-nums">{duration(job.started_at, job.ended_at)}</span>
+	{:else if id === 'written'}
+		{bytes(job.bytes_transferred)}
+	{:else if id === 'protected'}
+		{bytes(job.bytes_protected)}
+	{:else if id === 'reduction'}
+		{reduction(job.bytes_protected, job.bytes_transferred)}
+	{:else if id === 'attempt'}
+		{job.attempt ?? ''}
+	{:else if id === 'updated'}
+		<span class="tabular-nums">{when(job.updated_at)}</span>
+	{:else if id === 'collected'}
+		<span class="tabular-nums">{when(job.last_collected_at)}</span>
+	{/if}
+{/snippet}

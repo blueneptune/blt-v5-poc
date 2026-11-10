@@ -107,6 +107,62 @@ test('jobs: unpinned, everything scrolls away, and that is remembered', async ({
 	await expect(page.getByRole('heading', { name: 'Jobs' })).not.toBeInViewport();
 });
 
+test('jobs: columns are chosen, and the choice is remembered', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 800 });
+	await page.goto(everyJob);
+	const heading = (name: string) => page.getByRole('columnheader', { name, exact: true });
+	await expect(heading('Job ID')).toHaveCount(0);
+
+	await page.getByRole('button', { name: 'Columns' }).click();
+	await page.getByRole('checkbox', { name: /^Job ID/ }).check();
+	await page.getByRole('checkbox', { name: /^Kind/ }).uncheck();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('group', { name: 'Columns shown' })).toBeHidden();
+	await expect(heading('Job ID')).toHaveCount(1);
+	await expect(heading('Kind')).toHaveCount(0);
+	// Its column shows each job's own id.
+	const first = page.locator('tbody tr').first();
+	await expect(first.locator("td").nth(4)).toHaveText(/\S/);
+
+	await page.reload();
+	await expect(heading('Job ID')).toHaveCount(1);
+	await expect(heading('Kind')).toHaveCount(0);
+
+	await page.getByRole('button', { name: 'Columns' }).click();
+	await page.getByRole('button', { name: 'Back to the usual columns and widths' }).click();
+	await expect(heading('Job ID')).toHaveCount(0);
+	await expect(heading('Kind')).toHaveCount(1);
+});
+
+test('jobs: a column is resized by dragging or with the keys, and remembered', async ({ page }) => {
+	await page.setViewportSize({ width: 1400, height: 800 });
+	await page.goto(everyJob);
+	const asset = page.getByRole('columnheader', { name: 'Asset', exact: true });
+	const edge = page.getByRole('separator', { name: 'Width of Asset' });
+	const width = async () => Math.round((await asset.boundingBox())!.width);
+	expect(await width()).toBe(256);
+
+	const box = (await edge.boundingBox())!;
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(box.x + 120, box.y + box.height / 2, { steps: 5 });
+	await page.mouse.up();
+	await expect.poll(width).toBeGreaterThan(360);
+	// Dragging a heading's edge does not open the job underneath.
+	await expect(page).toHaveURL(/\/jobs\?/);
+
+	await edge.focus();
+	const dragged = await width();
+	await page.keyboard.press('ArrowLeft');
+	await expect.poll(width).toBe(dragged - 16);
+	await expect(edge).toHaveAttribute('aria-valuenow', String(dragged - 16));
+
+	await page.reload();
+	await expect.poll(width).toBe(dragged - 16);
+	await page.getByRole('separator', { name: 'Width of Asset' }).dblclick();
+	await expect.poll(width).toBe(256);
+});
+
 test('jobs: narrower than the table, it scrolls sideways inside its box', async ({ page }) => {
 	await page.setViewportSize({ width: 1024, height: 700 });
 	await page.goto(everyJob);
