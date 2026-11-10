@@ -5,6 +5,8 @@
 	import StateBadge from '$lib/components/StateBadge.svelte';
 	import { ago, bytes, duration, when } from '$lib/format';
 	import { recordLabel } from '$lib/jobs';
+	import ProductRecord from '$lib/components/ProductRecord.svelte';
+	import { isEmpty, isObj, type Obj } from '$lib/record';
 
 	let { data } = $props();
 	const job = $derived(data.job);
@@ -31,6 +33,14 @@
 		['Attempt', job.attempt?.toString()],
 		['Product job id', job.product_job_key]
 	] as const);
+
+	// The product's record: blt's columns, then the product's own answer
+	// (raw). blt's bookkeeping is in the Collection panel already.
+	const BOOKKEEPING = ['raw', 'id', 'commcell_id', 'account_id', 'primary_id', 'first_seen_at', 'last_collected_at', 'last_seen_run_id'];
+	const PRODUCT_NAME: Record<string, string> = { commvault: 'Commvault', rubrik: 'Rubrik', netbackup: 'NetBackup' };
+	const product = $derived((job.product ?? {}) as Obj);
+	const raw = $derived(isObj(product.raw) && !isEmpty(product.raw) ? product.raw : null);
+	const productName = $derived(PRODUCT_NAME[job.source_type ?? ''] ?? 'the product');
 </script>
 
 <svelte:head><title>{job.asset_name ?? job.product_job_key} · blt</title></svelte:head>
@@ -79,8 +89,25 @@
 </div>
 
 <section class="bg-card mt-6 rounded-xl border shadow-sm p-4">
+	<h2 class="font-medium">{recordLabel(job.source_type, job.source_name)}</h2>
+	{#if isEmpty(product)}
+		<p class="text-muted-foreground mt-2 text-sm">blt has no record of this job from {productName} yet.</p>
+	{:else}
+		<div class="mt-3">
+			<ProductRecord record={product} skip={BOOKKEEPING} />
+		</div>
+		{#if raw}
+			<h3 class="mt-6 border-t pt-4 text-sm font-semibold">As {productName} reports it</h3>
+			<div class="mt-3">
+				<ProductRecord record={raw} />
+			</div>
+		{/if}
+	{/if}
+</section>
+
+<section class="bg-card mt-6 rounded-xl border shadow-sm p-4">
 	<details>
-		<summary class="cursor-pointer font-medium">{recordLabel(job.source_type, job.source_name)}</summary>
+		<summary class="cursor-pointer font-medium">Raw record (JSON)</summary>
 		<p class="text-muted-foreground mt-1 text-xs">As blt stores it; also at <code>{job.product_path}</code> in the API.</p>
 		<pre class="bg-muted mt-3 max-h-[32rem] overflow-auto rounded-lg p-3 text-xs">{JSON.stringify(job.product, null, 2)}</pre>
 	</details>

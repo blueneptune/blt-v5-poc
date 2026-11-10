@@ -104,7 +104,37 @@ createServer(async (req, res) => {
 	if (one) {
 		const job = JOBS.find((j) => j.id === one[1]);
 		if (!job) return send(res, 404, { detail: 'No such job' });
-		const detail: JobDetail = { ...job, product: { jobId: Number(job.product_job_key), status: job.product_status } };
+		// Shaped like a Commvault job row: blt's columns, and the product's own JSON in raw.
+		const detail: JobDetail = {
+			...job,
+			product: {
+				commcell_id: 1,
+				job_id: Number(job.product_job_key),
+				status: job.product_status,
+				client_name: job.asset_name,
+				storage_policy: job.protection,
+				size_of_application: 5_368_709_120,
+				elapsed_seconds: 3_725,
+				is_aged: false,
+				pending_reason: null,
+				first_seen_at: job.first_seen_at,
+				raw: {
+					jobSummary: {
+						jobId: Number(job.product_job_key),
+						jobStartTime: 1_794_300_000,
+						sizeOfApplication: 5_368_709_120,
+						backupLevelName: 'Incremental',
+						subclient: { clientName: job.asset_name, appName: 'File System', subclientName: 'default' },
+						dataPaths: [
+							{ mediaAgentName: 'ma01', libraryName: 'disk-lib-1', copyName: 'Primary' },
+							{ mediaAgentName: 'ma02', libraryName: 'cloud-lib', copyName: 'Secondary' }
+						],
+						totalFailedFiles: 0,
+						pendingReason: ''
+					}
+				}
+			}
+		};
 		return send(res, 200, detail);
 	}
 	send(res, 404, { detail: 'Not Found' });
