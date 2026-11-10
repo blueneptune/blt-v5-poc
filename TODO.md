@@ -294,7 +294,9 @@ current work.
     (`deploy/maintenance.sh` without the UI).
 
 27. **Jobs page** (asked for 2026-11-09):
-    - resizable columns, and a choice of columns - including fields blt
-      collects but does not show yet (list them for the user to pick);
+    - resizable columns, and a choice of columns - done 2026-11-09: a
+      Columns picker (18 fields, among them job id, ended, protected,
+      reduction, attempt, product status) and widths dragged or keyed,
+      kept per browser (ui/src/lib/jobColumns.ts);
     - in a job's detail, "the product's own record" named for the source
       it came from: the CommCell, the primary server, ...
