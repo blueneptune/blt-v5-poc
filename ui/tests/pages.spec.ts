@@ -196,6 +196,17 @@ test('a job: from the list to its page', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: job.asset_name! })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Collection' })).toBeVisible();
 	await expect(page.getByText(`${job.source_name}'s own record`)).toBeVisible();
+	// The product's record laid out, the JSON still underneath.
+	await expect(page.getByText('Size of application').first()).toBeVisible();
+	await expect(page.getByText('5.0 GiB (5,368,709,120)').first()).toBeVisible();
+	await expect(page.getByText('1h 2m')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'As Commvault reports it' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Job summary' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: /Data paths \(2\)/ })).toBeVisible();
+	await expect(page.getByRole('cell', { name: 'cloud-lib' })).toBeVisible();
+	await expect(page.getByText('Commcell ID')).toHaveCount(0);
+	await page.getByText('Raw record (JSON)').click();
+	await expect(page.locator('pre')).toContainText('"mediaAgentName": "ma02"');
 });
 
 test('a job that does not exist is a 404 page', async ({ page, errors }) => {
