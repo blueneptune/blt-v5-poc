@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { parseServiceAccount } from '$lib/admin';
 import { reason, refused, requireAdmin } from '$lib/server/admin';
+import { saveTiming } from '$lib/server/timing';
 import type { Actions, PageServerLoad } from './$types';
 
 /** A CommCell's or a Rubrik account's page; a NetBackup primary has its
@@ -49,6 +50,8 @@ async function patch(locals: App.Locals, type: Kind, name: string, body: Patch, 
 }
 
 export const actions: Actions = {
+	timing: ({ locals, params, request }) => saveTiming(locals, request, kindOf(params.type), params.name),
+
 	check: async ({ locals, params }) => {
 		requireAdmin(locals.user);
 		const run = await locals.api.POST('/v1/admin/sources/{source_type}/{source_name}/check', path(kindOf(params.type), params.name));

@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import RunLog from '$lib/components/RunLog.svelte';
 	import CollectorSelect from '$lib/components/CollectorSelect.svelte';
+	import TimingForm from '$lib/components/TimingForm.svelte';
 	import { sourceKindLabel } from '$lib/admin';
 	import { when } from '$lib/format';
 
@@ -100,6 +101,10 @@
 		<div class="mt-3"><RunLog runId={data.run} /></div>
 	{/if}
 </section>
+
+{#key source.updated}
+	<TimingForm timing={source.timing ?? {}} nextStarts={source.next_starts ?? []} collecting={source.collect} product={commvault ? 'Commvault' : 'Rubrik'} />
+{/key}
 
 <section class="mt-10 max-w-2xl">
 	<h2 class="text-lg font-semibold">Change</h2>

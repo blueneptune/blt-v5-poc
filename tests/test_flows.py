@@ -145,7 +145,7 @@ def test_every_commcell_is_started_before_any_is_waited_for(prefect_server: None
     # previous run, "good" would be done before "bad" was started.
     looks: dict[str, int] = {}
 
-    def start(deployment: str, commcell: str) -> str:
+    def start(deployment: str, commcell: str, delay: float = 0) -> str:
         assert deployment == flows.COLLECT_ONE
         if commcell == "unreachable-api":
             raise RuntimeError("Prefect refused the run")
@@ -203,7 +203,7 @@ def test_a_run_no_collector_picks_up_is_cancelled_at_the_deadline(prefect_server
             flows.COLLECT_ONE,
             "collect jobs",
             wait_minutes=1,
-            start=lambda _, name: f"run-{name}",
+            start=lambda _, name, delay=0: f"run-{name}",
             read_state=lambda run_id: {
                 "run-near": Completed(),
                 "run-busy": Running(),
@@ -329,3 +329,130 @@ def test_mark_blanks_the_file_and_touches_no_block(
 
     assert tokens_held_by(config / "msp.env") == "prefect"
     assert "msp-access-secret" not in (config / "msp.env").read_text()
+
+
+def test_a_run_started_later_has_its_own_deadline(prefect_server: None) -> None:
+    # "later" starts ten minutes after the firing (blt.timing's spread): a
+    # one-minute wait must count from its start, not from the firing.
+    asked: dict[str, float] = {}
+    cancelled_at: list[float] = []
+    ticks = iter(range(0, 10_000, 30))
+    now = [0.0]
+
+    def clock() -> float:
+        now[0] = next(ticks)
+        return now[0]
+
+    def start(_: str, name: str, delay: float = 0) -> str:
+        asked[name] = delay
+        return f"run-{name}"
+
+    @flow
+    def parent() -> dict[str, str]:
+        return flows.fan_out(
+            ["now", "later"],
+            flows.COLLECT_ONE,
+            "collect jobs",
+            wait_minutes=1,
+            delays={"later": 600},
+            start=start,
+            read_state=lambda run_id: Completed() if run_id == "run-now" else Late(),
+            cancel=lambda run_id: cancelled_at.append(now[0]),
+            clock=clock,
+            sleep=lambda _: None,
+        )
+
+    state = parent(return_state=True)
+    assert asked == {"now": 0.0, "later": 600}
+    assert cancelled_at and cancelled_at[0] >= 660
+    assert "not picked up" in str(state.result(raise_on_failure=False))
+
+
+def test_a_firing_starts_only_the_sources_that_are_due(
+    prefect_server: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from blt.timing import SourceTiming
+
+    started: dict[str, float] = {}
+
+    def start(_: str, name: str, delay: float = 0) -> str:
+        started[name] = delay
+        return f"run-{name}"
+
+    timings = {
+        "every-firing": SourceTiming(),
+        "nightly": SourceTiming(daily_at="02:30"),
+        "quiet-now": SourceTiming(quiet_from="00:00", quiet_until="23:59"),
+    }
+    monkeypatch.setattr(flows, "_timings", lambda slug: timings)
+
+    @flow
+    def parent() -> dict[str, str]:
+        return flows.fan_out_due(
+            None,
+            flows.COLLECT_ONE,
+            "collect jobs",
+            "jobs",
+            wait_minutes=1,
+            interval_minutes=60,
+            collectable=lambda: sorted(timings),
+            start=start,
+            read_state=lambda run_id: Completed(),
+        )
+
+    outcome = parent()
+    # "nightly" only in the firing whose hour holds 02:30 UTC.
+    assert set(outcome) in ({"every-firing"}, {"every-firing", "nightly"})
+    assert "quiet-now" not in started
+    assert 0 <= started["every-firing"] < 1800
+
+    # Named by hand: all of them, now, whatever their timing.
+    started.clear()
+
+    @flow
+    def by_hand() -> dict[str, str]:
+        return flows.fan_out_due(
+            ["quiet-now"],
+            flows.COLLECT_ONE,
+            "collect jobs",
+            "jobs",
+            wait_minutes=1,
+            interval_minutes=60,
+            start=start,
+            read_state=lambda run_id: Completed(),
+        )
+
+    by_hand()
+    assert started == {"quiet-now": 0.0}
+
+
+def test_each_parent_s_interval_is_its_schedule_s() -> None:
+    import inspect
+
+    import yaml
+
+    from blt.flows import netbackup, rubrik
+
+    by_entry = {
+        d["entrypoint"]: d["schedules"][0]["cron"]
+        for d in yaml.safe_load((Path(__file__).parents[1] / "prefect.yaml").read_text())[
+            "deployments"
+        ]
+        if d.get("schedules")
+    }
+    for module, name in [
+        (flows, "collect_jobs"),
+        (flows, "collect_inventory"),
+        (flows, "collect_storage"),
+        (rubrik, "rubrik_collect_jobs"),
+        (rubrik, "rubrik_collect_inventory"),
+        (netbackup, "netbackup_collect_jobs"),
+        (netbackup, "netbackup_collect_storage"),
+    ]:
+        target = getattr(module, name)
+        cron = by_entry[f"{module.__name__}:{name}"]
+        minutes, rest = cron.split(" ", 1)
+        firings = len(minutes.split(",")) * (2 if rest.startswith("5,17") else 24)
+        expected = 24 * 60 / firings if rest != "5,17 * * *" else 720
+        default = inspect.signature(target.fn).parameters["interval_minutes"].default
+        assert default == expected, (name, cron, default)

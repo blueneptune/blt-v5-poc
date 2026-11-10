@@ -38,6 +38,7 @@ from blt.queues import (
     check_collector,
     queue_for,
 )
+from blt.timing import SourceTiming, next_starts
 
 from .docs import UNAUTHORIZED
 from .prefect import PrefectApi, PrefectError
@@ -64,6 +65,14 @@ CHECKS: dict[str, tuple[tuple[str, str], str]] = {
     "netbackup": (NETBACKUP_CHECK, "primary"),
     "commvault": (("blt-commvault-check", "by-hand"), "commcell"),
     "rubrik": (("blt-rubrik-check", "by-hand"), "account"),
+}
+
+# The deployment that collects each product's jobs, and how often it
+# fires (prefect.yaml): a source's next start is worked out from it.
+JOBS_PARENTS: dict[str, tuple[str, str, float]] = {
+    "commvault": ("blt-collect-jobs", "hourly", 60),
+    "rubrik": ("blt-rubrik-collect-jobs", "hourly", 60),
+    "netbackup": ("blt-netbackup-collect-jobs", "every-15-minutes", 15),
 }
 
 # Prefect's own rule for block names.
@@ -105,6 +114,16 @@ class SourceBlockOut(BaseModel):
         default=None, description="Commvault: the block its credentials come from (an MSP login)."
     )
     secrets_set: list[str] = Field(description="The secret fields that have a value.")
+    timing: SourceTiming = Field(
+        default_factory=SourceTiming,
+        description="When it is collected; all empty: its product's schedule (blt.timing).",
+    )
+    timing_text: str = Field(default="product's schedule", description="That, in a few words.")
+    next_starts: list[datetime] = Field(
+        default_factory=list,
+        description="Its next job collections, from its product's schedule and its own "
+        "timing; empty when collection is off, or the schedule is paused.",
+    )
     updated: datetime | None = Field(default=None, description="When the block last changed.")
 
 
@@ -457,6 +476,11 @@ class SourceBlockPatch(BaseModel):
     service_account: RubrikServiceAccountIn | None = Field(
         default=None, description="Rubrik: a new service account file, in place of the one kept."
     )
+    timing: SourceTiming | None = Field(
+        default=None,
+        description="When it is collected, in place of what it had; all empty: its "
+        "product's schedule.",
+    )
 
     model_config = {"json_schema_extra": {"examples": [{"collect": True}]}}
 
@@ -779,6 +803,8 @@ def source_out(document: dict[str, Any]) -> SourceBlockOut | None:
         login=data.get("username") if kind == "commvault" else data.get("service_account_name"),
         credentials_from=data.get("credentials") if kind == "commvault" else None,
         secrets_set=secrets_set,
+        timing=(timing := SourceTiming.from_block(data)),
+        timing_text=timing.describe(),
         updated=document.get("updated"),
     )
 
@@ -870,7 +896,46 @@ def admin_router(
         holds a block for, with whether each secret is set - never its
         value."""
         documents = guarded(lambda: prefect.block_documents(list(BLOCK_TYPES)))
-        return [out for d in documents if (out := source_out(d))]
+        found = [out for d in documents if (out := source_out(d))]
+        firings = next_firings(prefect)
+        for source in found:
+            firing = firings.get(source.type)
+            if source.collect and firing is not None:
+                interval = JOBS_PARENTS[source.type][2]
+                source.next_starts = next_starts(source.name, source.timing, firing, interval)
+        return found
+
+    def next_firings(prefect: PrefectApi) -> dict[str, datetime]:
+        """Each product's next job-collection firing; none for one whose
+        deployment is paused or missing. Never fails the list: without
+        it, the sources are listed without their next starts."""
+        try:
+            deployments = prefect.deployments()
+            flows = prefect.flows(sorted({str(d["flow_id"]) for d in deployments}))
+            wanted = {(flow, name): kind for kind, (flow, name, _) in JOBS_PARENTS.items()}
+            ids = {
+                str(d["id"]): wanted[key]
+                for d in deployments
+                if (key := (flows.get(str(d["flow_id"]), ""), d["name"])) in wanted
+                and not d.get("paused")
+            }
+            if not ids:
+                return {}
+            upcoming = prefect.flow_runs(
+                deployment_ids=list(ids),
+                state_types=["SCHEDULED"],
+                sort="EXPECTED_START_TIME_ASC",
+                limit=50,
+            )
+        except PrefectError:
+            return {}
+        found: dict[str, datetime] = {}
+        for run in upcoming:
+            kind = ids.get(str(run.get("deployment_id")))
+            when = run.get("expected_start_time")
+            if kind and when and kind not in found:
+                found[kind] = datetime.fromisoformat(str(when).replace("Z", "+00:00"))
+        return found
 
     @router.post(
         "/sources/netbackup",
@@ -957,6 +1022,8 @@ def admin_router(
             changes["collector"] = body.collector or None
         if body.verify_tls is not None:
             changes["verify_tls"] = body.verify_tls
+        if body.timing is not None:
+            changes.update(body.timing.to_block())
         own: dict[str, dict[str, Any]] = {
             "netbackup": {
                 "url": body.url,

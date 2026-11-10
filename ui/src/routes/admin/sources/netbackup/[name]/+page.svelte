@@ -4,6 +4,7 @@
 	import RunLog from '$lib/components/RunLog.svelte';
 	import { when } from '$lib/format';
 	import CollectorSelect from '$lib/components/CollectorSelect.svelte';
+	import TimingForm from '$lib/components/TimingForm.svelte';
 
 	let { data, form } = $props();
 	const source = $derived(data.source);
@@ -77,6 +78,10 @@
 		<div class="mt-3"><RunLog runId={data.run} /></div>
 	{/if}
 </section>
+
+{#key source.updated}
+	<TimingForm timing={source.timing ?? {}} nextStarts={source.next_starts ?? []} collecting={source.collect} product={'NetBackup'} />
+{/key}
 
 <section class="mt-10 max-w-2xl">
 	<h2 class="text-lg font-semibold">Change</h2>

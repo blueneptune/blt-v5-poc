@@ -120,6 +120,36 @@ The command-line imports still work: `blt-prefect-import` for CommCells'
 `.env` files (and an MSP's credentials block, which the form does not
 make), and `blt-rubrik add`.
 
+### Collection timing
+
+Each product's parent flow fires on its own schedule (prefect.yaml:
+CommCell and Rubrik jobs hourly, NetBackup jobs every 15 minutes). At
+each firing it starts a run only for the sources that are due, each **at
+a time of its own** (blt.timing). A source's page sets its **Collection
+timing**:
+
+- **On the product's schedule** (the default): every firing, at an
+  offset of its own - a hash of its name - in the first half of the
+  interval, at most 30 minutes. Thirty primaries on "every 15 minutes"
+  start over seven and a half minutes instead of all at once.
+- **Every N hours**, at the same times each day (multiples of N from
+  midnight UTC, plus its offset). Never more often than the product's
+  schedule.
+- **Daily at a time**, in the source's time zone.
+- **A quiet window** (from - until, may span midnight): no collection of
+  any kind starts in it, storage and inventory included - for a domain's
+  busy backup hours.
+
+The rules for *when* are for job collection; storage and inventory keep
+their product's schedule, spread the same way, and keep out of the quiet
+window. Run now, or a parent flow run by hand naming sources, starts them
+at once whatever their timing. The Sources list shows each source's next
+start and its timing in a few words; its page, the next three. Nothing
+is stored between firings, so a firing Prefect missed loses only that
+interval's runs - the next run collects everything since the last one
+that worked. Pausing a product's schedule (Schedules) still pauses all of
+its sources; Collect off on a source stops that one.
+
 ### The NetBackup account
 
 NetBackup ties an API key to a user, one key per user. Make a service

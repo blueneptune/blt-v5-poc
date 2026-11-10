@@ -75,6 +75,20 @@ class CommvaultCommCell(Block):
         description="The remote collector that reaches it (its Prefect work queue; "
         "docs/remote-collector.md). Empty: blt's own worker.",
     )
+    # When it is collected (blt.timing); all empty: its product's schedule.
+    timing_every_minutes: int | None = Field(
+        default=None, description="Collect jobs every so many minutes (blt.timing)."
+    )
+    timing_daily_at: str | None = Field(
+        default=None, description="Or once a day at HH:MM, in timing_timezone."
+    )
+    timing_quiet_from: str | None = Field(
+        default=None, description="No collection starts from HH:MM..."
+    )
+    timing_quiet_until: str | None = Field(default=None, description="...until HH:MM.")
+    timing_timezone: str | None = Field(
+        default=None, description="The time zone of the times above; empty: UTC."
+    )
     credentials: str | None = Field(
         default=None,
         description="Name of another block to take the URL, deployment and tokens from "

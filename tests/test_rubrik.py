@@ -439,8 +439,10 @@ def test_no_account_blocks_means_nothing_to_do_not_the_commcells(
     def refuse(*args: object, **kwargs: object) -> dict[str, str]:
         raise AssertionError("fan_out must not run with no accounts")
 
-    monkeypatch.setattr(rubrik, "fan_out", refuse)
-    monkeypatch.setattr(rubrik, "get_run_logger", lambda: logging.getLogger("test"))
+    from blt.flows import flows
+
+    monkeypatch.setattr(flows, "fan_out", refuse)
+    monkeypatch.setattr(flows, "get_run_logger", lambda: logging.getLogger("test"))
 
     assert rubrik.rubrik_collect_jobs.fn() == {}
 
@@ -453,7 +455,9 @@ def test_no_account_blocks_means_no_inventory_either(monkeypatch: pytest.MonkeyP
     def refuse(*args: object, **kwargs: object) -> dict[str, str]:
         raise AssertionError("fan_out must not run with no accounts")
 
-    monkeypatch.setattr(rubrik, "fan_out", refuse)
-    monkeypatch.setattr(rubrik, "get_run_logger", lambda: logging.getLogger("test"))
+    from blt.flows import flows
+
+    monkeypatch.setattr(flows, "fan_out", refuse)
+    monkeypatch.setattr(flows, "get_run_logger", lambda: logging.getLogger("test"))
 
     assert rubrik.rubrik_collect_inventory.fn() == {}

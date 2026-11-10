@@ -38,7 +38,7 @@ from typing import cast
 import httpx
 from loguru import logger
 from netbackup_sdk import NetBackupClient
-from prefect import flow, get_run_logger
+from prefect import flow
 from prefect.blocks.core import Block
 from prefect.client.orchestration import get_client
 from prefect.client.schemas.objects import FlowRun
@@ -61,7 +61,7 @@ from blt.netbackup.store import NetBackupStore
 from blt.storage.netbackup import netbackup_storage
 from blt.storage.store import StorageStore
 
-from .flows import SLOTS, fan_out, logs_to_prefect, source_queue
+from .flows import SLOTS, fan_out_due, logs_to_prefect, source_queue, starts_at
 from .locks import source_lock
 from .rubrik import BltApiSettings
 
@@ -97,6 +97,20 @@ class NetBackupPrimaryBlock(Block):
         default=None,
         description="The remote collector that reaches it (its Prefect work queue; "
         "docs/remote-collector.md). Empty: blt's own worker.",
+    )
+    # When it is collected (blt.timing); all empty: its product's schedule.
+    timing_every_minutes: int | None = Field(
+        default=None, description="Collect jobs every so many minutes (blt.timing)."
+    )
+    timing_daily_at: str | None = Field(
+        default=None, description="Or once a day at HH:MM, in timing_timezone."
+    )
+    timing_quiet_from: str | None = Field(
+        default=None, description="No collection starts from HH:MM..."
+    )
+    timing_quiet_until: str | None = Field(default=None, description="...until HH:MM.")
+    timing_timezone: str | None = Field(
+        default=None, description="The time zone of the times above; empty: UTC."
     )
 
     @contextmanager
@@ -195,7 +209,7 @@ def collectable_primaries() -> list[str]:
     )
 
 
-def _start_run(deployment: str, primary: str) -> str:
+def _start_run(deployment: str, primary: str, delay_seconds: float = 0) -> str:
     label = "netbackup-jobs" if deployment == JOBS_ONE else "netbackup-storage"
     run = cast(
         FlowRun,
@@ -204,6 +218,7 @@ def _start_run(deployment: str, primary: str) -> str:
             parameters={"primary": primary},
             flow_run_name=f"{label}-{primary}",
             timeout=0,
+            scheduled_time=starts_at(delay_seconds),
             work_queue_name=source_queue(BLOCK_TYPE_SLUG, primary),
         ),
     )
@@ -212,35 +227,42 @@ def _start_run(deployment: str, primary: str) -> str:
 
 @flow(name="blt-netbackup-collect-storage")
 def netbackup_collect_storage(
-    primaries: list[str] | None = None, wait_minutes: float = 30
+    primaries: list[str] | None = None, wait_minutes: float = 30, interval_minutes: float = 60
 ) -> dict[str, str]:
-    """Storage from every NetBackup primary block (or the ones named), all
-    at once, each in its own flow run."""
-    names = primaries or collectable_primaries()
-    if not names:
-        # Checked here: fan_out given no names would fall back to the
-        # CommCell blocks.
-        get_run_logger().warning("No NetBackup primary blocks - see docs/storage.md")
-        return {}
-    return fan_out(
-        names, STORAGE_ONE, "collect NetBackup storage", wait_minutes=wait_minutes, start=_start_run
+    """Storage from every NetBackup primary block (or the ones named),
+    each in its own flow run, spread over the start of the interval."""
+    return fan_out_due(
+        primaries,
+        STORAGE_ONE,
+        "collect NetBackup storage",
+        "storage",
+        wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+        collectable=collectable_primaries,
+        block_type_slug=BLOCK_TYPE_SLUG,
+        start=_start_run,
+        nothing="No NetBackup primary blocks - see docs/storage.md",
     )
 
 
 @flow(name="blt-netbackup-collect-jobs")
 def netbackup_collect_jobs(
-    primaries: list[str] | None = None, wait_minutes: float = 14
+    primaries: list[str] | None = None, wait_minutes: float = 14, interval_minutes: float = 15
 ) -> dict[str, str]:
-    """Jobs from every NetBackup primary block (or the ones named), all at
-    once, each in its own flow run."""
-    names = primaries or collectable_primaries()
-    if not names:
-        # Checked here: fan_out given no names would fall back to the
-        # CommCell blocks.
-        get_run_logger().warning("No NetBackup primary blocks - see docs/netbackup.md")
-        return {}
-    return fan_out(
-        names, JOBS_ONE, "collect NetBackup jobs", wait_minutes=wait_minutes, start=_start_run
+    """Jobs from every NetBackup primary block that is due (or the ones
+    named, at once), each in its own flow run at its own time
+    (blt.timing)."""
+    return fan_out_due(
+        primaries,
+        JOBS_ONE,
+        "collect NetBackup jobs",
+        "jobs",
+        wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+        collectable=collectable_primaries,
+        block_type_slug=BLOCK_TYPE_SLUG,
+        start=_start_run,
+        nothing="No NetBackup primary blocks - see docs/netbackup.md",
     )
 
 

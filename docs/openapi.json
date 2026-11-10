@@ -11305,6 +11305,25 @@
             "title": "Secrets Set",
             "description": "The secret fields that have a value."
           },
+          "timing": {
+            "$ref": "#/components/schemas/SourceTiming",
+            "description": "When it is collected; all empty: its product's schedule (blt.timing)."
+          },
+          "timing_text": {
+            "type": "string",
+            "title": "Timing Text",
+            "description": "That, in a few words.",
+            "default": "product's schedule"
+          },
+          "next_starts": {
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "type": "array",
+            "title": "Next Starts",
+            "description": "Its next job collections, from its product's schedule and its own timing; empty when collection is off, or the schedule is paused."
+          },
           "updated": {
             "anyOf": [
               {
@@ -11495,6 +11514,17 @@
               }
             ],
             "description": "Rubrik: a new service account file, in place of the one kept."
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceTiming"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it is collected, in place of what it had; all empty: its product's schedule."
           }
         },
         "type": "object",
@@ -11546,6 +11576,84 @@
         ],
         "title": "SourceOut",
         "description": "A source blt collects from."
+      },
+      "SourceTiming": {
+        "properties": {
+          "every_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10080.0,
+                "minimum": 15.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Every Minutes",
+            "description": "Collect jobs every so many minutes, at fixed times (multiples of it from midnight UTC). Never more often than the product's own schedule.",
+            "examples": [
+              240
+            ]
+          },
+          "daily_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily At",
+            "description": "Or collect jobs once a day, at this time (HH:MM, in `timezone`).",
+            "examples": [
+              "06:15"
+            ]
+          },
+          "quiet_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet From",
+            "description": "No collection of any kind starts from this time (HH:MM, in `timezone`)...",
+            "examples": [
+              "22:00"
+            ]
+          },
+          "quiet_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Until",
+            "description": "...until this one. It may span midnight.",
+            "examples": [
+              "04:00"
+            ]
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "description": "The time zone of `daily_at` and the quiet window (IANA, e.g. America/Chicago).",
+            "default": "UTC",
+            "examples": [
+              "Europe/London"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "SourceTiming",
+        "description": "One source's collection timing. All empty: the product's own."
       },
       "StorageBatch": {
         "properties": {

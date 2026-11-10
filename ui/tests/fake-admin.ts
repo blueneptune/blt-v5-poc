@@ -30,6 +30,9 @@ const sources: Source[] = [
 		verify_tls: true,
 		has_ca_certificate: null,
 		secrets_set: ['access_token', 'refresh_token'],
+		timing: { timezone: 'UTC' },
+		timing_text: "product's schedule",
+		next_starts: [iso(-12)],
 		updated: iso(60)
 	},
 	{
@@ -41,6 +44,9 @@ const sources: Source[] = [
 		verify_tls: true,
 		has_ca_certificate: null,
 		secrets_set: ['client_secret'],
+		timing: { timezone: 'UTC' },
+		timing_text: "product's schedule",
+		next_starts: [iso(-12)],
 		updated: iso(600)
 	}
 ];
@@ -247,6 +253,9 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 			legacy_keys: !!body.legacy_keys,
 			collector: body.collector ?? null,
 			secrets_set: body.api_key ? ['api_key'] : [],
+			timing: { timezone: 'UTC' },
+			timing_text: "product's schedule",
+			next_starts: [iso(-12)],
 			updated: new Date().toISOString()
 		};
 		sources.push(added);
@@ -271,6 +280,9 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 			deployment: saas ? 'saas' : 'software',
 			login: token ? null : body.username,
 			secrets_set: token ? ['access_token', ...(body.refresh_token ? ['refresh_token'] : [])] : ['password'],
+			timing: { timezone: 'UTC' },
+			timing_text: "product's schedule",
+			next_starts: [iso(-12)],
 			updated: new Date().toISOString()
 		};
 		sources.push(added);
@@ -291,6 +303,9 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 			collector: body.collector ?? null,
 			login: account.name ?? null,
 			secrets_set: ['client_secret'],
+			timing: { timezone: 'UTC' },
+			timing_text: "product's schedule",
+			next_starts: [iso(-12)],
 			updated: new Date().toISOString()
 		};
 		sources.push(added);
@@ -314,6 +329,16 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 				if (body.username) found.login = body.username;
 			}
 			if (body.service_account) found.login = body.service_account.name ?? null;
+			if (body.timing) {
+				const timing = body.timing;
+				found.timing = timing;
+				found.timing_text = timing.daily_at
+					? `daily at ${timing.daily_at}${timing.timezone && timing.timezone !== 'UTC' ? ` ${timing.timezone}` : ''}`
+					: timing.every_minutes
+						? `every ${timing.every_minutes / 60} h`
+						: "product's schedule";
+				if (timing.quiet_from) found.timing_text += `, quiet ${timing.quiet_from}-${timing.quiet_until}`;
+			}
 			if (body.ca_certificate === '') found.has_ca_certificate = false;
 			else if (body.ca_certificate) found.has_ca_certificate = true;
 			found.updated = new Date().toISOString();

@@ -48,3 +48,14 @@ export function ago(value: string | null | undefined, now: Date = new Date()): s
 	if (hours < 48) return `${hours} h ago`;
 	return `${Math.round(hours / 24)} days ago`;
 }
+
+/** How far off a time is: "in 12 min", "in 3 h", "in 2 days". */
+export function until(value: string | null | undefined, now: Date = new Date()): string {
+	if (!value) return '';
+	const minutes = Math.round((Date.parse(value) - now.getTime()) / 60_000);
+	if (minutes < 1) return 'now';
+	if (minutes < 60) return `in ${minutes} min`;
+	const hours = Math.round(minutes / 60);
+	if (hours < 48) return `in ${hours} h`;
+	return `in ${Math.round(hours / 24)} days`;
+}

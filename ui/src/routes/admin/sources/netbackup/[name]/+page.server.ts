@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { reason, refused, requireAdmin } from '$lib/server/admin';
+import { saveTiming } from '$lib/server/timing';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
@@ -16,6 +17,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 const path = (name: string) => ({ params: { path: { source_type: 'netbackup' as const, source_name: name } } });
 
 export const actions: Actions = {
+	timing: ({ locals, params, request }) => saveTiming(locals, request, 'netbackup', params.name),
+
 	check: async ({ locals, params }) => {
 		requireAdmin(locals.user);
 		const run = await locals.api.POST('/v1/admin/sources/{source_type}/{source_name}/check', {

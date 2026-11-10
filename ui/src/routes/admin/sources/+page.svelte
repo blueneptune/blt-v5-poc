@@ -4,7 +4,7 @@
 	import { Plus } from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import { ADD_SOURCE_CHOICES, collectorLabel, collectorTone, sourceKindLabel } from '$lib/admin';
-	import { ago } from '$lib/format';
+	import { ago, until, when } from '$lib/format';
 	import { stateClass } from '$lib/jobs';
 	import CollectorSelect from '$lib/components/CollectorSelect.svelte';
 
@@ -88,6 +88,7 @@
 				<th class="px-4 py-2 font-medium">Secrets set</th>
 				<th class="hidden px-4 py-2 font-medium 2xl:table-cell">Changed</th>
 				<th class="px-4 py-2 font-medium">Collector</th>
+				<th class="px-4 py-2 font-medium">Next</th>
 				<th class="px-4 py-2 font-medium">Collecting</th>
 			</tr>
 		</thead>
@@ -133,6 +134,14 @@
 							<noscript><button type="submit" class="text-xs underline">Set</button></noscript>
 						</form>
 					</td>
+					<td class="px-4 py-2 whitespace-nowrap">
+						{#if source.collect && source.next_starts?.length}
+							<span title={when(source.next_starts[0])}>{until(source.next_starts[0])}</span>
+						{:else}
+							<span class="text-muted-foreground">—</span>
+						{/if}
+						<span class="text-muted-foreground block text-xs">{source.timing_text}</span>
+					</td>
 					<td class="px-4 py-2">
 						<form method="POST" action="?/collect" use:enhance>
 							<input type="hidden" name="type" value={source.type} />
@@ -155,7 +164,7 @@
 					</td>
 				</tr>
 			{:else}
-				<tr><td colspan="7" class="text-muted-foreground px-4 py-6 text-center">No sources yet.</td></tr>
+				<tr><td colspan="8" class="text-muted-foreground px-4 py-6 text-center">No sources yet.</td></tr>
 			{/each}
 		</tbody>
 	</table>
