@@ -34,8 +34,7 @@
 		{#if !collecting}
 			<span class="text-muted-foreground">Collection is off: nothing is started.</span>
 		{:else if nextStarts.length}
-			Next: {#each nextStarts as start, i (start)}{#if i}, {/if}<span title={when(start)}>{when(start)}</span>{#if i === 0}
-					<span class="text-muted-foreground">({until(start)})</span>{/if}{/each}
+			Next: {#each nextStarts as start, i (start)}{#if i}, {/if}<span title={when(start)}>{when(start)}</span>{#if i === 0}&nbsp;<span class="text-muted-foreground">({until(start)})</span>{/if}{/each}
 		{:else}
 			<span class="text-muted-foreground">No start in the coming week (or its schedule is paused).</span>
 		{/if}
