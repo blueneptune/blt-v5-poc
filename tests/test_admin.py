@@ -746,3 +746,28 @@ def test_maintenance_unstick_dry_run_changes_nothing_then_clears(
     assert all(prefect.runs[r]["state"]["type"] == "CANCELLED" for r in stuck)
     assert maintenance.main(["unstick"]) == 0
     assert "Nothing to clear." in capsys.readouterr().out
+
+
+def test_legacy_key_sizes_are_a_netbackup_primary_s_own_choice(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    added = http.post(
+        "/v1/admin/sources/netbackup",
+        json={"name": "nbu-2017", "url": "nbu17:443", "api_key": "k", "legacy_keys": True},
+    ).json()
+    assert added["legacy_keys"] is True and added["address"] == "https://nbu17:443/netbackup"
+    (stored,) = prefect.documents.values()
+    assert stored["data"]["legacy_keys"] is True
+
+    off = http.patch("/v1/admin/sources/netbackup/nbu-2017", json={"legacy_keys": False})
+    assert off.json()["legacy_keys"] is False
+    # Left out of a change, it stays.
+    http.patch("/v1/admin/sources/netbackup/nbu-2017", json={"collect": True})
+    assert stored["data"]["legacy_keys"] is False
+
+    prefect.add_block("blt-commvault-commcell", "cv", {"base_url": "https://cv/api"})
+    assert (
+        http.patch("/v1/admin/sources/commvault/cv", json={"legacy_keys": True}).status_code == 422
+    )
+    cv = next(s for s in http.get("/v1/admin/sources").json() if s["name"] == "cv")
+    assert cv["legacy_keys"] is None

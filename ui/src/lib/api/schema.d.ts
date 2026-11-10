@@ -2576,6 +2576,12 @@ export interface components {
              */
             verify_tls: boolean;
             /**
+             * Legacy Keys
+             * @description Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still checked.
+             * @default false
+             */
+            legacy_keys: boolean;
+            /**
              * Collect
              * @description Collected by the scheduled flows.
              * @default false
@@ -4198,6 +4204,11 @@ export interface components {
              */
             verify_tls?: boolean | null;
             /**
+             * Legacy Keys
+             * @description NetBackup: legacy (1024-bit) TLS keys are accepted.
+             */
+            legacy_keys?: boolean | null;
+            /**
              * Has Ca Certificate
              * @description NetBackup: a CA certificate is kept for it.
              */
@@ -4252,6 +4263,11 @@ export interface components {
              * @description NetBackup: check the primary's TLS certificate.
              */
             verify_tls?: boolean | null;
+            /**
+             * Legacy Keys
+             * @description NetBackup: Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still checked.
+             */
+            legacy_keys?: boolean | null;
         };
         /**
          * SourceOut

@@ -48,6 +48,22 @@ export const actions: Actions = {
 		return { saved: 'Saved. Check it again: the check runs from its collector.' };
 	},
 
+	/** Legacy (1024-bit) TLS keys accepted, or not, for this primary. */
+	legacyKeys: async ({ locals, params, request }) => {
+		requireAdmin(locals.user);
+		const legacy = (await request.formData()).get('legacy_keys') === 'true';
+		const result = await locals.api.PATCH('/v1/admin/sources/{source_type}/{source_name}', {
+			...path(params.name),
+			body: { legacy_keys: legacy }
+		});
+		if (!result.data) return refused(result);
+		return {
+			saved: legacy
+				? 'Legacy key sizes are accepted for it. Check it again.'
+				: 'Legacy key sizes are no longer accepted for it. Check it again.'
+		};
+	},
+
 	/** Changes what was filled in; empty fields stay as they are. */
 	change: async ({ locals, params, request }) => {
 		requireAdmin(locals.user);

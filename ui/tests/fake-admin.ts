@@ -204,6 +204,7 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 			address: `https://${host}:1556/netbackup`,
 			verify_tls: true,
 			has_ca_certificate: !!body.ca_certificate,
+			legacy_keys: !!body.legacy_keys,
 			collector: body.collector ?? null,
 			secrets_set: body.api_key ? ['api_key'] : [],
 			updated: new Date().toISOString()
@@ -219,6 +220,7 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 		if (method === 'PATCH') {
 			if (body.collect !== undefined && body.collect !== null) found.collect = body.collect;
 			if (body.collector !== undefined && body.collector !== null) found.collector = body.collector || null;
+			if (body.legacy_keys !== undefined && body.legacy_keys !== null) found.legacy_keys = body.legacy_keys;
 			if (body.ca_certificate === '') found.has_ca_certificate = false;
 			else if (body.ca_certificate) found.has_ca_certificate = true;
 			found.updated = new Date().toISOString();
@@ -247,7 +249,12 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 				['INFO', `${answered} gave 1 CA certificate(s)`],
 				['INFO', `CA certificate 1: CN=nbatd,OU=root@nbu01,O=vx - SHA-256 ${FINGERPRINT}`],
 				['INFO', PEM],
-				['INFO', "CA certificate 1 verifies this primary's TLS certificate."]
+				url.includes('nbu2017')
+					? [
+							'WARNING',
+							"CA certificate 1 verifies this primary's TLS certificate only with legacy key sizes accepted: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate key too weak"
+						]
+					: ['INFO', "CA certificate 1 verifies this primary's TLS certificate."]
 			])
 		];
 	}

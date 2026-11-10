@@ -35,6 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
+import httpx
 from loguru import logger
 from netbackup_sdk import NetBackupClient
 from prefect import flow, get_run_logger
@@ -46,7 +47,15 @@ from prefect.deployments import run_deployment
 from pydantic import Field, SecretStr
 
 from blt.collector.lock import run_lock
-from blt.netbackup.check import answers, check_primary, fallback_url, fetch_ca_answering, verifies
+from blt.netbackup.check import (
+    answers,
+    check_primary,
+    fallback_url,
+    fetch_ca_answering,
+    legacy_context,
+    verifies,
+    weak_key,
+)
 from blt.netbackup.collect import run_netbackup_collection
 from blt.netbackup.source import NetBackupJobs
 from blt.netbackup.store import NetBackupStore
@@ -79,6 +88,11 @@ class NetBackupPrimaryBlock(Block):
         description="The primary's CA certificate (PEM), when it is not signed by a public CA.",
     )
     verify_tls: bool = True
+    legacy_keys: bool = Field(
+        default=False,
+        description="Accept TLS keys today's defaults call too weak (1024-bit RSA), for a "
+        "primary whose CA predates 2048-bit keys. Chain, expiry and host name are still checked.",
+    )
     collect: bool = Field(default=True, description="Collected by the scheduled flows.")
     collector: str | None = Field(
         default=None,
@@ -95,11 +109,19 @@ class NetBackupPrimaryBlock(Block):
             if self.ca_certificate:
                 ca = Path(folder) / "ca.pem"
                 ca.write_text(self.ca_certificate)
+            # Legacy key sizes: the same checks, through a transport of
+            # our own (the SDK then leaves TLS to it).
+            transport = (
+                httpx.HTTPTransport(verify=legacy_context(ca))
+                if self.legacy_keys and self.verify_tls
+                else None
+            )
             with NetBackupClient(
                 self.url,
                 api_key=self.api_key.get_secret_value(),
                 verify_tls=self.verify_tls,
                 ca_bundle=ca,
+                transport=transport,
             ) as nbu:
                 yield nbu
 
@@ -239,6 +261,11 @@ def netbackup_check(primary: str) -> str:
         summary = f"{passed} of {len(checks)} checks passed"
         if not checks[0].ok:
             problem = f"Could not sign in to {primary}: {checks[0].detail}"
+            if weak_key(checks[0].detail) and not block.legacy_keys:
+                problem += (
+                    ". Its CA's key is below today's minimum (1024-bit, from an older install): "
+                    "turn on 'Accept legacy key sizes' for it, or have the CA migrated."
+                )
             other = fallback_url(block.url)
             if other and not answers(block.url) and answers(other):
                 problem += (
@@ -279,6 +306,15 @@ def netbackup_fetch_ca(url: str) -> str:
             if problem is None:
                 trusted += 1
                 logger.info("CA certificate {} verifies this primary's TLS certificate.", number)
+            elif weak_key(problem) and verifies(url, certificate.pem, legacy=True) is None:
+                trusted += 1
+                # The add page reads "only with legacy key sizes" (lib/admin.ts).
+                logger.warning(
+                    "CA certificate {} verifies this primary's TLS certificate only with legacy "
+                    "key sizes accepted: {}",
+                    number,
+                    problem,
+                )
             else:
                 logger.warning("CA certificate {} does not verify it: {}", number, problem)
         return f"{len(certificates)} CA certificate(s), {trusted} verifying the primary"

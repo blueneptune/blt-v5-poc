@@ -41,6 +41,7 @@ export const actions: Actions = {
 				api_key: String(form.get('api_key') ?? ''),
 				ca_certificate: text(form, 'ca_certificate') || null,
 				verify_tls: form.get('verify_tls') !== 'false',
+				legacy_keys: form.get('legacy_keys') === 'on',
 				collect: false,
 				collector: text(form, 'collector') || null
 			}

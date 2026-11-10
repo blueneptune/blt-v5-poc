@@ -12,6 +12,10 @@ is its CA certificate.
   against yet - so each certificate comes with its SHA-256 fingerprint,
   to be compared with the primary's own before it is trusted, and a test
   of whether it actually verifies the primary's TLS certificate.
+- `legacy_context(ca)` - TLS that still checks the chain, expiry and host
+  name but accepts keys today's defaults call too weak (1024-bit RSA): for
+  a primary whose NetBackup CA predates 2048-bit keys (a 2017 CA, kept
+  through every upgrade since). Each primary opts in (`legacy_keys`).
 - `fetch_ca_answering(url)` - the same, trying port 443 when the default
   1556 does not answer: some NetBackup 10.5 primaries serve the API only
   through their web server, on 443.
@@ -34,6 +38,10 @@ from netbackup_sdk import NetBackupClient
 from netbackup_sdk.client import tls_context
 from netbackup_sdk.versions import AUTO_ORDER, media_type
 from sdk_primer import AuthenticationError, NotFoundError, SDKError
+
+# OpenSSL's words when a certificate's key is below its security level:
+# "certificate key too weak", "CA key too small", "EE key too small".
+WEAK_KEY = re.compile(r"key too (weak|small)", re.IGNORECASE)
 
 DEFAULT_PORT = 1556
 FALLBACK_PORT = 443
@@ -194,14 +202,30 @@ def answers(url: str, timeout: float = 10.0) -> bool:
     return True
 
 
-def verifies(url: str, pem: str, timeout: float = 20.0) -> str | None:
+def legacy_context(ca: Path | None) -> ssl.SSLContext:
+    """As the SDK's own TLS (chain, expiry and host name all checked), but
+    at OpenSSL security level 1, which accepts 1024-bit RSA keys - and
+    nothing else changed."""
+    context = tls_context(ca) if ca else ssl.create_default_context()
+    context.set_ciphers("DEFAULT:@SECLEVEL=1")
+    return context
+
+
+def weak_key(problem: str | None) -> bool:
+    """Whether a TLS failure is only a key below today's minimum."""
+    return bool(problem and WEAK_KEY.search(problem))
+
+
+def verifies(url: str, pem: str, timeout: float = 20.0, *, legacy: bool = False) -> str | None:
     """None if the primary's TLS certificate verifies against `pem` for
-    this address; otherwise why not."""
+    this address; otherwise why not. `legacy`: with legacy key sizes
+    accepted (legacy_context)."""
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "ca.pem"
         path.write_text(pem)
+        context = legacy_context(path) if legacy else tls_context(path)
         try:
-            with httpx.Client(verify=tls_context(path), timeout=timeout) as http:
+            with httpx.Client(verify=context, timeout=timeout) as http:
                 http.get(f"{url}/ping", headers={"Accept": "*/*"})
         except httpx.ConnectError as error:
             return str(error)

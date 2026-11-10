@@ -25,6 +25,19 @@
 	<dd>{source.secrets_set.includes('api_key') ? 'set' : 'not set'}</dd>
 	<dt class="text-muted-foreground">CA certificate</dt>
 	<dd>{source.has_ca_certificate ? 'kept' : 'none (publicly signed, or not verified)'}</dd>
+	<dt class="text-muted-foreground self-center">Legacy key sizes</dt>
+	<dd>
+		<form method="POST" action="?/legacyKeys" use:enhance class="flex flex-wrap items-center gap-2">
+			<input type="hidden" name="legacy_keys" value={String(!source.legacy_keys)} />
+			{#if source.legacy_keys}
+				<span class="font-medium text-amber-700 dark:text-amber-300">accepted</span>
+				<span class="text-muted-foreground text-xs">(its CA's key is below today's minimum)</span>
+			{:else}
+				<span>not accepted</span>
+			{/if}
+			<Button type="submit" size="sm" variant="outline">{source.legacy_keys ? 'Stop accepting' : 'Accept'}</Button>
+		</form>
+	</dd>
 	<dt class="text-muted-foreground">Changed</dt>
 	<dd>{when(source.updated)}</dd>
 	<dt class="text-muted-foreground self-center">Collected by</dt>

@@ -51,6 +51,8 @@ export interface FoundCertificate {
 	sha256: string | null;
 	subject: string | null;
 	verifies: boolean | null;
+	/** It verifies only with legacy key sizes accepted (a 1024-bit CA). */
+	legacy: boolean;
 }
 
 const PEM = /-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s]+?-----END CERTIFICATE-----/g;
@@ -73,14 +75,23 @@ export function certificatesInLog(lines: { message: string }[]): FoundCertificat
 		const pems = message.match(PEM);
 		if (pems) {
 			for (const pem of pems)
-				found.push({ pem: `${pem.trim()}\n`, sha256: pending?.sha256 ?? null, subject: pending?.subject ?? null, verifies: null });
+				found.push({
+					pem: `${pem.trim()}\n`,
+					sha256: pending?.sha256 ?? null,
+					subject: pending?.subject ?? null,
+					verifies: null,
+					legacy: false
+				});
 			pending = null;
 			continue;
 		}
 		const verdict = /^CA certificate (\d+) (verifies|does not verify)/.exec(message);
 		if (verdict) {
 			const certificate = found[Number(verdict[1]) - 1];
-			if (certificate) certificate.verifies = verdict[2] === 'verifies';
+			if (certificate) {
+				certificate.verifies = verdict[2] === 'verifies';
+				certificate.legacy = certificate.verifies && message.includes('only with legacy key sizes');
+			}
 		}
 	}
 	return found;
