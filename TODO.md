@@ -4,71 +4,39 @@ Open items, roughly in the order they matter, grouped by area. Numbers
 never change, so a number in a commit or a conversation still finds its
 item; finished ones move to [Done](#done) at the end, one line each.
 
-## Next up (asked for 2026-11-09 and 2026-11-10)
+## Next up
 
-29. **One "Add a source" button** (asked for 2026-11-10). The Sources
-    page's "Add a NetBackup primary" becomes "Add a source", with a
-    choice of product, each opening its own form:
-    - **NetBackup primary** - today's form (address, fetch its CA, API
-      key, legacy key sizes);
-    - **CommCell** (Commvault on-prem, and Commvault Cloud) - address,
-      CA, user name and password or token, as blt-prefect-import takes
-      them today;
-    - **Rubrik account** - upload the service account's JSON file, as
-      blt-rubrik takes it today; the secret goes to the source's block
-      and is never shown again.
-    Each saves through the admin API (new POST endpoints beside the
-    NetBackup one) and runs Check. The CLI imports stay, and the note
-    "CommCells and Rubrik accounts get their credentials from
-    blt-prefect-import and blt-rubrik for now" goes.
-
-27. **Jobs page** (asked for 2026-11-09). Columns and widths are done
-    (see Done). Still to do: in a job's detail, "the product's own
-    record" named for the source it came from: the CommCell, the primary
-    server, the Rubrik account.
-
-24. **Per-source collection timing** (asked for 2026-11-09). Today each
-    kind of collection has one schedule in `prefect.yaml` and every
-    source with Collect on runs at the same moment. With 20-30 sources
-    that bunches the load, so:
-    - a **Collection schedule** on each source, set on its edit page:
-      "default" (the product's schedule), every N hours, or daily at a
-      time; plus an optional quiet window ("not between 22:00 and
-      04:00") for a domain's busy backup hours;
-    - an **automatic spread** for sources left on "default": each gets a
-      stable offset inside the interval (from its UUID), so 30 primaries
-      on "hourly" don't all start at :27;
-    - the parent flow still fires on the finest interval and skips any
-      source not due, so there is still one schedule per product to
-      pause; the product's interval is the finest a source can get;
-    - Administration shows each source's next run, and a per-source
-      pause next to the Collect switch.
-
-25. **Remote collectors, what is left** (the collectors themselves are
-    done: see Done, and docs/remote-collector.md). The direction
-    (2026-11-10): a small Kubernetes cluster in each location runs a
-    Prefect worker for that location's work pool, and each source's run
-    is its own pod. Toward that:
-    - a per-source lock held in Prefect, not in a file on one machine,
-      so two machines - or two pods - never run the same source at once,
-      and never renew one CommCell's tokens at once;
-    - a location cluster's worker: a Kubernetes work pool and its
-      manifests, straight to core's ingresses (no tunnel);
-    - keeping the desktop's tunnel up without a terminal (a systemd user
-      unit in WSL);
+25. **Location clusters, what is left** (direction 2026-11-10: a small
+    Kubernetes cluster per location runs its collector; see Done for what
+    is built). Still to do:
+    - a pod per flow run: `prefect-kubernetes` in the worker image, a
+      Kubernetes work pool per location (`blt-<location>`) with its base
+      job template, a Role to create Jobs, and blt routing a source's runs
+      to its location's pool (yoki-blt-infra docs/location-cluster.md,
+      "Two steps");
+    - merge yoki-blt-infra `F/Location_collector` once a blt release with
+      the Prefect-held locks is out, and stand up the first location;
     - an API key that may only collect, for collectors (with Zitadel).
 
-30. **Policies, read only** (asked for 2026-11-10). For each backup
-    product, a read view of its storage policies and its backup
-    policies: Commvault plans and storage policies, NetBackup policies
-    and storage lifecycle policies, Rubrik SLA domains. Collected like
-    storage, shown on their own page, nothing changed in the product.
-
-22. **Ready-made imports for API tools** (asked for 2026-10-30):
-    collections for Bruno, Postman and Insomnia generated from
-    `docs/openapi.json`, an environment per install (lab, work, a
-    customer's) with the key left blank, and example requests for the
-    common tasks. Generated like the spec, so they cannot drift.
+30. **Policies, read only** (asked for 2026-11-10; not started - it needs
+    a few answers first). Proposal: a fourth kind of collection,
+    `policies`, twice daily like inventory, storing each product's
+    policies as rows of `(source, kind, product key, name, summary
+    fields, raw JSON, first/last seen)`, and a Policies page listing them
+    per product with each one's raw record (as a job's page does):
+    - Commvault: plans (`GET /V2/Plan`, each plan's storage copies and
+      retention) and storage policies (`GET /V2/StoragePolicy` and each
+      one's copies) - `cv.raw` has both;
+    - NetBackup: policies (`/config/policies`: type, schedules, clients,
+      storage) and SLPs (`/config/slps`: operations, retention, target
+      storage);
+    - Rubrik: SLA domains (`rsc.sla_domains`: frequencies, retention,
+      archival, replication).
+    To settle with the owner: which fields the page shows for each
+    (retention, copies, schedule windows, SLP operations); whether
+    policies keep history (like assets) or only the latest (like jobs);
+    and a run of each read against a real CommServe, primary and RSC
+    account first, since none of these answers has been seen yet.
 
 ## Later, decided but not started
 
@@ -209,6 +177,34 @@ item; finished ones move to [Done](#done) at the end, one line each.
 
 ## Done
 
+29. One "Add a source" drop-down (2026-11-10): NetBackup primaries,
+    CommCells (a user and password, or a token pair; a CommServe or a
+    Commvault Cloud tenant) and Rubrik accounts (the service account's
+    file) added and checked from the UI; blt-commvault-check and
+    blt-rubrik-check beside NetBackup's; each source's page changes its
+    sign-in. An MSP's shared credentials block is still
+    blt-prefect-import's.
+27. Jobs page (2026-11-09/10): a Columns picker over 18 fields, widths
+    dragged or keyed (ui/src/lib/jobColumns.ts), and a job's raw record
+    named for its source ("CommCell cv-toaster's own record").
+24. Collection timing per source (2026-11-10, blt.timing): sources on
+    their product's schedule spread over the first half of its interval;
+    every N hours at fixed times, or daily at a time in the source's time
+    zone; a quiet window for any collection; each source's next starts on
+    the Sources list and its page. A per-source pause is the Collect
+    switch.
+25. Remote collectors (2026-11-09) and, on 2026-11-10: the per-source and
+    token-renewal locks held in Prefect (blt.flows.locks), so two machines
+    or pods never run one source at once; `deploy/collector.sh
+    keep-tunnel` keeps the desktop's tunnel up as a systemd user service;
+    yoki-blt-infra `clusters/location/blt-collector` and
+    docs/location-cluster.md (branch F/Location_collector). What is left
+    is item 25 above.
+22. Bruno, Postman and Insomnia collections (2026-11-10):
+    `blt-api-collections` makes docs/api-tools/ from docs/openapi.json,
+    with a Common tasks folder and an environment per install; a test
+    keeps them current.
+
 1. Renewing an access token after it expired - works (2026-10-05);
    `renewableUntil` did not move, so the 60 days look fixed from the
    token's creation.
@@ -226,16 +222,10 @@ item; finished ones move to [Done](#done) at the end, one line each.
 19. The Commvault SDK in its own repository, `yoki-py-commvault-sdk`
     (2026-10-10).
 21. The API paths from before /v1 removed (2026-10-30, 2026.10.30.3).
-25. Remote collectors (2026-11-09): each source names its collector,
-    runs go to its work queue, `deploy/collector.sh` sets one up over
-    ssh (docs/remote-collector.md). What is left is item 25 above.
 26. Stuck runs (2026-11-09): Prefect's leases on disk
     (`blt-prefect-home`), silent runs marked Crashed
     (`blt-crash-silent-runs`), run health and **Clear stuck runs** on
     Schedules, `deploy/maintenance.sh` (docs/admin.md, "Stuck runs").
-27. Jobs page columns (2026-11-09): a Columns picker over 18 fields, and
-    widths dragged or keyed, kept per browser (ui/src/lib/jobColumns.ts).
-    What is left is item 27 above.
 28. Legacy TLS keys (2026-11-09): a primary may accept 1024-bit keys
     (`legacy_keys`), for the 2017 CA at work; chain, expiry and host name
     still checked. Follow-up for that site: a NetBackup CA migration,
