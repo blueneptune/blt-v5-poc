@@ -46,7 +46,6 @@ from prefect.concurrency.sync import concurrency
 from prefect.deployments import run_deployment
 from pydantic import Field, SecretStr
 
-from blt.collector.lock import run_lock
 from blt.netbackup.check import (
     answers,
     check_primary,
@@ -63,12 +62,12 @@ from blt.storage.netbackup import netbackup_storage
 from blt.storage.store import StorageStore
 
 from .flows import SLOTS, fan_out, logs_to_prefect, source_queue
+from .locks import source_lock
 from .rubrik import BltApiSettings
 
 BLOCK_TYPE_SLUG = "blt-netbackup-primary"
 STORAGE_ONE = "blt-netbackup-storage-primary/per-primary"
 JOBS_ONE = "blt-netbackup-jobs-primary/per-primary"
-LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
 
 
 class NetBackupPrimaryBlock(Block):
@@ -128,7 +127,7 @@ class NetBackupPrimaryBlock(Block):
 
 def jobs_primary(name: str, block: NetBackupPrimaryBlock, *, force_full: bool = False) -> str:
     """One primary's job collection, under the primary's own jobs lock."""
-    with run_lock(LOCKS, f"netbackup-{name}.jobs") as held:
+    with source_lock(f"netbackup-{name}.jobs") as held:
         if not held:
             logger.warning("A job run for NetBackup {} is already running, skipping.", name)
             return "skipped: already running"
@@ -155,7 +154,7 @@ def netbackup_jobs_primary(primary: str, full: bool = False) -> str:
 def storage_primary(name: str, block: NetBackupPrimaryBlock) -> str:
     """One primary's storage, posted as one complete batch, under the
     primary's own lock."""
-    with run_lock(LOCKS, f"netbackup-{name}.storage") as held:
+    with source_lock(f"netbackup-{name}.storage") as held:
         if not held:
             logger.warning("A storage run for NetBackup {} is already running, skipping.", name)
             return "skipped: already running"

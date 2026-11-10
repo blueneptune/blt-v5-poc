@@ -7,6 +7,9 @@
 #   deploy/collector.sh push HOST NAME     copy the worker image to HOST (if it
 #                                          changed) and start collector NAME there
 #   deploy/collector.sh tunnel HOST        open the tunnel and keep it open (ctrl-c ends it)
+#   deploy/collector.sh keep-tunnel HOST   the tunnel as a systemd user service: up without
+#                                          a terminal, back by itself after a drop
+#   deploy/collector.sh drop-tunnel HOST   stop that service and remove it
 #   deploy/collector.sh ssh-config         the same tunnel as ~/.ssh/config lines
 #   deploy/collector.sh status HOST NAME   is it running, is the tunnel up, its last log lines
 #   deploy/collector.sh stop HOST NAME     remove it, and its settings file, from HOST
@@ -32,16 +35,19 @@ cd "$ROOT"
 # shellcheck source=deploy/env.sh
 source deploy/env.sh
 
-# For the tests: stand-ins for ssh and podman.
+# For the tests: stand-ins for ssh, podman and systemctl, and where the
+# user's systemd units go.
 SSH="${BLT_COLLECTOR_SSH:-ssh}"
 PODMAN="${BLT_COLLECTOR_PODMAN:-podman}"
+SYSTEMCTL="${BLT_COLLECTOR_SYSTEMCTL:-systemctl}"
+UNIT_DIR="${BLT_COLLECTOR_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
 
 IMAGE=localhost/blt-prefect-worker:latest
 REMOTE_PREFECT_PORT="${BLT_COLLECTOR_PREFECT_PORT:-14200}"
 REMOTE_API_PORT="${BLT_COLLECTOR_API_PORT:-18088}"
 
 usage() {
-    sed -n '7,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+    sed -n '7,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
@@ -108,8 +114,61 @@ tunnel() {
     while read -r forward; do args+=(-R "$forward"); done < <(forwards)
     echo "Tunnel to ${host}: its 127.0.0.1:${REMOTE_PREFECT_PORT} is this machine's Prefect," \
         "127.0.0.1:${REMOTE_API_PORT} its blt API. Ctrl-C closes it."
+    # From the systemd service: never wait at a prompt nobody will answer.
+    [[ "${BLT_TUNNEL_BATCH:-}" == 1 ]] && args+=(-o BatchMode=yes)
     exec "$SSH" -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
         -o ServerAliveCountMax=3 "${args[@]}" "$host"
+}
+
+check_host() {
+    if [[ ! "$1" =~ ^[A-Za-z0-9_.@:-]+$ ]]; then
+        echo "A host is user@host, or a Host from ~/.ssh/config: letters, digits and _.@:-" >&2
+        exit 1
+    fi
+}
+
+unit_name() { echo "blt-tunnel-${1//[^A-Za-z0-9_.-]/_}.service"; }
+
+keep_tunnel() {
+    local host="$1" unit
+    unit="$(unit_name "$host")"
+    mkdir -p "$UNIT_DIR"
+    cat >"${UNIT_DIR}/${unit}" <<UNIT
+# Made by deploy/collector.sh keep-tunnel ${host}; removed by drop-tunnel.
+[Unit]
+Description=blt: the tunnel to the remote collector on ${host}
+After=network-online.target
+Wants=network-online.target
+# Keep trying however often it drops.
+StartLimitIntervalSec=0
+
+[Service]
+Environment=BLT_TUNNEL_BATCH=1
+ExecStart=${ROOT}/deploy/collector.sh tunnel ${host}
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target
+UNIT
+    "$SYSTEMCTL" --user daemon-reload
+    "$SYSTEMCTL" --user enable --now "$unit"
+    echo "The tunnel to ${host} is the systemd user service ${unit}:"
+    echo "  systemctl --user status ${unit}     journalctl --user -u ${unit}"
+    echo "It needs ssh to ${host} without a prompt (a key in ssh-agent, or one with no"
+    echo "passphrase kept for this). To keep it up with nobody logged in, once:"
+    echo "  sudo loginctl enable-linger \$USER"
+    echo "In WSL also: systemd on ([boot] systemd=true in /etc/wsl.conf), and WSL kept"
+    echo "running (docs/remote-collector.md, \"Keeping the tunnel up\")."
+}
+
+drop_tunnel() {
+    local host="$1" unit
+    unit="$(unit_name "$host")"
+    "$SYSTEMCTL" --user disable --now "$unit" || true
+    rm -f "${UNIT_DIR}/${unit}"
+    "$SYSTEMCTL" --user daemon-reload
+    echo "The tunnel service to ${host} is gone. deploy/collector.sh tunnel ${host} still opens it by hand."
 }
 
 ssh_config() {
@@ -164,6 +223,16 @@ case "$command" in
         [[ $# -eq 2 ]] || usage
         need_prefect
         tunnel "$2"
+        ;;
+    keep-tunnel | drop-tunnel)
+        [[ $# -eq 2 ]] || usage
+        check_host "$2"
+        if [[ "$command" == keep-tunnel ]]; then
+            need_prefect
+            keep_tunnel "$2"
+        else
+            drop_tunnel "$2"
+        fi
         ;;
     ssh-config)
         need_prefect

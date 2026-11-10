@@ -461,3 +461,62 @@ def test_maintenance_runs_inside_the_api_container(tmp_path: Path) -> None:
     assert calls[-1] == "exec blt-api python -m blt.api.maintenance unstick --dry-run"
     assert "key-1" not in log.read_text()  # the key stays in the container
     assert run("restart-everything").returncode == 2
+
+
+def test_the_tunnel_is_kept_up_by_a_systemd_user_service(tmp_path: Path) -> None:
+    units = tmp_path / "units"
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(ENV + "BLT_PREFECT_BIND_ADDRESS=127.0.0.1\n")
+    environment = {
+        **clean_environment(),
+        "BLT_ENV_FILE": str(env_file),
+        "BLT_COLLECTOR_SYSTEMCTL": str(fake(tmp_path, "systemctl", "-")),
+        "BLT_COLLECTOR_UNIT_DIR": str(units),
+    }
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "deploy/collector.sh", *args],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+        )
+
+    kept = run("keep-tunnel", "blue@tools-box")
+    assert kept.returncode == 0, kept.stderr
+    unit = units / "blt-tunnel-blue_tools-box.service"
+    text = unit.read_text()
+    assert f"ExecStart={ROOT}/deploy/collector.sh tunnel blue@tools-box" in text
+    assert "Restart=always" in text and "Environment=BLT_TUNNEL_BATCH=1" in text
+    assert [args for args, _ in calls(tmp_path, "systemctl")] == [
+        ["--user", "daemon-reload"],
+        ["--user", "enable", "--now", "blt-tunnel-blue_tools-box.service"],
+    ]
+
+    dropped = run("drop-tunnel", "blue@tools-box")
+    assert dropped.returncode == 0, dropped.stderr
+    assert not unit.exists()
+    assert run("keep-tunnel", "tools box; rm -rf /").returncode == 1
+
+
+def test_the_tunnel_from_the_service_never_waits_at_a_prompt(tmp_path: Path) -> None:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(ENV + "BLT_PREFECT_BIND_ADDRESS=127.0.0.1\n")
+    result = subprocess.run(
+        ["bash", "deploy/collector.sh", "tunnel", "tools-box"],
+        cwd=ROOT,
+        env={
+            **clean_environment(),
+            "BLT_ENV_FILE": str(env_file),
+            "BLT_COLLECTOR_SSH": str(fake(tmp_path, "ssh", "-")),
+            "BLT_TUNNEL_BATCH": "1",
+        },
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+    assert result.returncode == 0, result.stderr
+    ((args, _),) = calls(tmp_path, "ssh")
+    assert "BatchMode=yes" in args and args[-1] == "tools-box"

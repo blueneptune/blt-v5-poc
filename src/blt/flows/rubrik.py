@@ -21,8 +21,6 @@ BLT_MAX_PARALLEL caps collection runs of every product together.
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
 from typing import cast
 
 from loguru import logger
@@ -37,17 +35,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from rubrik_sdk import RubrikClient, ServiceAccount
 from sdk_primer import APIClient
 
-from blt.collector.lock import run_lock
 from blt.rubrik.collect import run_rubrik_collection, run_rubrik_inventory
 from blt.rubrik.source import RubrikInventory, RubrikJobs
 from blt.rubrik.store import RubrikStore
 
 from .flows import SLOTS, fan_out, logs_to_prefect, source_queue
+from .locks import source_lock
 
 BLOCK_TYPE_SLUG = "blt-rubrik-account"
 COLLECT_ONE = "blt-rubrik-collect-account/per-account"
 INVENTORY_ONE = "blt-rubrik-inventory-account/per-account"
-LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
 
 
 class RubrikAccountBlock(Block):
@@ -120,7 +117,7 @@ class BltApiSettings(BaseSettings):
 def collect_account(name: str, block: RubrikAccountBlock, *, force_full: bool = False) -> str:
     """One account's collection, with the per-account lock - shared by the
     flow and the blt-rubrik command."""
-    with run_lock(LOCKS, f"rubrik-{name}.collection") as held:
+    with source_lock(f"rubrik-{name}.collection") as held:
         if not held:
             logger.warning("A collection for Rubrik account {} is already running, skipping.", name)
             return "skipped: already running"
@@ -143,7 +140,7 @@ def collect_account(name: str, block: RubrikAccountBlock, *, force_full: bool = 
 def inventory_account(name: str, block: RubrikAccountBlock) -> str:
     """One account's inventory, with its own lock: it can run while the
     account's jobs are being collected, not alongside another inventory."""
-    with run_lock(LOCKS, f"rubrik-{name}.inventory") as held:
+    with source_lock(f"rubrik-{name}.inventory") as held:
         if not held:
             logger.warning("An inventory for Rubrik account {} is already running, skipping.", name)
             return "skipped: already running"

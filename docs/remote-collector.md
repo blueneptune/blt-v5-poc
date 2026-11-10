@@ -35,6 +35,15 @@ point each region's sources at it. Several machines may run the same
 collector, for example two tools servers in the UK. They share its queue,
 and each run goes to one of them.
 
+**One run per source, wherever it runs.** A source's run that finds the
+previous one still going skips ("already running"), and two runs never
+renew one Commvault token pair at once. Both locks are held in Prefect
+(`blt-lock-<source>.<kind>` global concurrency limits of one slot,
+blt.flows.locks), so they hold across machines - and across pods, for a
+location's cluster that runs each flow run in its own. A run holds its
+lock under a lease it renews as it goes; if its machine or pod dies, the
+lock is free again within two minutes.
+
 **When a collector is away.** If a run is still waiting at the parent's
 deadline (`wait_minutes`), it is **cancelled** and reported: "not picked
 up ... is its collector running?". Without that, runs would pile up while
@@ -76,6 +85,40 @@ deploy/collector.sh ssh-config     # prints the RemoteForward lines to paste
 A second session to the same host at the same time only warns that the
 ports are taken. The first session's tunnel keeps working.
 
+### Keeping the tunnel up
+
+`tunnel` lasts as long as its terminal: close it, let the laptop sleep, or
+shut WSL down, and the collector goes offline. Its runs are then cancelled
+unstarted and reported, and that region collects nothing until the tunnel
+is back. To have it come up by itself and come back after every drop:
+
+```bash
+deploy/collector.sh keep-tunnel tools-server   # a systemd user service, started now and at every boot
+systemctl --user status blt-tunnel-tools-server.service
+deploy/collector.sh drop-tunnel tools-server   # stop it and remove it
+```
+
+The service restarts the tunnel 15 seconds after it ends, however often.
+ssh notices a dead connection within about 90 seconds (keepalives every
+30), and a tunnel that could not claim its ports ends rather than looking
+up while forwarding nothing. For it to work unattended:
+
+- **ssh without a prompt.** The service never answers one (BatchMode): a
+  key loaded in `ssh-agent` for your user, or a key kept only for this
+  with no passphrase. On the tools server, that key may be limited to the
+  tunnel in `authorized_keys`:
+  `restrict,port-forwarding,command="/bin/false" ssh-ed25519 AAAA...`.
+- **The service running with nobody logged in:** once,
+  `sudo loginctl enable-linger $USER`.
+- **In WSL**, systemd on: `/etc/wsl.conf` with `[boot]` `systemd=true`,
+  then `wsl --shutdown` from Windows. And WSL itself kept running: Windows
+  stops a WSL distribution a while after its last window closes. Either
+  keep a WSL window open, or start it at sign-in from Windows Task
+  Scheduler with `wsl.exe -d <distro> --exec sleep infinity`.
+
+`journalctl --user -u blt-tunnel-tools-server.service` shows each drop and
+restart.
+
 **After upgrading blt** (`./deploy/up.sh` builds a new worker image), run
 `push` again so the collector runs the same version.
 
@@ -103,23 +146,27 @@ never on a command line. The tools server therefore holds the keys to
 every source in Prefect, so treat it as you would blt's own machine.
 `stop` deletes the file.
 
-## blt on the cluster
+## blt on the cluster, and location clusters
 
-Nothing about the collector changes except where it reaches Prefect and
-the API. On the cluster these are https ingresses (prefect.blt...,
+On the cluster, Prefect and the API are https ingresses (prefect.blt...,
 api.blt...), so a collector that can reach them needs no tunnel. Run the
 image with `BLT_COLLECTOR`, `PREFECT_API_URL`, `PREFECT_API_AUTH_STRING`,
-`BLT_API_URL` and `BLT_API_KEY` pointing there. `collector.sh` does the
-desktop case only, for now.
+`BLT_API_URL` and `BLT_API_KEY` pointing there (and `SSL_CERT_FILE` /
+`PREFECT_API_SSL_CERT_FILE` for core's CA, unless its certificate is
+publicly signed).
+
+The direction for each location is a small Kubernetes cluster of its own
+running the collector, with core's ingresses its only way to blt:
+yoki-blt-infra `docs/location-cluster.md` and
+`clusters/location/blt-collector` (two replicas, now that the locks are in
+Prefect). The step after: a Prefect Kubernetes work pool per location, a
+pod per flow run.
 
 ## Known limits
 
-- **Two machines on one collector can overlap on one source** if one
-  source's run outlasts its interval, because the "already running" lock
-  is per machine. The data stays right, since every write is an upsert;
-  only the work is doubled. A Prefect-held lock per source would fix
-  this (TODO.md).
-- A collector stopped in the middle of a run leaves that run showing
-  Running in Prefect until someone cancels it.
+- A collector stopped in the middle of a run leaves that run in Running
+  until `blt-crash-silent-runs` marks it Crashed (5 minutes without a
+  heartbeat; docs/admin.md, "Stuck runs"), and its lock until its lease
+  runs out.
 - The collector uses blt's one API key. Keys scoped to collecting come
   with Zitadel.

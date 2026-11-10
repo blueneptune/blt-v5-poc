@@ -24,11 +24,9 @@ waits for them, up to wait_minutes, and fails if any did.
 
 from __future__ import annotations
 
-import tempfile
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID
 
@@ -45,7 +43,6 @@ from sdk_primer import APIClient
 from blt.collector.collect import run_backfill, run_collection, run_inventory
 from blt.collector.connect import build_client
 from blt.collector.inventory import iter_inventory
-from blt.collector.lock import run_lock
 from blt.collector.settings import CollectorSettings
 from blt.collector.source import CommvaultJobs
 from blt.collector.store import BltStore
@@ -54,8 +51,8 @@ from blt.storage.collect import collect_commvault_storage
 from blt.storage.store import StorageStore
 
 from .blocks import BLOCK_TYPE_SLUG, BlockTokenStore, settings_from_blocks
+from .locks import source_lock
 
-LOCKS = Path(tempfile.gettempdir()) / "blt-locks"
 # How many CommCells may collect at once, across every flow: a global
 # concurrency limit the worker creates on start (BLT_MAX_PARALLEL).
 SLOTS = SLOT_LIMIT
@@ -118,7 +115,7 @@ def _with_commcell_api(
     # A slot first (waiting for one if every slot is taken), then the
     # per-CommCell lock. Without the limit defined, nothing is capped.
     with logs_to_prefect(), concurrency(SLOTS, occupy=1, strict=False):
-        with run_lock(LOCKS, f"{commcell}.{kind}") as held:
+        with source_lock(f"commvault-{commcell}.{kind}") as held:
             if not held:
                 logger.warning("A {} for {} is already running, skipping.", kind, commcell)
                 return "skipped: already running"

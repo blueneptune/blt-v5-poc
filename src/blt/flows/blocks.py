@@ -15,11 +15,9 @@ docs/prefect.md before moving them.
 from __future__ import annotations
 
 import json
-import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Literal, cast
 
 from commvault_sdk import TokenSet
@@ -27,7 +25,6 @@ from loguru import logger
 from prefect.blocks.core import Block
 from pydantic import Field, SecretStr
 
-from blt.collector.lock import wait_lock
 from blt.collector.settings import CollectorSettings
 
 BLOCK_TYPE_SLUG = "blt-commvault-commcell"
@@ -176,16 +173,14 @@ def settings_from_blocks(name: str, load: Loader = _load) -> tuple[CollectorSett
 class BlockTokenStore:
     """Tokens kept in a block (connect.TokenStore).
 
-    Turns are taken with a file lock in the worker's temp directory. That
-    serialises renewals among flow runs on one worker, which is the setup
-    this is built for; a second worker on another machine would need a
-    Prefect concurrency limit instead.
+    Turns are taken with a lock held in Prefect (blt.flows.locks), so two
+    runs never renew one token pair at once - on one worker, on two
+    machines of a collector, or in two pods.
     """
 
     def __init__(self, name: str, load: Loader = _load) -> None:
         self.name = name
         self._load = load
-        self._lock_file = Path(tempfile.gettempdir()) / "blt-locks" / f"{name}.token.lock"
 
     def save(self, tokens: TokenSet, raw_response: dict[str, Any]) -> None:
         block = self._load(self.name)
@@ -209,5 +204,9 @@ class BlockTokenStore:
 
     @contextmanager
     def lock(self) -> Iterator[None]:
-        with wait_lock(self._lock_file):
+        # Imported here: blt.flows.locks needs a Prefect client, and
+        # importing this module (for the block type) should not.
+        from .locks import wait_lock
+
+        with wait_lock(f"commvault-{self.name}.token"):
             yield
