@@ -1,0 +1,25 @@
+meta {
+  name: Run a deployment now
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/deployments/{{deployment_id}}/runs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "parameters": {
+      "commcell": "cv-toaster"
+    }
+  }
+}
+
+docs {
+  Starts a run now, with these parameters over its defaults. A
+  run for one source (a `commcell`, `account` or `primary`
+  parameter) goes to the collector that reaches that source.
+}

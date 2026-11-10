@@ -1,0 +1,21 @@
+meta {
+  name: Collect from a source now
+  type: http
+  seq: 8
+}
+
+patch {
+  url: {{baseUrl}}/v1/admin/sources/{{sourceType}}/{{sourceName}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collect": true
+  }
+}
+
+docs {
+  Turns collection on for a source (false: off).
+}

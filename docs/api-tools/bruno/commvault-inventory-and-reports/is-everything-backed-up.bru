@@ -1,0 +1,20 @@
+meta {
+  name: Is everything backed up
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/validation
+  body: none
+  auth: inherit
+}
+
+docs {
+  Is everything this source says exists also backed up?
+
+  Judged entirely from the source's own inventory (see
+  ValidationReport for what that can and cannot establish), with
+  each database's last backup job looked up in the job table as a
+  second opinion on whether that backup actually succeeded.
+}

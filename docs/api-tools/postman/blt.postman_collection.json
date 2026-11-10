@@ -1,0 +1,1670 @@
+{
+  "info": {
+    "_postman_id": "3d83d1d4-a645-5958-8196-d5c0e82a3d61",
+    "name": "blt API",
+    "description": "\nblt collects backup jobs and inventory from backup products (Commvault,\nRubrik) into one database. **This API is the only thing that reads or\nwrites that database.** Collectors never touch Postgres: they ask the API\nwhere they left off, post what they collected, and report how the run\nwent. Reports and other readers use the same API.\n\n## Signing in\n\nEvery endpoint except `/healthz` needs the API key in an `X-API-Key`\nheader. In these docs: **Authorize** (top right), paste the key, and the\n*Try it out* buttons send it.\n\n```\ncurl -H \"X-API-Key: $BLT_API_KEY\" \\\n    https://api.blt.lab.ethos.home/v1/sources/commvault/cv-toaster/last-run\n```\n\n## Conventions\n\n- **Sources are named in the path**:\n  `/v1/sources/{source type}/{source name}/...` - a CommCell is\n  `/v1/sources/commvault/cv-toaster`, an RSC account\n  `/v1/sources/rubrik/work`. The name is blt's own (its Prefect\n  block's), not the product's. Each source type has its own endpoints\n  below that, in its product's own terms.\n- **Times** are ISO 8601 with a time zone (`2026-10-29T14:00:00Z`). A\n  time in a request body without one is refused.\n- **Lists** page with `limit` and `offset`.\n- **Errors** come back as `{\"detail\": \"...\"}`: 401 for a missing or wrong\n  key, 404 for an unknown source, run or job, 422 for a body or\n  parameter that does not validate.\n- **Writes are upserts**, keyed by the source's own ids. Posting the same\n  batch twice changes nothing; a batch collected *before* what is\n  already stored is ignored, so a slow run cannot roll a job back.\n\n## Versions\n\nEverything except `/healthz` is under `/v1`. Changes that don't break a\nclient (a new endpoint, field or optional parameter) are made in `/v1`\nas it stands. A change that would break one goes into a `/v2` beside\nit, and `/v1` stays until every collector has moved over.\n\n## One collection run\n\n1. `GET .../last-run` - the watermark: where the last successful run\n   started. None means never collected.\n2. `POST .../runs` - open a run; keep its `id`.\n3. `POST .../jobs` - the jobs collected, in batches, each with the run id.\n4. `POST .../runs/{run_id}/finish` - succeeded or failed. Only a\n   succeeded run moves the watermark.\n\nCommvault runs also check on jobs still active (`GET .../jobs?active=true`)\nand reconcile ones the CommCell no longer knows (`PATCH .../jobs/{job_id}`).\nRubrik runs need neither: RSC reports every change, so one pass covers it.\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{apiKey}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Common tasks",
+      "item": [
+        {
+          "name": "Failed jobs, last 24 hours",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs?state=failed&since={{since}}&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "failed"
+                },
+                {
+                  "key": "since",
+                  "value": "{{since}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Every product's failed jobs since `since` (an ISO time, e.g. 2026-11-10T00:00:00Z)."
+          }
+        },
+        {
+          "name": "Jobs still running",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs?active=true&limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "active",
+                  "value": "true"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Every job still running, any product."
+          }
+        },
+        {
+          "name": "Job counts by state, per source",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/summary?group=source&since={{since}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "group",
+                  "value": "source"
+                },
+                {
+                  "key": "since",
+                  "value": "{{since}}"
+                }
+              ]
+            },
+            "description": "How many jobs ended each way, per source, since `since`."
+          }
+        },
+        {
+          "name": "Storage, with use and trend",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/storage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "storage"
+              ],
+              "query": []
+            },
+            "description": "Every storage target with its latest use."
+          }
+        },
+        {
+          "name": "Sources and collectors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources"
+              ],
+              "query": []
+            },
+            "description": "Every source, its collector, its timing and next starts; secrets only as set or not."
+          }
+        },
+        {
+          "name": "Run health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs",
+                "health"
+              ],
+              "query": []
+            },
+            "description": "Are runs getting through: slots taken against runs collecting, and stuck runs."
+          }
+        },
+        {
+          "name": "Check a source",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/{{sourceType}}/{{sourceName}}/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "{{sourceType}}",
+                "{{sourceName}}",
+                "check"
+              ],
+              "query": []
+            },
+            "description": "Starts the source's check on its collector; follow it with GET /v1/admin/runs/{id}."
+          }
+        },
+        {
+          "name": "Collect from a source now",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/{{sourceType}}/{{sourceName}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "{{sourceType}}",
+                "{{sourceName}}"
+              ],
+              "query": []
+            },
+            "description": "Turns collection on for a source (false: off).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collect\": true\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ],
+              "query": []
+            },
+            "description": "`{\"status\": \"ok\"}` once the API can query its database. No key\nneeded: this is what the liveness and readiness probes call.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "sources",
+      "item": [
+        {
+          "name": "Every source blt collects from",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources"
+              ],
+              "query": []
+            },
+            "description": "Every CommCell and RSC account blt has collected from, of any\nproduct, with the id that stands for it everywhere. A source\nappears the first time a run is started for it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "jobs",
+      "item": [
+        {
+          "name": "List jobs from every product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Jobs from every source, newest start first (jobs not yet started\nfirst of all). The `X-Total-Count` header holds how many match,\nfor paging."
+          }
+        },
+        {
+          "name": "Count jobs by state, grouped",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "summary"
+              ],
+              "query": []
+            },
+            "description": "Jobs per state for each group, newest day first. Takes the same\nfilters as `GET /v1/jobs`; jobs not yet started have no day."
+          }
+        },
+        {
+          "name": "One job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/jobs/{{job_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "jobs",
+                "{{job_id}}"
+              ],
+              "query": []
+            },
+            "description": "One job in the common shape, with the product's full record of\nit in `product`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "storage",
+      "item": [
+        {
+          "name": "Every storage target, with its latest use and trend",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/storage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "storage"
+              ],
+              "query": []
+            },
+            "description": "Each target with its newest sample and, once there are enough\nhours of samples, how fast it is filling and when it would be\nfull at that rate."
+          }
+        },
+        {
+          "name": "One storage target",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/storage/{{storage_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "storage",
+                "{{storage_id}}"
+              ],
+              "query": []
+            },
+            "description": "The target, present or not, with its latest sample and trend."
+          }
+        },
+        {
+          "name": "One target's use over time",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/storage/{{storage_id}}/samples",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "storage",
+                "{{storage_id}}",
+                "samples"
+              ],
+              "query": []
+            },
+            "description": "Oldest first. `every=day` gives one sample a day (the last of\nit), for long ranges."
+          }
+        },
+        {
+          "name": "Store one collection of storage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/storage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "storage"
+              ],
+              "query": []
+            },
+            "description": "Every storage target the collector read from the source, each\nwith its capacity and use at `collected_at`. A target is matched\nby `product_key`; one not seen before is added. With `complete`\n(the default), targets the source no longer lists are marked not\npresent - their samples stay.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-11-05T14:27:00Z\",\n  \"targets\": [\n    {\n      \"capacity_bytes\": 1099509530624,\n      \"free_bytes\": 1075347718144,\n      \"hosts\": [\n        \"ma01\"\n      ],\n      \"kind\": \"dedupe\",\n      \"name\": \"pool-01\",\n      \"product_key\": \"2\",\n      \"product_type\": \"DEDUPLICATION\",\n      \"status\": \"Online\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Store one collection of storage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/storage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "storage"
+              ],
+              "query": []
+            },
+            "description": "Every storage target the collector read from the source, each\nwith its capacity and use at `collected_at`. A target is matched\nby `product_key`; one not seen before is added. With `complete`\n(the default), targets the source no longer lists are marked not\npresent - their samples stay.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-11-05T14:27:00Z\",\n  \"targets\": [\n    {\n      \"capacity_bytes\": 1099509530624,\n      \"free_bytes\": 1075347718144,\n      \"hosts\": [\n        \"ma01\"\n      ],\n      \"kind\": \"dedupe\",\n      \"name\": \"pool-01\",\n      \"product_key\": \"2\",\n      \"product_type\": \"DEDUPLICATION\",\n      \"status\": \"Online\"\n    }\n  ]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "admin",
+      "item": [
+        {
+          "name": "Every source's block",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources"
+              ],
+              "query": []
+            },
+            "description": "Every CommCell, Rubrik account and NetBackup primary Prefect\nholds a block for, with whether each secret is set - never its\nvalue."
+          }
+        },
+        {
+          "name": "Add a NetBackup primary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/netbackup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "netbackup"
+              ],
+              "query": []
+            },
+            "description": "Saves the primary's block. Collection starts off: check the\nprimary first (`.../check`), then turn `collect` on.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"api_key\": \"A1b2...\",\n  \"name\": \"nbu-prod-01\",\n  \"url\": \"nbu01.example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Add a CommCell or Commvault Cloud tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/commvault",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "commvault"
+              ],
+              "query": []
+            },
+            "description": "Saves the CommCell's block: a user name and password, or a\ntoken pair from Command Center (renewed into the block from then\non). Collection starts off: check it first (`.../check`), then\nturn `collect` on.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"base_url\": \"cs01.example.com\",\n  \"name\": \"cv-prod-01\",\n  \"password\": \"...\",\n  \"username\": \"blt-reader\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Add a Rubrik Security Cloud account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/rubrik",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "rubrik"
+              ],
+              "query": []
+            },
+            "description": "Saves the account's block from its service account file's\nfields. The secret is kept in the block and never shown again; the\nfile is not needed after. Collection starts off: check it first\n(`.../check`), then turn `collect` on.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"rsc-prod\",\n  \"service_account\": {\n    \"access_token_uri\": \"https://example.my.rubrik.com/api/client_token\",\n    \"client_id\": \"client|...\",\n    \"client_secret\": \"...\",\n    \"name\": \"blt-reader\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Change a source's block",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/{{source_type}}/{{source_name}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "{{source_type}}",
+                "{{source_name}}"
+              ],
+              "query": []
+            },
+            "description": "Changes only what is given: `collect`, `collector` and\n`verify_tls` for any source, and each product's own fields for its\nsources (a 422 for another product's). New credentials replace the\nold ones whole; check the source again after.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collect\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Remove a source's block",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/{{source_type}}/{{source_name}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "{{source_type}}",
+                "{{source_name}}"
+              ],
+              "query": []
+            },
+            "description": "Removes the block, so nothing collects from it any more. What\nwas collected stays in blt."
+          }
+        },
+        {
+          "name": "Check a source, from a worker",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/sources/{{source_type}}/{{source_name}}/check",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "sources",
+                "{{source_type}}",
+                "{{source_name}}",
+                "check"
+              ],
+              "query": []
+            },
+            "description": "Starts the product's check for the source, on the collector\nthat reaches it: it signs in with what the block holds and tries\neach read blt makes - storage, jobs, and for NetBackup its SLP\nimages, for Rubrik inventory and SLA domains - logging one OK or\nFAIL line for each. Watch the run's log."
+          }
+        },
+        {
+          "name": "Fetch a NetBackup primary's CA certificate, from a worker",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/netbackup/ca-certificate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "netbackup",
+                "ca-certificate"
+              ],
+              "query": []
+            },
+            "description": "Starts blt-netbackup-fetch-ca: it asks the primary for its CA\ncertificate (which needs no sign-in) and logs it with its SHA-256\nfingerprint. Compare the fingerprint with the primary's own\n(`nbcertcmd -displayCACertDetail`) before trusting it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"nbu01.example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "The workers that collect, and whether each is there",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/collectors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "collectors"
+              ],
+              "query": []
+            },
+            "description": "blt's own worker and every remote collector: each work queue in\nblt's pool, and each collector a source names, with when it last\nasked for work and the sources it reaches."
+          }
+        },
+        {
+          "name": "What runs, and when",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/deployments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "deployments"
+              ],
+              "query": []
+            },
+            "description": "Every deployment, with its schedules, its last finished run and\nits next scheduled one."
+          }
+        },
+        {
+          "name": "Run a deployment now",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/deployments/{{deployment_id}}/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "deployments",
+                "{{deployment_id}}",
+                "runs"
+              ],
+              "query": []
+            },
+            "description": "Starts a run now, with these parameters over its defaults. A\nrun for one source (a `commcell`, `account` or `primary`\nparameter) goes to the collector that reaches that source.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parameters\": {\n    \"commcell\": \"cv-toaster\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Pause a deployment's schedules",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/deployments/{{deployment_id}}/pause",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "deployments",
+                "{{deployment_id}}",
+                "pause"
+              ],
+              "query": []
+            },
+            "description": "No scheduled runs until it is resumed. It stays paused when the\nworker restarts and deploys prefect.yaml again (prefect deploy\nleaves `paused` alone when prefect.yaml does not set it)."
+          }
+        },
+        {
+          "name": "Resume a deployment's schedules",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/deployments/{{deployment_id}}/resume",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "deployments",
+                "{{deployment_id}}",
+                "resume"
+              ],
+              "query": []
+            },
+            "description": "Its schedules make runs again."
+          }
+        },
+        {
+          "name": "Flow runs, newest first",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs"
+              ],
+              "query": []
+            },
+            "description": "Flow runs by when they were due, newest first: every\ndeployment's, or one's."
+          }
+        },
+        {
+          "name": "Are runs getting through?",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs",
+                "health"
+              ],
+              "query": []
+            },
+            "description": "The collection slots against the runs that could hold them, and\nthe runs that look stuck. A slot is leaked when a run that held it\nis gone - its worker restarted, or the Prefect server did while it\nkept them only in memory - and runs then queue for it for ever."
+          }
+        },
+        {
+          "name": "Cancel stuck runs and give back leaked slots",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs/clear-stuck",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs",
+                "clear-stuck"
+              ],
+              "query": []
+            },
+            "description": "Cancels the runs asked for that are still stuck by the same\nrule - at once, since no worker is running them - and then, if\nPrefect counts more slots taken than there are runs collecting,\nbrings the count down to those runs. It never goes below them, so\na run that holds a slot keeps it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"run_ids\": [\n    \"0f4b5c3e-2a1d-4e6f-9b8a-7c6d5e4f3a2b\"\n  ],\n  \"stuck_after_minutes\": 120\n}"
+            }
+          }
+        },
+        {
+          "name": "A flow run and its log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs/{{run_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs",
+                "{{run_id}}"
+              ],
+              "query": []
+            },
+            "description": "The run and its log lines, oldest first. Poll with `log_offset`\nset to the lines already shown to get only new ones."
+          }
+        },
+        {
+          "name": "Cancel a flow run",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/runs/{{run_id}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "admin",
+                "runs",
+                "{{run_id}}",
+                "cancel"
+              ],
+              "query": []
+            },
+            "description": "Asks the worker to stop the run: it goes to CANCELLING, then\nCANCELLED once the worker has stopped it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "commvault: collection",
+      "item": [
+        {
+          "name": "Where the last collection got to",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/last-run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "last-run"
+              ],
+              "query": []
+            },
+            "description": "The CommCell's watermark and its most recent run. An unknown\nCommCell is not an error: it comes back with no watermark, which\ntells a collector to start with an initial run."
+          }
+        },
+        {
+          "name": "How far back history has been collected",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/backfill",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "backfill"
+              ],
+              "query": []
+            },
+            "description": "Where the next backfill chunk should end, and whether backfill\nhas reached the start of the CommCell's history."
+          }
+        },
+        {
+          "name": "Record backfill progress",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/backfill",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "backfill"
+              ],
+              "query": []
+            },
+            "description": "Called by the backfill flow after each chunk it collects.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backfilled_to\": \"2026-09-01T00:00:00Z\",\n  \"complete\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Open a collection run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "runs"
+              ],
+              "query": []
+            },
+            "description": "Opens a run (status `running`) and returns it; send its `id`\nwith each batch of jobs or objects. The CommCell is created on its\nfirst run.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lookup_seconds\": 3900,\n  \"mode\": \"delta\",\n  \"started_at\": \"2026-10-29T14:00:00Z\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Close a collection run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/runs/{{run_id}}/finish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "runs",
+                "{{run_id}}",
+                "finish"
+              ],
+              "query": []
+            },
+            "description": "Records how the run went. A succeeded collection run (initial,\ndelta or full) becomes the new watermark. A succeeded inventory\nrun marks everything it did not list as no longer present, and\nstores that day's per-instance report, and points jobs at the\nclients they ran on (common.job.source_object_id).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finished_at\": \"2026-10-29T14:02:10Z\",\n  \"jobs_collected\": 42,\n  \"jobs_missing\": 0,\n  \"jobs_reconciled\": 3,\n  \"status\": \"succeeded\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Store a batch of jobs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Inserts new jobs and updates known ones, keyed by Commvault's\njob id. A job collected earlier than what is stored is left alone.\n`written` counts the jobs actually inserted or changed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-10-29T14:01:00Z\",\n  \"jobs\": [\n    {\n      \"app_type\": \"File System\",\n      \"backup_level\": \"Incremental\",\n      \"client_name\": \"fs-01\",\n      \"end_time\": \"2026-10-29T13:12:30Z\",\n      \"job_id\": 4711,\n      \"job_type\": \"Backup\",\n      \"percent_complete\": 100,\n      \"size_of_application\": 52428800,\n      \"size_of_media\": 10485760,\n      \"start_time\": \"2026-10-29T13:00:00Z\",\n      \"status\": \"Completed\",\n      \"storage_policy\": \"Server Plan\",\n      \"subclient_name\": \"default\"\n    }\n  ],\n  \"run_id\": 1234\n}"
+            }
+          }
+        },
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Jobs in job id order. The collector uses `active=true` to find\njobs to check on, and `unseen_in_run` to find ones to reconcile."
+          }
+        },
+        {
+          "name": "One job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/jobs/{{job_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "jobs",
+                "{{job_id}}"
+              ],
+              "query": []
+            },
+            "description": "One job by Commvault's job id, with its full Commvault record in\n`raw`."
+          }
+        },
+        {
+          "name": "Change one job's status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/jobs/{{job_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "jobs",
+                "{{job_id}}"
+              ],
+              "query": []
+            },
+            "description": "Used to mark a job the CommCell no longer knows as \"Not found in\nCommCell\"; anything Commvault can still describe goes through\n`POST .../jobs`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-10-29T14:01:30Z\",\n  \"run_id\": 1234,\n  \"status\": \"Not found in CommCell\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "commvault: inventory and reports",
+      "item": [
+        {
+          "name": "Store a batch of inventory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "objects"
+              ],
+              "query": []
+            },
+            "description": "Clients, instances and databases as the CommCell lists them,\nduring an inventory run. Parents go before their children: clients,\nthen instances, then databases.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-10-29T14:05:00Z\",\n  \"objects\": [\n    {\n      \"kind\": \"client\",\n      \"name\": \"sql-01\",\n      \"source_key\": \"12\"\n    },\n    {\n      \"app_type\": \"SQL Server\",\n      \"kind\": \"instance\",\n      \"name\": \"sql-01\\\\MSSQLSERVER\",\n      \"parent_key\": \"12\",\n      \"parent_kind\": \"client\",\n      \"source_key\": \"34\"\n    },\n    {\n      \"app_type\": \"SQL Server\",\n      \"kind\": \"database\",\n      \"name\": \"sales\",\n      \"parent_key\": \"34\",\n      \"parent_kind\": \"instance\",\n      \"source_key\": \"34/sales\"\n    }\n  ],\n  \"run_id\": 1235\n}"
+            }
+          }
+        },
+        {
+          "name": "List inventory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "objects"
+              ],
+              "query": []
+            },
+            "description": "What the CommCell says exists, by kind then name."
+          }
+        },
+        {
+          "name": "SQL Server instances: discovered vs backed up",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/instance-report",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "instance-report"
+              ],
+              "query": []
+            },
+            "description": "Databases discovered against databases backed up, per SQL\nServer instance, for its most recent full backup."
+          }
+        },
+        {
+          "name": "Is everything backed up",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/commvault/{{source_name}}/validation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "commvault",
+                "{{source_name}}",
+                "validation"
+              ],
+              "query": []
+            },
+            "description": "Is everything this source says exists also backed up?\n\nJudged entirely from the source's own inventory (see\nValidationReport for what that can and cannot establish), with\neach database's last backup job looked up in the job table as a\nsecond opinion on whether that backup actually succeeded."
+          }
+        }
+      ]
+    },
+    {
+      "name": "rubrik",
+      "item": [
+        {
+          "name": "Where the last collection got to",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/last-run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "last-run"
+              ],
+              "query": []
+            },
+            "description": "The account's watermark and its most recent job run. An unknown\naccount is not an error: no watermark means do an initial run.\nInventory runs do not count."
+          }
+        },
+        {
+          "name": "Open a collection run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "runs"
+              ],
+              "query": []
+            },
+            "description": "Opens a run (status `running`); send its `id` with each batch.\nThe account is created on its first run.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lookup_seconds\": 3900,\n  \"mode\": \"delta\",\n  \"started_at\": \"2026-10-29T14:00:00Z\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Close a collection run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/runs/{{run_id}}/finish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "runs",
+                "{{run_id}}",
+                "finish"
+              ],
+              "query": []
+            },
+            "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present, and points jobs at the objects they ran\non (common.job.source_object_id).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finished_at\": \"2026-10-29T14:01:40Z\",\n  \"jobs_collected\": 180,\n  \"status\": \"succeeded\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Store a batch of jobs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Inserts new jobs and updates known ones, keyed by `series_key`.\nA job collected earlier than what is stored is left alone.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-10-29T14:01:00Z\",\n  \"jobs\": [\n    {\n      \"activity_type\": \"Backup\",\n      \"data_transferred\": 1073741824,\n      \"is_active\": false,\n      \"last_updated\": \"2026-10-29T13:20:00Z\",\n      \"logical_size\": 42949672960,\n      \"object_name\": \"vm-app-01\",\n      \"object_type\": \"VmwareVm\",\n      \"series_key\": \"0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b\",\n      \"sla_domain_name\": \"Gold\",\n      \"start_time\": \"2026-10-29T13:00:00Z\",\n      \"status\": \"Success\"\n    }\n  ],\n  \"run_id\": 88\n}"
+            }
+          }
+        },
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Jobs, most recently updated first."
+          }
+        },
+        {
+          "name": "One job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/jobs/{{series_key}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "jobs",
+                "{{series_key}}"
+              ],
+              "query": []
+            },
+            "description": "One job by its series key, with RSC's full record in `raw`."
+          }
+        },
+        {
+          "name": "Store a batch of inventory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "objects"
+              ],
+              "query": []
+            },
+            "description": "Objects as RSC lists them, during an inventory run, keyed by\n`source_key`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-10-30T05:47:00Z\",\n  \"objects\": [\n    {\n      \"compliance_status\": \"IN_COMPLIANCE\",\n      \"kind\": \"AzureNativeVm\",\n      \"last_snapshot\": \"2026-10-30T02:10:00Z\",\n      \"name\": \"vm-app-01\",\n      \"object_state\": \"ACTIVE\",\n      \"protection_status\": \"Protected\",\n      \"rsc_id\": \"6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f\",\n      \"sla_domain_name\": \"Gold\",\n      \"source_key\": \"6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f\",\n      \"total_snapshots\": 42\n    }\n  ],\n  \"run_id\": 91\n}"
+            }
+          }
+        },
+        {
+          "name": "List inventory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/rubrik/{{source_name}}/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "rubrik",
+                "{{source_name}}",
+                "objects"
+              ],
+              "query": []
+            },
+            "description": "What RSC says exists, by type then name."
+          }
+        }
+      ]
+    },
+    {
+      "name": "netbackup",
+      "item": [
+        {
+          "name": "Where the last job collection got to",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/last-run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "last-run"
+              ],
+              "query": []
+            },
+            "description": "The primary's watermark and its most recent job run. An unknown\nprimary is not an error: no watermark means do an initial run."
+          }
+        },
+        {
+          "name": "Open a job collection run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "runs"
+              ],
+              "query": []
+            },
+            "description": "Opens a run (status `running`); send its `id` with each batch.\nThe primary is created on its first run.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lookup_seconds\": 2700,\n  \"mode\": \"delta\",\n  \"started_at\": \"2026-11-08T14:02:00Z\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Close a job collection run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/runs/{{run_id}}/finish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "runs",
+                "{{run_id}}",
+                "finish"
+              ],
+              "query": []
+            },
+            "description": "Records how the run went. A succeeded run becomes the new\nwatermark.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finished_at\": \"2026-11-08T14:03:10Z\",\n  \"jobs_collected\": 37,\n  \"status\": \"succeeded\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Store a batch of jobs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Inserts new jobs and updates known ones, keyed by `job_id`. A job\ncollected earlier than what is stored is left alone.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-11-08T14:02:00Z\",\n  \"jobs\": [\n    {\n      \"backup_id\": \"app01.example.com_1794150000\",\n      \"client_name\": \"app01.example.com\",\n      \"end_time\": \"2026-11-08T13:21:00Z\",\n      \"is_active\": false,\n      \"job_id\": 48211,\n      \"job_type\": \"BACKUP\",\n      \"last_update_time\": \"2026-11-08T13:21:00Z\",\n      \"policy_name\": \"vm-gold\",\n      \"start_time\": \"2026-11-08T13:00:00Z\",\n      \"state\": \"DONE\",\n      \"status\": 0,\n      \"storage_unit\": \"msdp-stu-01\"\n    }\n  ],\n  \"run_id\": 12\n}"
+            }
+          }
+        },
+        {
+          "name": "List jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Jobs, most recently updated first."
+          }
+        },
+        {
+          "name": "One job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/jobs/{{job_id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "jobs",
+                "{{job_id}}"
+              ],
+              "query": []
+            },
+            "description": "One job by its id, with NetBackup's full record in `raw`."
+          }
+        }
+      ]
+    }
+  ]
+}

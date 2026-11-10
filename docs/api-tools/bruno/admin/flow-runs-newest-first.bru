@@ -1,0 +1,16 @@
+meta {
+  name: Flow runs, newest first
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/runs
+  body: none
+  auth: inherit
+}
+
+docs {
+  Flow runs by when they were due, newest first: every
+  deployment's, or one's.
+}

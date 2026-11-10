@@ -1,0 +1,17 @@
+meta {
+  name: The workers that collect, and whether each is there
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/collectors
+  body: none
+  auth: inherit
+}
+
+docs {
+  blt's own worker and every remote collector: each work queue in
+  blt's pool, and each collector a source names, with when it last
+  asked for work and the sources it reaches.
+}

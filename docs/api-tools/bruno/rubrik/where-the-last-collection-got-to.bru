@@ -1,0 +1,17 @@
+meta {
+  name: Where the last collection got to
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/rubrik/{{source_name}}/last-run
+  body: none
+  auth: inherit
+}
+
+docs {
+  The account's watermark and its most recent job run. An unknown
+  account is not an error: no watermark means do an initial run.
+  Inventory runs do not count.
+}

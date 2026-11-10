@@ -1,0 +1,15 @@
+meta {
+  name: One storage target
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/storage/{{storage_id}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  The target, present or not, with its latest sample and trend.
+}

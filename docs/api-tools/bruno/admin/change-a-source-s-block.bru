@@ -1,0 +1,24 @@
+meta {
+  name: Change a source's block
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/v1/admin/sources/{{source_type}}/{{source_name}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collect": true
+  }
+}
+
+docs {
+  Changes only what is given: `collect`, `collector` and
+  `verify_tls` for any source, and each product's own fields for its
+  sources (a 422 for another product's). New credentials replace the
+  old ones whole; check the source again after.
+}

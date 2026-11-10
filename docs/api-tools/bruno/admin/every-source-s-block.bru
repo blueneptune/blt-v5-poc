@@ -1,0 +1,17 @@
+meta {
+  name: Every source's block
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/sources
+  body: none
+  auth: inherit
+}
+
+docs {
+  Every CommCell, Rubrik account and NetBackup primary Prefect
+  holds a block for, with whether each secret is set - never its
+  value.
+}

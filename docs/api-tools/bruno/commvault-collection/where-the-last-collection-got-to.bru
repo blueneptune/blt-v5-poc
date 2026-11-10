@@ -1,0 +1,17 @@
+meta {
+  name: Where the last collection got to
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/last-run
+  body: none
+  auth: inherit
+}
+
+docs {
+  The CommCell's watermark and its most recent run. An unknown
+  CommCell is not an error: it comes back with no watermark, which
+  tells a collector to start with an initial run.
+}

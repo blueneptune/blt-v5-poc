@@ -1,0 +1,24 @@
+meta {
+  name: Fetch a NetBackup primary's CA certificate, from a worker
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/netbackup/ca-certificate
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "url": "nbu01.example.com"
+  }
+}
+
+docs {
+  Starts blt-netbackup-fetch-ca: it asks the primary for its CA
+  certificate (which needs no sign-in) and logs it with its SHA-256
+  fingerprint. Compare the fingerprint with the primary's own
+  (`nbcertcmd -displayCACertDetail`) before trusting it.
+}

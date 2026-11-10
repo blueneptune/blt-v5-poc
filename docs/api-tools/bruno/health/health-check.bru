@@ -1,0 +1,16 @@
+meta {
+  name: Health check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/healthz
+  body: none
+  auth: none
+}
+
+docs {
+  `{"status": "ok"}` once the API can query its database. No key
+  needed: this is what the liveness and readiness probes call.
+}

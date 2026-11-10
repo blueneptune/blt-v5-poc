@@ -1,0 +1,17 @@
+meta {
+  name: Pause a deployment's schedules
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/deployments/{{deployment_id}}/pause
+  body: none
+  auth: inherit
+}
+
+docs {
+  No scheduled runs until it is resumed. It stays paused when the
+  worker restarts and deploys prefect.yaml again (prefect deploy
+  leaves `paused` alone when prefect.yaml does not set it).
+}

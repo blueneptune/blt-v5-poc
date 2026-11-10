@@ -1,0 +1,37 @@
+meta {
+  name: Store a batch of inventory
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/rubrik/{{source_name}}/objects
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-10-30T05:47:00Z",
+    "objects": [
+      {
+        "compliance_status": "IN_COMPLIANCE",
+        "kind": "AzureNativeVm",
+        "last_snapshot": "2026-10-30T02:10:00Z",
+        "name": "vm-app-01",
+        "object_state": "ACTIVE",
+        "protection_status": "Protected",
+        "rsc_id": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+        "sla_domain_name": "Gold",
+        "source_key": "6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f",
+        "total_snapshots": 42
+      }
+    ],
+    "run_id": 91
+  }
+}
+
+docs {
+  Objects as RSC lists them, during an inventory run, keyed by
+  `source_key`.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Check a source, from a worker
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/sources/{{source_type}}/{{source_name}}/check
+  body: none
+  auth: inherit
+}
+
+docs {
+  Starts the product's check for the source, on the collector
+  that reaches it: it signs in with what the block holds and tries
+  each read blt makes - storage, jobs, and for NetBackup its SLP
+  images, for Rubrik inventory and SLA domains - logging one OK or
+  FAIL line for each. Watch the run's log.
+}

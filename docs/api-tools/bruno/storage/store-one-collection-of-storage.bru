@@ -1,0 +1,39 @@
+meta {
+  name: Store one collection of storage
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/storage
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-11-05T14:27:00Z",
+    "targets": [
+      {
+        "capacity_bytes": 1099509530624,
+        "free_bytes": 1075347718144,
+        "hosts": [
+          "ma01"
+        ],
+        "kind": "dedupe",
+        "name": "pool-01",
+        "product_key": "2",
+        "product_type": "DEDUPLICATION",
+        "status": "Online"
+      }
+    ]
+  }
+}
+
+docs {
+  Every storage target the collector read from the source, each
+  with its capacity and use at `collected_at`. A target is matched
+  by `product_key`; one not seen before is added. With `complete`
+  (the default), targets the source no longer lists are marked not
+  present - their samples stay.
+}

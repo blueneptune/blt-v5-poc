@@ -1,0 +1,30 @@
+meta {
+  name: Add a Rubrik Security Cloud account
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/sources/rubrik
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "rsc-prod",
+    "service_account": {
+      "access_token_uri": "https://example.my.rubrik.com/api/client_token",
+      "client_id": "client|...",
+      "client_secret": "...",
+      "name": "blt-reader"
+    }
+  }
+}
+
+docs {
+  Saves the account's block from its service account file's
+  fields. The secret is kept in the block and never shown again; the
+  file is not needed after. Collection starts off: check it first
+  (`.../check`), then turn `collect` on.
+}

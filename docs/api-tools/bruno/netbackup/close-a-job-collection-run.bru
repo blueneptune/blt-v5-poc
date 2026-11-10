@@ -1,0 +1,24 @@
+meta {
+  name: Close a job collection run
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/runs/{{run_id}}/finish
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "finished_at": "2026-11-08T14:03:10Z",
+    "jobs_collected": 37,
+    "status": "succeeded"
+  }
+}
+
+docs {
+  Records how the run went. A succeeded run becomes the new
+  watermark.
+}

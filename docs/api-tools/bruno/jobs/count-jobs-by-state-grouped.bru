@@ -1,0 +1,16 @@
+meta {
+  name: Count jobs by state, grouped
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/jobs/summary
+  body: none
+  auth: inherit
+}
+
+docs {
+  Jobs per state for each group, newest day first. Takes the same
+  filters as `GET /v1/jobs`; jobs not yet started have no day.
+}

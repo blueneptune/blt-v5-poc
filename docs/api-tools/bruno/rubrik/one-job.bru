@@ -1,0 +1,15 @@
+meta {
+  name: One job
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/rubrik/{{source_name}}/jobs/{{series_key}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  One job by its series key, with RSC's full record in `raw`.
+}

@@ -1,0 +1,38 @@
+meta {
+  name: Store a batch of jobs
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/rubrik/{{source_name}}/jobs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-10-29T14:01:00Z",
+    "jobs": [
+      {
+        "activity_type": "Backup",
+        "data_transferred": 1073741824,
+        "is_active": false,
+        "last_updated": "2026-10-29T13:20:00Z",
+        "logical_size": 42949672960,
+        "object_name": "vm-app-01",
+        "object_type": "VmwareVm",
+        "series_key": "0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b",
+        "sla_domain_name": "Gold",
+        "start_time": "2026-10-29T13:00:00Z",
+        "status": "Success"
+      }
+    ],
+    "run_id": 88
+  }
+}
+
+docs {
+  Inserts new jobs and updates known ones, keyed by `series_key`.
+  A job collected earlier than what is stored is left alone.
+}

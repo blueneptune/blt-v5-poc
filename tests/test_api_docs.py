@@ -1,6 +1,8 @@
 """The API's generated documentation: docs/openapi.json kept current, and
 every endpoint described. No database needed."""
 
+import json
+
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
@@ -106,3 +108,30 @@ def test_the_examples_are_valid_bodies() -> None:
             if isinstance(model, type) and issubclass(model, BaseModel) and model is not BaseModel:
                 for example in model.model_json_schema().get("examples", []):
                     model.model_validate(example)
+
+
+def test_the_api_tool_collections_are_current() -> None:
+    from blt.api import collections
+
+    files = collections.generate(json.loads(openapi.SPEC_PATH.read_text()))
+    assert collections.stale(collections.OUT, files) == [], (
+        "docs/api-tools is stale: run blt-api-collections"
+    )
+
+
+def test_the_collections_hold_every_endpoint_and_no_key() -> None:
+    from blt.api import collections
+
+    spec = json.loads(openapi.SPEC_PATH.read_text())
+    files = collections.generate(spec)
+    operations = sum(len(ops) for ops in spec["paths"].values())
+    postman = json.loads(files["postman/blt.postman_collection.json"])
+    assert sum(len(f["item"]) for f in postman["item"]) == operations + len(collections.COMMON)
+    insomnia = json.loads(files["insomnia/blt.insomnia.json"])
+    requests = [r for r in insomnia["resources"] if r["_type"] == "request"]
+    assert len(requests) == operations + len(collections.COMMON)
+    for name in collections.ENVIRONMENTS:
+        values = json.loads(files[f"postman/blt-{name}.postman_environment.json"])["values"]
+        assert {v["key"]: v["value"] for v in values}["apiKey"] == ""
+    # A path parameter is every tool's variable.
+    assert any("{{job_id}}" in path or "{{job_id}}" in text for path, text in files.items())

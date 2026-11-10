@@ -1,0 +1,15 @@
+meta {
+  name: One job
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/jobs/{{job_id}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  One job by its id, with NetBackup's full record in `raw`.
+}

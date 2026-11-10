@@ -1,0 +1,28 @@
+meta {
+  name: Cancel stuck runs and give back leaked slots
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/runs/clear-stuck
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "run_ids": [
+      "0f4b5c3e-2a1d-4e6f-9b8a-7c6d5e4f3a2b"
+    ],
+    "stuck_after_minutes": 120
+  }
+}
+
+docs {
+  Cancels the runs asked for that are still stuck by the same
+  rule - at once, since no worker is running them - and then, if
+  Prefect counts more slots taken than there are runs collecting,
+  brings the count down to those runs. It never goes below them, so
+  a run that holds a slot keeps it.
+}

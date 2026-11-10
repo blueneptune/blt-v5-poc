@@ -1,0 +1,1374 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_source": "blt-api-collections",
+  "resources": [
+    {
+      "_id": "wrk_d3fe89c14ab8586fa586",
+      "_type": "workspace",
+      "name": "blt API",
+      "description": ""
+    },
+    {
+      "_id": "env_286c4ce2db22513090bf",
+      "_type": "environment",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "Base Environment",
+      "data": {
+        "baseUrl": "http://127.0.0.1:8088",
+        "apiKey": "",
+        "since": "2026-01-01T00:00:00Z",
+        "sourceType": "netbackup",
+        "sourceName": ""
+      }
+    },
+    {
+      "_id": "env_68e165bb0243511f9fb0",
+      "_type": "environment",
+      "parentId": "env_286c4ce2db22513090bf",
+      "name": "blt desktop",
+      "data": {
+        "baseUrl": "http://127.0.0.1:8088",
+        "apiKey": ""
+      }
+    },
+    {
+      "_id": "env_c3e260c8fecf54cd957a",
+      "_type": "environment",
+      "parentId": "env_286c4ce2db22513090bf",
+      "name": "blt lab",
+      "data": {
+        "baseUrl": "https://api.blt.lab.ethos.home",
+        "apiKey": ""
+      }
+    },
+    {
+      "_id": "env_baa4e4f054e153a8a08e",
+      "_type": "environment",
+      "parentId": "env_286c4ce2db22513090bf",
+      "name": "blt customer",
+      "data": {
+        "baseUrl": "https://api.blt.example.com",
+        "apiKey": ""
+      }
+    },
+    {
+      "_id": "fld_f8b17721f2cc526db7d5",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "Common tasks"
+    },
+    {
+      "_id": "req_4c0f6e371d4e5a79ac39",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Failed jobs, last 24 hours",
+      "description": "Every product's failed jobs since `since` (an ISO time, e.g. 2026-11-10T00:00:00Z).",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/jobs",
+      "parameters": [
+        {
+          "name": "state",
+          "value": "failed"
+        },
+        {
+          "name": "since",
+          "value": "{{ _.since }}"
+        },
+        {
+          "name": "limit",
+          "value": "100"
+        }
+      ],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_551196bc7ea75c90a0b0",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Jobs still running",
+      "description": "Every job still running, any product.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/jobs",
+      "parameters": [
+        {
+          "name": "active",
+          "value": "true"
+        },
+        {
+          "name": "limit",
+          "value": "100"
+        }
+      ],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_0e9c8ee659305e9c881f",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Job counts by state, per source",
+      "description": "How many jobs ended each way, per source, since `since`.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/jobs/summary",
+      "parameters": [
+        {
+          "name": "group",
+          "value": "source"
+        },
+        {
+          "name": "since",
+          "value": "{{ _.since }}"
+        }
+      ],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_b0c30e5b6e5b505f8683",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Storage, with use and trend",
+      "description": "Every storage target with its latest use.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/storage",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_c5c55b8f73a75938bba3",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Sources and collectors",
+      "description": "Every source, its collector, its timing and next starts; secrets only as set or not.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/sources",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_258ad81a404a5eceac81",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Run health",
+      "description": "Are runs getting through: slots taken against runs collecting, and stuck runs.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/runs/health",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_6125f6c2179b5f098c5c",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Check a source",
+      "description": "Starts the source's check on its collector; follow it with GET /v1/admin/runs/{id}.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/{{ _.sourceType }}/{{ _.sourceName }}/check",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_03be4913f1b95b91bc96",
+      "_type": "request",
+      "parentId": "fld_f8b17721f2cc526db7d5",
+      "name": "Collect from a source now",
+      "description": "Turns collection on for a source (false: off).",
+      "method": "PATCH",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/{{ _.sourceType }}/{{ _.sourceName }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collect\": true\n}"
+      }
+    },
+    {
+      "_id": "fld_ecb25e69ab8753b7ba33",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "health"
+    },
+    {
+      "_id": "req_5195a47b5e025a3695c5",
+      "_type": "request",
+      "parentId": "fld_ecb25e69ab8753b7ba33",
+      "name": "Health check",
+      "description": "`{\"status\": \"ok\"}` once the API can query its database. No key\nneeded: this is what the liveness and readiness probes call.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/healthz",
+      "parameters": [],
+      "headers": [],
+      "body": {}
+    },
+    {
+      "_id": "fld_4ba30cbac7a159f0b7ae",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "sources"
+    },
+    {
+      "_id": "req_a94eabe71462567fa4a9",
+      "_type": "request",
+      "parentId": "fld_4ba30cbac7a159f0b7ae",
+      "name": "Every source blt collects from",
+      "description": "Every CommCell and RSC account blt has collected from, of any\nproduct, with the id that stands for it everywhere. A source\nappears the first time a run is started for it.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "fld_813b6bea9c0e52c8be28",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "jobs"
+    },
+    {
+      "_id": "req_0da0e7f36f305d46b146",
+      "_type": "request",
+      "parentId": "fld_813b6bea9c0e52c8be28",
+      "name": "List jobs from every product",
+      "description": "Jobs from every source, newest start first (jobs not yet started\nfirst of all). The `X-Total-Count` header holds how many match,\nfor paging.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/jobs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_a3e706ec6bdc51d58c02",
+      "_type": "request",
+      "parentId": "fld_813b6bea9c0e52c8be28",
+      "name": "Count jobs by state, grouped",
+      "description": "Jobs per state for each group, newest day first. Takes the same\nfilters as `GET /v1/jobs`; jobs not yet started have no day.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/jobs/summary",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_74cb1d9aba06544899f0",
+      "_type": "request",
+      "parentId": "fld_813b6bea9c0e52c8be28",
+      "name": "One job",
+      "description": "One job in the common shape, with the product's full record of\nit in `product`.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/jobs/{{ _.job_id }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "fld_aeeb07d4af0450a0ba33",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "storage"
+    },
+    {
+      "_id": "req_f2007f47d52c58e0b7e1",
+      "_type": "request",
+      "parentId": "fld_aeeb07d4af0450a0ba33",
+      "name": "Every storage target, with its latest use and trend",
+      "description": "Each target with its newest sample and, once there are enough\nhours of samples, how fast it is filling and when it would be\nfull at that rate.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/storage",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_3d89c09b87c85fb9bf42",
+      "_type": "request",
+      "parentId": "fld_aeeb07d4af0450a0ba33",
+      "name": "One storage target",
+      "description": "The target, present or not, with its latest sample and trend.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/storage/{{ _.storage_id }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_ec93f720d1ea5334bc39",
+      "_type": "request",
+      "parentId": "fld_aeeb07d4af0450a0ba33",
+      "name": "One target's use over time",
+      "description": "Oldest first. `every=day` gives one sample a day (the last of\nit), for long ranges.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/storage/{{ _.storage_id }}/samples",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_3226fbbce77d55b28746",
+      "_type": "request",
+      "parentId": "fld_aeeb07d4af0450a0ba33",
+      "name": "Store one collection of storage",
+      "description": "Every storage target the collector read from the source, each\nwith its capacity and use at `collected_at`. A target is matched\nby `product_key`; one not seen before is added. With `complete`\n(the default), targets the source no longer lists are marked not\npresent - their samples stay.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/storage",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-11-05T14:27:00Z\",\n  \"targets\": [\n    {\n      \"capacity_bytes\": 1099509530624,\n      \"free_bytes\": 1075347718144,\n      \"hosts\": [\n        \"ma01\"\n      ],\n      \"kind\": \"dedupe\",\n      \"name\": \"pool-01\",\n      \"product_key\": \"2\",\n      \"product_type\": \"DEDUPLICATION\",\n      \"status\": \"Online\"\n    }\n  ]\n}"
+      }
+    },
+    {
+      "_id": "req_e16825b2ee655e5086d2",
+      "_type": "request",
+      "parentId": "fld_aeeb07d4af0450a0ba33",
+      "name": "Store one collection of storage",
+      "description": "Every storage target the collector read from the source, each\nwith its capacity and use at `collected_at`. A target is matched\nby `product_key`; one not seen before is added. With `complete`\n(the default), targets the source no longer lists are marked not\npresent - their samples stay.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/storage",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-11-05T14:27:00Z\",\n  \"targets\": [\n    {\n      \"capacity_bytes\": 1099509530624,\n      \"free_bytes\": 1075347718144,\n      \"hosts\": [\n        \"ma01\"\n      ],\n      \"kind\": \"dedupe\",\n      \"name\": \"pool-01\",\n      \"product_key\": \"2\",\n      \"product_type\": \"DEDUPLICATION\",\n      \"status\": \"Online\"\n    }\n  ]\n}"
+      }
+    },
+    {
+      "_id": "fld_666d521f53055df38c19",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "admin"
+    },
+    {
+      "_id": "req_202938cab31d53159f74",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Every source's block",
+      "description": "Every CommCell, Rubrik account and NetBackup primary Prefect\nholds a block for, with whether each secret is set - never its\nvalue.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/sources",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_87b0eef4e7955c1caa42",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Add a NetBackup primary",
+      "description": "Saves the primary's block. Collection starts off: check the\nprimary first (`.../check`), then turn `collect` on.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/netbackup",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"api_key\": \"A1b2...\",\n  \"name\": \"nbu-prod-01\",\n  \"url\": \"nbu01.example.com\"\n}"
+      }
+    },
+    {
+      "_id": "req_6fde3108ba095afba473",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Add a CommCell or Commvault Cloud tenant",
+      "description": "Saves the CommCell's block: a user name and password, or a\ntoken pair from Command Center (renewed into the block from then\non). Collection starts off: check it first (`.../check`), then\nturn `collect` on.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/commvault",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"base_url\": \"cs01.example.com\",\n  \"name\": \"cv-prod-01\",\n  \"password\": \"...\",\n  \"username\": \"blt-reader\"\n}"
+      }
+    },
+    {
+      "_id": "req_67309bb572de5b68aaf7",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Add a Rubrik Security Cloud account",
+      "description": "Saves the account's block from its service account file's\nfields. The secret is kept in the block and never shown again; the\nfile is not needed after. Collection starts off: check it first\n(`.../check`), then turn `collect` on.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/rubrik",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"rsc-prod\",\n  \"service_account\": {\n    \"access_token_uri\": \"https://example.my.rubrik.com/api/client_token\",\n    \"client_id\": \"client|...\",\n    \"client_secret\": \"...\",\n    \"name\": \"blt-reader\"\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_6f77dd8e6a595315b2fa",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Change a source's block",
+      "description": "Changes only what is given: `collect`, `collector` and\n`verify_tls` for any source, and each product's own fields for its\nsources (a 422 for another product's). New credentials replace the\nold ones whole; check the source again after.",
+      "method": "PATCH",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/{{ _.source_type }}/{{ _.source_name }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collect\": true\n}"
+      }
+    },
+    {
+      "_id": "req_d917db4259885f47ad1b",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Remove a source's block",
+      "description": "Removes the block, so nothing collects from it any more. What\nwas collected stays in blt.",
+      "method": "DELETE",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/{{ _.source_type }}/{{ _.source_name }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_6ecdc9c5bb495efe9fc3",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Check a source, from a worker",
+      "description": "Starts the product's check for the source, on the collector\nthat reaches it: it signs in with what the block holds and tries\neach read blt makes - storage, jobs, and for NetBackup its SLP\nimages, for Rubrik inventory and SLA domains - logging one OK or\nFAIL line for each. Watch the run's log.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/sources/{{ _.source_type }}/{{ _.source_name }}/check",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_b92e09164b5659a3a475",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Fetch a NetBackup primary's CA certificate, from a worker",
+      "description": "Starts blt-netbackup-fetch-ca: it asks the primary for its CA\ncertificate (which needs no sign-in) and logs it with its SHA-256\nfingerprint. Compare the fingerprint with the primary's own\n(`nbcertcmd -displayCACertDetail`) before trusting it.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/netbackup/ca-certificate",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"url\": \"nbu01.example.com\"\n}"
+      }
+    },
+    {
+      "_id": "req_cf24a72f5690565c829f",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "The workers that collect, and whether each is there",
+      "description": "blt's own worker and every remote collector: each work queue in\nblt's pool, and each collector a source names, with when it last\nasked for work and the sources it reaches.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/collectors",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_a8c901c0675e54b8aba5",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "What runs, and when",
+      "description": "Every deployment, with its schedules, its last finished run and\nits next scheduled one.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/deployments",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_30f8c1b21595550a9f41",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Run a deployment now",
+      "description": "Starts a run now, with these parameters over its defaults. A\nrun for one source (a `commcell`, `account` or `primary`\nparameter) goes to the collector that reaches that source.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/deployments/{{ _.deployment_id }}/runs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"parameters\": {\n    \"commcell\": \"cv-toaster\"\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_3aaca549279e546fa2e9",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Pause a deployment's schedules",
+      "description": "No scheduled runs until it is resumed. It stays paused when the\nworker restarts and deploys prefect.yaml again (prefect deploy\nleaves `paused` alone when prefect.yaml does not set it).",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/deployments/{{ _.deployment_id }}/pause",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_90923b7d9c4d5239ab93",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Resume a deployment's schedules",
+      "description": "Its schedules make runs again.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/deployments/{{ _.deployment_id }}/resume",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_d5aa9a1e499d5047a2c2",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Flow runs, newest first",
+      "description": "Flow runs by when they were due, newest first: every\ndeployment's, or one's.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/runs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_c4edc04ce76156eca296",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Are runs getting through?",
+      "description": "The collection slots against the runs that could hold them, and\nthe runs that look stuck. A slot is leaked when a run that held it\nis gone - its worker restarted, or the Prefect server did while it\nkept them only in memory - and runs then queue for it for ever.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/runs/health",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_ecde47cfaaa557ba903c",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Cancel stuck runs and give back leaked slots",
+      "description": "Cancels the runs asked for that are still stuck by the same\nrule - at once, since no worker is running them - and then, if\nPrefect counts more slots taken than there are runs collecting,\nbrings the count down to those runs. It never goes below them, so\na run that holds a slot keeps it.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/runs/clear-stuck",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"run_ids\": [\n    \"0f4b5c3e-2a1d-4e6f-9b8a-7c6d5e4f3a2b\"\n  ],\n  \"stuck_after_minutes\": 120\n}"
+      }
+    },
+    {
+      "_id": "req_2b51320e0f155b16aeb8",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "A flow run and its log",
+      "description": "The run and its log lines, oldest first. Poll with `log_offset`\nset to the lines already shown to get only new ones.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/admin/runs/{{ _.run_id }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_b162de261a3857c3bc39",
+      "_type": "request",
+      "parentId": "fld_666d521f53055df38c19",
+      "name": "Cancel a flow run",
+      "description": "Asks the worker to stop the run: it goes to CANCELLING, then\nCANCELLED once the worker has stopped it.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/admin/runs/{{ _.run_id }}/cancel",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "fld_0f140f71ebb95dbb977d",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "commvault: collection"
+    },
+    {
+      "_id": "req_a80eb994da6652b7814e",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "Where the last collection got to",
+      "description": "The CommCell's watermark and its most recent run. An unknown\nCommCell is not an error: it comes back with no watermark, which\ntells a collector to start with an initial run.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/last-run",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_13d3809d0d6b52fca379",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "How far back history has been collected",
+      "description": "Where the next backfill chunk should end, and whether backfill\nhas reached the start of the CommCell's history.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/backfill",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_33cb886639db5a538d66",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "Record backfill progress",
+      "description": "Called by the backfill flow after each chunk it collects.",
+      "method": "PUT",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/backfill",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"backfilled_to\": \"2026-09-01T00:00:00Z\",\n  \"complete\": false\n}"
+      }
+    },
+    {
+      "_id": "req_1050daf1501c5c0ab4f4",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "Open a collection run",
+      "description": "Opens a run (status `running`) and returns it; send its `id`\nwith each batch of jobs or objects. The CommCell is created on its\nfirst run.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/runs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"lookup_seconds\": 3900,\n  \"mode\": \"delta\",\n  \"started_at\": \"2026-10-29T14:00:00Z\"\n}"
+      }
+    },
+    {
+      "_id": "req_407c4e6d7e395764a8e9",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "Close a collection run",
+      "description": "Records how the run went. A succeeded collection run (initial,\ndelta or full) becomes the new watermark. A succeeded inventory\nrun marks everything it did not list as no longer present, and\nstores that day's per-instance report, and points jobs at the\nclients they ran on (common.job.source_object_id).",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/runs/{{ _.run_id }}/finish",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"finished_at\": \"2026-10-29T14:02:10Z\",\n  \"jobs_collected\": 42,\n  \"jobs_missing\": 0,\n  \"jobs_reconciled\": 3,\n  \"status\": \"succeeded\"\n}"
+      }
+    },
+    {
+      "_id": "req_fc4fc4d43dd255bb946a",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "Store a batch of jobs",
+      "description": "Inserts new jobs and updates known ones, keyed by Commvault's\njob id. A job collected earlier than what is stored is left alone.\n`written` counts the jobs actually inserted or changed.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/jobs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-10-29T14:01:00Z\",\n  \"jobs\": [\n    {\n      \"app_type\": \"File System\",\n      \"backup_level\": \"Incremental\",\n      \"client_name\": \"fs-01\",\n      \"end_time\": \"2026-10-29T13:12:30Z\",\n      \"job_id\": 4711,\n      \"job_type\": \"Backup\",\n      \"percent_complete\": 100,\n      \"size_of_application\": 52428800,\n      \"size_of_media\": 10485760,\n      \"start_time\": \"2026-10-29T13:00:00Z\",\n      \"status\": \"Completed\",\n      \"storage_policy\": \"Server Plan\",\n      \"subclient_name\": \"default\"\n    }\n  ],\n  \"run_id\": 1234\n}"
+      }
+    },
+    {
+      "_id": "req_982a3a7b9c675dca9f63",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "List jobs",
+      "description": "Jobs in job id order. The collector uses `active=true` to find\njobs to check on, and `unseen_in_run` to find ones to reconcile.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/jobs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_75163e7209745172a4a2",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "One job",
+      "description": "One job by Commvault's job id, with its full Commvault record in\n`raw`.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/jobs/{{ _.job_id }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_359cea76b7e55c7083ae",
+      "_type": "request",
+      "parentId": "fld_0f140f71ebb95dbb977d",
+      "name": "Change one job's status",
+      "description": "Used to mark a job the CommCell no longer knows as \"Not found in\nCommCell\"; anything Commvault can still describe goes through\n`POST .../jobs`.",
+      "method": "PATCH",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/jobs/{{ _.job_id }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-10-29T14:01:30Z\",\n  \"run_id\": 1234,\n  \"status\": \"Not found in CommCell\"\n}"
+      }
+    },
+    {
+      "_id": "fld_0928c64f27cf577a9aa8",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "commvault: inventory and reports"
+    },
+    {
+      "_id": "req_0054ecf5e3ae55f982d7",
+      "_type": "request",
+      "parentId": "fld_0928c64f27cf577a9aa8",
+      "name": "Store a batch of inventory",
+      "description": "Clients, instances and databases as the CommCell lists them,\nduring an inventory run. Parents go before their children: clients,\nthen instances, then databases.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/objects",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-10-29T14:05:00Z\",\n  \"objects\": [\n    {\n      \"kind\": \"client\",\n      \"name\": \"sql-01\",\n      \"source_key\": \"12\"\n    },\n    {\n      \"app_type\": \"SQL Server\",\n      \"kind\": \"instance\",\n      \"name\": \"sql-01\\\\MSSQLSERVER\",\n      \"parent_key\": \"12\",\n      \"parent_kind\": \"client\",\n      \"source_key\": \"34\"\n    },\n    {\n      \"app_type\": \"SQL Server\",\n      \"kind\": \"database\",\n      \"name\": \"sales\",\n      \"parent_key\": \"34\",\n      \"parent_kind\": \"instance\",\n      \"source_key\": \"34/sales\"\n    }\n  ],\n  \"run_id\": 1235\n}"
+      }
+    },
+    {
+      "_id": "req_7ca49692ed295975b9b2",
+      "_type": "request",
+      "parentId": "fld_0928c64f27cf577a9aa8",
+      "name": "List inventory",
+      "description": "What the CommCell says exists, by kind then name.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/objects",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_6b692729ae3f5a549ddf",
+      "_type": "request",
+      "parentId": "fld_0928c64f27cf577a9aa8",
+      "name": "SQL Server instances: discovered vs backed up",
+      "description": "Databases discovered against databases backed up, per SQL\nServer instance, for its most recent full backup.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/instance-report",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_db83b50229ac580e818d",
+      "_type": "request",
+      "parentId": "fld_0928c64f27cf577a9aa8",
+      "name": "Is everything backed up",
+      "description": "Is everything this source says exists also backed up?\n\nJudged entirely from the source's own inventory (see\nValidationReport for what that can and cannot establish), with\neach database's last backup job looked up in the job table as a\nsecond opinion on whether that backup actually succeeded.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/commvault/{{ _.source_name }}/validation",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "fld_36ca9fbaed47595194d7",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "rubrik"
+    },
+    {
+      "_id": "req_70b9dd5762a253d7a5ee",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "Where the last collection got to",
+      "description": "The account's watermark and its most recent job run. An unknown\naccount is not an error: no watermark means do an initial run.\nInventory runs do not count.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/last-run",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_4a821eb887f857908f4d",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "Open a collection run",
+      "description": "Opens a run (status `running`); send its `id` with each batch.\nThe account is created on its first run.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/runs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"lookup_seconds\": 3900,\n  \"mode\": \"delta\",\n  \"started_at\": \"2026-10-29T14:00:00Z\"\n}"
+      }
+    },
+    {
+      "_id": "req_7dc2bfab4801521dadec",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "Close a collection run",
+      "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present, and points jobs at the objects they ran\non (common.job.source_object_id).",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/runs/{{ _.run_id }}/finish",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"finished_at\": \"2026-10-29T14:01:40Z\",\n  \"jobs_collected\": 180,\n  \"status\": \"succeeded\"\n}"
+      }
+    },
+    {
+      "_id": "req_1e14b2719dc05b1588df",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "Store a batch of jobs",
+      "description": "Inserts new jobs and updates known ones, keyed by `series_key`.\nA job collected earlier than what is stored is left alone.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/jobs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-10-29T14:01:00Z\",\n  \"jobs\": [\n    {\n      \"activity_type\": \"Backup\",\n      \"data_transferred\": 1073741824,\n      \"is_active\": false,\n      \"last_updated\": \"2026-10-29T13:20:00Z\",\n      \"logical_size\": 42949672960,\n      \"object_name\": \"vm-app-01\",\n      \"object_type\": \"VmwareVm\",\n      \"series_key\": \"0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b\",\n      \"sla_domain_name\": \"Gold\",\n      \"start_time\": \"2026-10-29T13:00:00Z\",\n      \"status\": \"Success\"\n    }\n  ],\n  \"run_id\": 88\n}"
+      }
+    },
+    {
+      "_id": "req_a0ad1975afed574f99fc",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "List jobs",
+      "description": "Jobs, most recently updated first.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/jobs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_eaac576e195b53399852",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "One job",
+      "description": "One job by its series key, with RSC's full record in `raw`.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/jobs/{{ _.series_key }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_d90b3224b76950a29469",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "Store a batch of inventory",
+      "description": "Objects as RSC lists them, during an inventory run, keyed by\n`source_key`.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/objects",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-10-30T05:47:00Z\",\n  \"objects\": [\n    {\n      \"compliance_status\": \"IN_COMPLIANCE\",\n      \"kind\": \"AzureNativeVm\",\n      \"last_snapshot\": \"2026-10-30T02:10:00Z\",\n      \"name\": \"vm-app-01\",\n      \"object_state\": \"ACTIVE\",\n      \"protection_status\": \"Protected\",\n      \"rsc_id\": \"6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f\",\n      \"sla_domain_name\": \"Gold\",\n      \"source_key\": \"6a1c2d3e-4f50-4617-8829-3a4b5c6d7e8f\",\n      \"total_snapshots\": 42\n    }\n  ],\n  \"run_id\": 91\n}"
+      }
+    },
+    {
+      "_id": "req_5ced9613167e51cc98b4",
+      "_type": "request",
+      "parentId": "fld_36ca9fbaed47595194d7",
+      "name": "List inventory",
+      "description": "What RSC says exists, by type then name.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/rubrik/{{ _.source_name }}/objects",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "fld_5dea2e7090295767a817",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "netbackup"
+    },
+    {
+      "_id": "req_999796ee10555625bbc1",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "Where the last job collection got to",
+      "description": "The primary's watermark and its most recent job run. An unknown\nprimary is not an error: no watermark means do an initial run.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/last-run",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_10f133214e7f5f1bad58",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "Open a job collection run",
+      "description": "Opens a run (status `running`); send its `id` with each batch.\nThe primary is created on its first run.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/runs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"lookup_seconds\": 2700,\n  \"mode\": \"delta\",\n  \"started_at\": \"2026-11-08T14:02:00Z\"\n}"
+      }
+    },
+    {
+      "_id": "req_c18ffb7e985150389f65",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "Close a job collection run",
+      "description": "Records how the run went. A succeeded run becomes the new\nwatermark.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/runs/{{ _.run_id }}/finish",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"finished_at\": \"2026-11-08T14:03:10Z\",\n  \"jobs_collected\": 37,\n  \"status\": \"succeeded\"\n}"
+      }
+    },
+    {
+      "_id": "req_fb8a0a17dc635b55812a",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "Store a batch of jobs",
+      "description": "Inserts new jobs and updates known ones, keyed by `job_id`. A job\ncollected earlier than what is stored is left alone.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/jobs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-11-08T14:02:00Z\",\n  \"jobs\": [\n    {\n      \"backup_id\": \"app01.example.com_1794150000\",\n      \"client_name\": \"app01.example.com\",\n      \"end_time\": \"2026-11-08T13:21:00Z\",\n      \"is_active\": false,\n      \"job_id\": 48211,\n      \"job_type\": \"BACKUP\",\n      \"last_update_time\": \"2026-11-08T13:21:00Z\",\n      \"policy_name\": \"vm-gold\",\n      \"start_time\": \"2026-11-08T13:00:00Z\",\n      \"state\": \"DONE\",\n      \"status\": 0,\n      \"storage_unit\": \"msdp-stu-01\"\n    }\n  ],\n  \"run_id\": 12\n}"
+      }
+    },
+    {
+      "_id": "req_81f38f8b194c5d2fa96c",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "List jobs",
+      "description": "Jobs, most recently updated first.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/jobs",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_bbfadbcd6a60579eb4d5",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "One job",
+      "description": "One job by its id, with NetBackup's full record in `raw`.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/jobs/{{ _.job_id }}",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+meta {
+  name: Jobs still running
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/jobs?active=true&limit=100
+  body: none
+  auth: inherit
+}
+
+params:query {
+  active: true
+  limit: 100
+}
+
+docs {
+  Every job still running, any product.
+}

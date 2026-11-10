@@ -1,0 +1,17 @@
+meta {
+  name: Every source blt collects from
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/sources
+  body: none
+  auth: inherit
+}
+
+docs {
+  Every CommCell and RSC account blt has collected from, of any
+  product, with the id that stands for it everywhere. A source
+  appears the first time a run is started for it.
+}
