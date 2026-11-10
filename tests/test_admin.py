@@ -51,6 +51,7 @@ class FakePrefect:
                 "blt-netbackup-fetch-ca",
                 "blt-commvault-check",
                 "blt-rubrik-check",
+                "blt-netbackup-collect-jobs",
             )
         }
         self.deployments: dict[str, dict[str, Any]] = {}
@@ -934,3 +935,64 @@ def test_legacy_key_sizes_are_a_netbackup_primary_s_own_choice(
     )
     cv = next(s for s in http.get("/v1/admin/sources").json() if s["name"] == "cv")
     assert cv["legacy_keys"] is None
+
+
+# --- collection timing (blt.timing) --------------------------------------
+
+
+def test_a_source_s_timing_is_set_and_shown_with_its_next_starts(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    block_id = prefect.add_block(
+        "blt-netbackup-primary", "nbu-01", {"url": "https://a:1556/netbackup", "collect": True}
+    )
+    nbu_jobs = prefect.add_deployment(
+        "blt-netbackup-collect-jobs", "every-15-minutes", parameters={}
+    )
+    prefect.add_run(nbu_jobs, "SCHEDULED", "2026-11-10T12:02:00+00:00")
+
+    listed = http.get("/v1/admin/sources").json()[0]
+    assert listed["timing_text"] == "product's schedule"
+    assert len(listed["next_starts"]) == 3  # every firing, each at its offset
+
+    changed = http.patch(
+        "/v1/admin/sources/netbackup/nbu-01",
+        json={"timing": {"daily_at": "06:15", "timezone": "America/Chicago"}},
+    )
+    assert changed.status_code == 200, changed.text
+    data = prefect.documents[block_id]["data"]
+    assert data["timing_daily_at"] == "06:15" and data["timing_every_minutes"] is None
+    listed = http.get("/v1/admin/sources").json()[0]
+    assert listed["timing_text"] == "daily at 06:15 America/Chicago"
+    assert [s[:16] for s in listed["next_starts"]] == [
+        "2026-11-10T12:15",
+        "2026-11-11T12:15",
+        "2026-11-12T12:15",
+    ]
+
+    # Back to the product's schedule.
+    http.patch("/v1/admin/sources/netbackup/nbu-01", json={"timing": {}})
+    assert http.get("/v1/admin/sources").json()[0]["timing"]["daily_at"] is None
+
+
+def test_timing_that_does_not_hold_together_is_refused(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    prefect.add_block("blt-commvault-commcell", "cv", {"base_url": "https://cv/api"})
+    refused = http.patch("/v1/admin/sources/commvault/cv", json={"timing": {"quiet_from": "22:00"}})
+    assert refused.status_code == 422
+    assert "both its start and its end" in refused.text
+
+
+def test_a_source_switched_off_or_a_paused_schedule_has_no_next_start(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    prefect.add_block("blt-commvault-commcell", "cv-off", {"collect": False})
+    prefect.add_block("blt-commvault-commcell", "cv-on", {})
+    jobs = next(d for d in prefect.deployments.values() if d["name"] == "hourly")
+    prefect.add_run(jobs["id"], "SCHEDULED", "2026-11-10T12:07:00+00:00")
+    listed = {s["name"]: s for s in http.get("/v1/admin/sources").json()}
+    assert listed["cv-off"]["next_starts"] == [] and len(listed["cv-on"]["next_starts"]) == 3
+    jobs["paused"] = True
+    listed = {s["name"]: s for s in http.get("/v1/admin/sources").json()}
+    assert listed["cv-on"]["next_starts"] == []

@@ -260,6 +260,37 @@ test('a file that is not a service account is refused, saying so', async ({ page
 	await expect(page.getByRole('alert')).toContainText('should end with /api/client_token');
 });
 
+test('collection timing: daily with a quiet window, shown on the list, and back to the product', async ({ page }) => {
+	await page.goto('/admin/sources/commvault/cv-toaster');
+	await expect(page.getByRole('heading', { name: 'Collection timing' })).toBeVisible();
+	await expect(page.getByText(/^Next: /)).toBeVisible();
+	await page.getByRole('radio', { name: /Daily at/ }).check();
+	await page.locator('input[name=daily_at]').fill('06:15');
+	await page.getByLabel('A quiet window').check();
+	await page.getByLabel('Time zone').fill('America/Chicago');
+	await page.getByRole('button', { name: 'Save timing' }).click();
+	await expect(page.getByRole('status')).toHaveText(/Timing saved: daily at 06:15 America\/Chicago, quiet 22:00-04:00\./);
+
+	await page.goto('/admin/sources');
+	await expect(page.getByRole('row', { name: /cv-toaster/ })).toContainText('daily at 06:15 America/Chicago');
+
+	await page.goto('/admin/sources/commvault/cv-toaster');
+	await page.getByLabel(/On Commvault's schedule/).check();
+	await page.getByLabel('A quiet window').uncheck();
+	await page.getByRole('button', { name: 'Save timing' }).click();
+	await expect(page.getByRole('status')).toHaveText("Timing saved: product's schedule.");
+});
+
+test('collection timing that is not whole is refused, saying what is missing', async ({ page }) => {
+	await page.goto('/admin/sources/rubrik/work');
+	await page.getByRole('radio', { name: /Every/ }).check();
+	// The browser refuses it first; without that, the server says why.
+	await page.getByLabel('Hours between collections').evaluate((input: HTMLInputElement) => input.removeAttribute('min'));
+	await page.getByLabel('Hours between collections').fill('0');
+	await page.getByRole('button', { name: 'Save timing' }).click();
+	await expect(page.getByRole('alert')).toHaveText('Every how many hours? From 0.25 to 168.');
+});
+
 test('schedules: read as words, paused and resumed', async ({ page }) => {
 	await page.goto('/admin/schedules');
 	const row = page.getByRole('row', { name: /blt-collect-jobs/ });

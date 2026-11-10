@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import cast
 
 from loguru import logger
-from prefect import flow, get_run_logger
+from prefect import flow
 from prefect.blocks.core import Block
 from prefect.client.orchestration import get_client
 from prefect.client.schemas.objects import FlowRun
@@ -39,7 +39,7 @@ from blt.rubrik.collect import run_rubrik_collection, run_rubrik_inventory
 from blt.rubrik.source import RubrikInventory, RubrikJobs
 from blt.rubrik.store import RubrikStore
 
-from .flows import SLOTS, fan_out, logs_to_prefect, source_queue
+from .flows import SLOTS, fan_out_due, logs_to_prefect, source_queue, starts_at
 from .locks import source_lock
 
 BLOCK_TYPE_SLUG = "blt-rubrik-account"
@@ -68,6 +68,20 @@ class RubrikAccountBlock(Block):
         default=None,
         description="The remote collector that reaches it (its Prefect work queue; "
         "docs/remote-collector.md). Empty: blt's own worker.",
+    )
+    # When it is collected (blt.timing); all empty: its product's schedule.
+    timing_every_minutes: int | None = Field(
+        default=None, description="Collect jobs every so many minutes (blt.timing)."
+    )
+    timing_daily_at: str | None = Field(
+        default=None, description="Or once a day at HH:MM, in timing_timezone."
+    )
+    timing_quiet_from: str | None = Field(
+        default=None, description="No collection starts from HH:MM..."
+    )
+    timing_quiet_until: str | None = Field(default=None, description="...until HH:MM.")
+    timing_timezone: str | None = Field(
+        default=None, description="The time zone of the times above; empty: UTC."
     )
     initial_lookback_hours: int = Field(
         default=24, description="First run: jobs changed in this many hours."
@@ -187,7 +201,7 @@ def collectable_accounts() -> list[str]:
     )
 
 
-def _start_run(deployment: str, account: str) -> str:
+def _start_run(deployment: str, account: str, delay_seconds: float = 0) -> str:
     label = "rubrik" if deployment == COLLECT_ONE else "rubrik-inventory"
     run = cast(
         FlowRun,
@@ -196,6 +210,7 @@ def _start_run(deployment: str, account: str) -> str:
             parameters={"account": account},
             flow_run_name=f"{label}-{account}",
             timeout=0,
+            scheduled_time=starts_at(delay_seconds),
             work_queue_name=source_queue(BLOCK_TYPE_SLUG, account),
         ),
     )
@@ -204,39 +219,40 @@ def _start_run(deployment: str, account: str) -> str:
 
 @flow(name="blt-rubrik-collect-jobs")
 def rubrik_collect_jobs(
-    accounts: list[str] | None = None, wait_minutes: float = 50
+    accounts: list[str] | None = None, wait_minutes: float = 50, interval_minutes: float = 60
 ) -> dict[str, str]:
-    """Collect jobs from every Rubrik account block (or the ones named),
-    all at once, each in its own flow run."""
-    names = accounts or collectable_accounts()
-    if not names:
-        # Checked here: fan_out given no names would fall back to the
-        # CommCell blocks.
-        get_run_logger().warning("No Rubrik account blocks to collect - see docs/rubrik.md")
-        return {}
-    return fan_out(
-        names,
+    """Collect jobs from every Rubrik account block that is due (or the
+    ones named, at once), each in its own flow run at its own time
+    (blt.timing)."""
+    return fan_out_due(
+        accounts,
         COLLECT_ONE,
         "collect Rubrik jobs",
+        "jobs",
         wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+        collectable=collectable_accounts,
+        block_type_slug=BLOCK_TYPE_SLUG,
         start=_start_run,
+        nothing="No Rubrik account blocks to collect - see docs/rubrik.md",
     )
 
 
 @flow(name="blt-rubrik-collect-inventory")
 def rubrik_collect_inventory(
-    accounts: list[str] | None = None, wait_minutes: float = 110
+    accounts: list[str] | None = None, wait_minutes: float = 110, interval_minutes: float = 720
 ) -> dict[str, str]:
-    """Inventory from every Rubrik account block (or the ones named), all
-    at once, each in its own flow run."""
-    names = accounts or collectable_accounts()
-    if not names:
-        get_run_logger().warning("No Rubrik account blocks to inventory - see docs/rubrik.md")
-        return {}
-    return fan_out(
-        names,
+    """Inventory from every Rubrik account block (or the ones named),
+    each in its own flow run, spread over the start of the interval."""
+    return fan_out_due(
+        accounts,
         INVENTORY_ONE,
         "collect Rubrik inventory",
+        "inventory",
         wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+        collectable=collectable_accounts,
+        block_type_slug=BLOCK_TYPE_SLUG,
         start=_start_run,
+        nothing="No Rubrik account blocks to inventory - see docs/rubrik.md",
     )

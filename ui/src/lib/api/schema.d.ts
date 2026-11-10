@@ -4431,6 +4431,19 @@ export interface components {
              * @description The secret fields that have a value.
              */
             secrets_set: string[];
+            /** @description When it is collected; all empty: its product's schedule (blt.timing). */
+            timing?: components["schemas"]["SourceTiming"];
+            /**
+             * Timing Text
+             * @description That, in a few words.
+             * @default product's schedule
+             */
+            timing_text: string;
+            /**
+             * Next Starts
+             * @description Its next job collections, from its product's schedule and its own timing; empty when collection is off, or the schedule is paused.
+             */
+            next_starts?: string[];
             /**
              * Updated
              * @description When the block last changed.
@@ -4509,6 +4522,8 @@ export interface components {
             refresh_token?: string | null;
             /** @description Rubrik: a new service account file, in place of the one kept. */
             service_account?: components["schemas"]["RubrikServiceAccountIn"] | null;
+            /** @description When it is collected, in place of what it had; all empty: its product's schedule. */
+            timing?: components["schemas"]["SourceTiming"] | null;
         };
         /**
          * SourceOut
@@ -4539,6 +4554,43 @@ export interface components {
              * @description When blt first collected from it.
              */
             created_at: string;
+        };
+        /**
+         * SourceTiming
+         * @description One source's collection timing. All empty: the product's own.
+         */
+        SourceTiming: {
+            /**
+             * Every Minutes
+             * @description Collect jobs every so many minutes, at fixed times (multiples of it from midnight UTC). Never more often than the product's own schedule.
+             * @example 240
+             */
+            every_minutes?: number | null;
+            /**
+             * Daily At
+             * @description Or collect jobs once a day, at this time (HH:MM, in `timezone`).
+             * @example 06:15
+             */
+            daily_at?: string | null;
+            /**
+             * Quiet From
+             * @description No collection of any kind starts from this time (HH:MM, in `timezone`)...
+             * @example 22:00
+             */
+            quiet_from?: string | null;
+            /**
+             * Quiet Until
+             * @description ...until this one. It may span midnight.
+             * @example 04:00
+             */
+            quiet_until?: string | null;
+            /**
+             * Timezone
+             * @description The time zone of `daily_at` and the quiet window (IANA, e.g. America/Chicago).
+             * @default UTC
+             * @example Europe/London
+             */
+            timezone: string;
         };
         /**
          * StorageBatch

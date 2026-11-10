@@ -27,6 +27,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Literal, cast
 from uuid import UUID
 
@@ -49,6 +50,8 @@ from blt.collector.store import BltStore
 from blt.queues import SLOT_LIMIT, queue_for
 from blt.storage.collect import collect_commvault_storage
 from blt.storage.store import StorageStore
+from blt.timing import Kind as TimingKind
+from blt.timing import SourceTiming, decide
 
 from .blocks import BLOCK_TYPE_SLUG, BlockTokenStore, settings_from_blocks
 from .locks import source_lock
@@ -178,7 +181,43 @@ def storage_commcell(commcell: str) -> str:
     return _with_commcell_api(commcell, "storage", work)
 
 
-StartRun = Callable[[str, str], str]
+# (deployment, source, seconds from now to start it) -> flow run id
+StartRun = Callable[[str, str, float], str]
+
+
+def _timings(block_type_slug: str) -> dict[str, SourceTiming]:
+    with get_client(sync_client=True) as client:
+        documents = client.read_block_documents_by_type(block_type_slug, include_secrets=False)
+    return {d.name: SourceTiming.from_block(d.data) for d in documents if d.name}
+
+
+def due_sources(
+    names: list[str],
+    block_type_slug: str,
+    *,
+    kind: TimingKind,
+    interval_minutes: float,
+    now: datetime | None = None,
+    timings: Callable[[str], dict[str, SourceTiming]] | None = None,
+) -> tuple[list[str], dict[str, float]]:
+    """The sources whose run of `kind` starts in this firing's interval,
+    and the seconds from now to each one's start (blt.timing). The rest
+    are logged with why they are not due."""
+    now = now or datetime.now(UTC)
+    known = (timings or _timings)(block_type_slug)
+    due: list[str] = []
+    delays: dict[str, float] = {}
+    log = get_run_logger()
+    for name in names:
+        decision = decide(name, known.get(name, SourceTiming()), now, interval_minutes, kind)
+        if decision.due:
+            due.append(name)
+            delays[name] = decision.delay_seconds(now)
+        else:
+            log.info("%s: not this time - %s", name, decision.why)
+    return due, delays
+
+
 ReadState = Callable[[str], State]
 
 
@@ -192,9 +231,9 @@ def source_queue(block_type_slug: str, name: str) -> str:
     return queue_for(document.data)
 
 
-def _start_run(deployment: str, commcell: str) -> str:
-    """Start one CommCell's flow run, on the worker that reaches it, and
-    return its id without waiting."""
+def _start_run(deployment: str, commcell: str, delay_seconds: float = 0) -> str:
+    """Start one CommCell's flow run, on the worker that reaches it -
+    `delay_seconds` from now - and return its id without waiting."""
     label = _RUN_LABELS[deployment]
     # run_deployment is typed as possibly a coroutine; called from sync
     # code it is not.
@@ -205,10 +244,17 @@ def _start_run(deployment: str, commcell: str) -> str:
             parameters={"commcell": commcell},
             flow_run_name=f"{label}-{commcell}",
             timeout=0,
+            scheduled_time=starts_at(delay_seconds),
             work_queue_name=source_queue(BLOCK_TYPE_SLUG, commcell),
         ),
     )
     return str(run.id)
+
+
+def starts_at(delay_seconds: float) -> datetime | None:
+    """A flow run's scheduled start, `delay_seconds` from now; None (now)
+    for none."""
+    return datetime.now(UTC) + timedelta(seconds=delay_seconds) if delay_seconds > 0 else None
 
 
 def _read_state(run_id: str) -> State:
@@ -232,6 +278,7 @@ def fan_out(
     what: str,
     *,
     wait_minutes: float,
+    delays: dict[str, float] | None = None,
     start: StartRun = _start_run,
     read_state: ReadState = _read_state,
     cancel: Callable[[str], None] = _cancel,
@@ -239,13 +286,15 @@ def fan_out(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, str]:
-    """Start a flow run per CommCell at once, then wait for them all.
+    """Start a flow run per CommCell at once - each at its own time, with
+    `delays` (seconds from now, from due_sources) - then wait for them all.
 
     Returns each CommCell's final state. Raises if any failed, or did
     not start; a run still going at the deadline is reported, not failed
     - it carries on, and its own result shows in the UI.
 
-    A run no worker has picked up by the deadline is cancelled, and
+    The deadline is `wait_minutes` after each run's own start.
+    A run no worker has picked up by its deadline is cancelled, and
     counts as failed: its collector is not running (a remote collector
     whose tunnel is down, docs/remote-collector.md). Left alone, the runs
     would pile up and all start at once when it is back.
@@ -256,19 +305,28 @@ def fan_out(
         log.warning("No CommCell blocks to %s - see docs/prefect.md", what)
         return {}
 
+    delays = delays or {}
     runs: dict[str, str] = {}
     outcome: dict[str, str] = {}
     for name in names:
         try:
-            runs[name] = start(deployment, name)
+            runs[name] = start(deployment, name, delays.get(name, 0.0))
         except Exception as exc:  # noqa: BLE001 - one bad start must not stop the rest
             outcome[name] = f"not started: {exc}"
-    log.info("Started %d flow runs to %s: %s", len(runs), what, ", ".join(runs))
+    later = {n: delays[n] for n in runs if delays.get(n, 0) >= 60}
+    log.info(
+        "Started %d flow runs to %s: %s",
+        len(runs),
+        what,
+        ", ".join(f"{n} (in {later[n] / 60:.0f} min)" if n in later else n for n in runs),
+    )
 
-    deadline = clock() + wait_minutes * 60
+    started = clock()
+    deadlines = {n: started + delays.get(n, 0.0) + wait_minutes * 60 for n in runs}
     waiting = dict(runs)
     latest: dict[str, State] = {}
     while waiting:
+        now = clock()
         for name, run_id in list(waiting.items()):
             state = latest[name] = read_state(run_id)
             if state.is_final():
@@ -281,7 +339,7 @@ def fan_out(
                     else label
                 )
                 del waiting[name]
-        if not waiting or clock() >= deadline:
+        if not waiting or all(now >= deadlines[n] for n in waiting):
             break
         sleep(poll_seconds)
     for name, run_id in waiting.items():
@@ -310,26 +368,92 @@ def fan_out(
 
 
 @flow(name="blt-collect-jobs")
-def collect_jobs(commcells: list[str] | None = None, wait_minutes: float = 50) -> dict[str, str]:
-    """Collect jobs from every CommCell block (or the ones named), all at
-    once, each in its own flow run."""
-    return fan_out(commcells, COLLECT_ONE, "collect jobs", wait_minutes=wait_minutes)
+def collect_jobs(
+    commcells: list[str] | None = None, wait_minutes: float = 50, interval_minutes: float = 60
+) -> dict[str, str]:
+    """Collect jobs from every CommCell block that is due (or the ones
+    named, at once), each in its own flow run at its own time
+    (blt.timing). `interval_minutes`: how often this deployment fires."""
+    return fan_out_due(
+        commcells,
+        COLLECT_ONE,
+        "collect jobs",
+        "jobs",
+        wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+    )
 
 
 @flow(name="blt-collect-inventory")
 def collect_inventory(
-    commcells: list[str] | None = None, wait_minutes: float = 300
+    commcells: list[str] | None = None, wait_minutes: float = 300, interval_minutes: float = 720
 ) -> dict[str, str]:
     """Collect inventory from every CommCell block (or the ones named),
-    all at once, each in its own flow run."""
-    return fan_out(commcells, INVENTORY_ONE, "collect inventory", wait_minutes=wait_minutes)
+    each in its own flow run, spread over the start of the interval."""
+    return fan_out_due(
+        commcells,
+        INVENTORY_ONE,
+        "collect inventory",
+        "inventory",
+        wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+    )
 
 
 @flow(name="blt-collect-storage")
-def collect_storage(commcells: list[str] | None = None, wait_minutes: float = 30) -> dict[str, str]:
-    """Storage from every CommCell block (or the ones named), all at once,
-    each in its own flow run."""
-    return fan_out(commcells, STORAGE_ONE, "collect storage", wait_minutes=wait_minutes)
+def collect_storage(
+    commcells: list[str] | None = None, wait_minutes: float = 30, interval_minutes: float = 60
+) -> dict[str, str]:
+    """Storage from every CommCell block (or the ones named), each in its
+    own flow run, spread over the start of the interval."""
+    return fan_out_due(
+        commcells,
+        STORAGE_ONE,
+        "collect storage",
+        "storage",
+        wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+    )
+
+
+def fan_out_due(
+    given: list[str] | None,
+    deployment: str,
+    what: str,
+    kind: TimingKind,
+    *,
+    wait_minutes: float,
+    interval_minutes: float,
+    collectable: Callable[[], list[str]] = collectable_commcells,
+    block_type_slug: str = BLOCK_TYPE_SLUG,
+    start: StartRun = _start_run,
+    nothing: str = "No CommCell blocks to {what} - see docs/prefect.md",
+    read_state: ReadState = _read_state,
+) -> dict[str, str]:
+    """A parent flow's firing: the sources named by hand all at once, or
+    else every collectable source that is due (blt.timing), each at its
+    own time."""
+    if given:
+        return fan_out(
+            given, deployment, what, wait_minutes=wait_minutes, start=start, read_state=read_state
+        )
+    names = collectable()
+    if not names:
+        get_run_logger().warning(nothing.format(what=what))
+        return {}
+    due, delays = due_sources(names, block_type_slug, kind=kind, interval_minutes=interval_minutes)
+    if not due:
+        get_run_logger().info("Nothing is due to %s this time.", what)
+        return {}
+    return fan_out(
+        due,
+        deployment,
+        what,
+        wait_minutes=wait_minutes,
+        delays=delays,
+        start=start,
+        read_state=read_state,
+    )
 
 
 @flow(name="blt-backfill", flow_run_name="backfill-{commcell}")
