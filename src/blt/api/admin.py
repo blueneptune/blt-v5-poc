@@ -58,10 +58,20 @@ SLUG_OF: dict[str, str] = {kind: slug for slug, (kind, _) in BLOCK_TYPES.items()
 # (blt.flows.netbackup).
 NETBACKUP_CHECK = ("blt-netbackup-check", "by-hand")
 NETBACKUP_CA = ("blt-netbackup-fetch-ca", "by-hand")
+# Each product's check (blt.flows.netbackup, blt.flows.checks), and the
+# parameter that names the source to it.
+CHECKS: dict[str, tuple[tuple[str, str], str]] = {
+    "netbackup": (NETBACKUP_CHECK, "primary"),
+    "commvault": (("blt-commvault-check", "by-hand"), "commcell"),
+    "rubrik": (("blt-rubrik-check", "by-hand"), "account"),
+}
 
 # Prefect's own rule for block names.
 BLOCK_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 NETBACKUP_PORT = 1556
+COMMVAULT_CLOUD_URL = "https://api.metallic.io"
+COMMVAULT_API_PATH = "/commandcenter/api"
+RUBRIK_TOKEN_PATH = "/api/client_token"
 
 
 class SourceBlockOut(BaseModel):
@@ -82,6 +92,17 @@ class SourceBlockOut(BaseModel):
     )
     has_ca_certificate: bool | None = Field(
         default=None, description="NetBackup: a CA certificate is kept for it."
+    )
+    deployment: str | None = Field(
+        default=None, description="Commvault: software (a CommServe you run) or saas (Cloud)."
+    )
+    login: str | None = Field(
+        default=None,
+        description="Who blt signs in as, where that is not a secret: a Commvault user name, a "
+        "Rubrik service account's name.",
+    )
+    credentials_from: str | None = Field(
+        default=None, description="Commvault: the block its credentials come from (an MSP login)."
     )
     secrets_set: list[str] = Field(description="The secret fields that have a value.")
     updated: datetime | None = Field(default=None, description="When the block last changed.")
@@ -177,9 +198,227 @@ class NetBackupPrimaryIn(BaseModel):
         return check_collector(value)
 
 
+def normalise_commvault_url(value: str) -> str:
+    """`cs01` and `https://cs01` mean https://cs01/commandcenter/api; a
+    URL with a path (`.../webconsole/api`) is kept as it is."""
+    text = value.strip()
+    if "://" not in text:
+        text = f"https://{text}"
+    parts = urlsplit(text)
+    if parts.scheme != "https":
+        raise ValueError("Commvault's API is https only here.")
+    if not parts.hostname:
+        raise ValueError("No host name in it.")
+    if parts.username or parts.password or parts.query or parts.fragment:
+        raise ValueError("Just the address: no user, query or fragment.")
+    path = parts.path.rstrip("/") or COMMVAULT_API_PATH
+    return f"https://{parts.netloc}{path}"
+
+
+def _block_name(value: str) -> str:
+    if not BLOCK_NAME.match(value):
+        raise ValueError("Lower case letters, digits and dashes, starting with a letter or digit.")
+    return value
+
+
+class CommCellIn(BaseModel):
+    """A CommCell - a CommServe you run, or a Commvault Cloud tenant - to
+    add. Either a user name and password, or a token pair from Command
+    Center. It starts with collection off, so it can be checked first."""
+
+    name: str = Field(
+        description="blt's name for it: lower case letters, digits and dashes.",
+        examples=["cv-prod-01"],
+    )
+    deployment: Literal["software", "saas"] = Field(
+        default="software",
+        description="software: a CommServe you run. saas: Commvault Cloud (Metallic).",
+    )
+    base_url: str | None = Field(
+        default=None,
+        description="The CommServe's address: a host name, or its API's URL "
+        "(https://<host>/commandcenter/api). Commvault Cloud: leave it out for "
+        "https://api.metallic.io.",
+        examples=["cs01.example.com"],
+    )
+    username: str | None = Field(default=None, description="A Commvault user blt signs in as.")
+    password: SecretStr | None = Field(default=None, description="That user's password.")
+    access_token: SecretStr | None = Field(
+        default=None, description="Or an access token, made in Command Center."
+    )
+    refresh_token: SecretStr | None = Field(
+        default=None,
+        description="Its refresh token, so blt renews the access token itself. Once blt has "
+        "the pair, use it nowhere else: a renewal elsewhere ends blt's.",
+    )
+    account_id: str | None = Field(
+        default=None, description="Commvault Cloud MSP: the customer's account id (lhAccountId)."
+    )
+    tenant_guid: str | None = Field(
+        default=None, description="Commvault Cloud MSP: or the customer's tenant GUID."
+    )
+    verify_tls: bool = Field(default=True, description="Check the CommServe's TLS certificate.")
+    collect: bool = Field(default=False, description="Collected by the scheduled flows.")
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it; none: blt's own worker.",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "cv-prod-01",
+                    "base_url": "cs01.example.com",
+                    "username": "blt-reader",
+                    "password": "...",
+                }
+            ]
+        }
+    }
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return _block_name(value)
+
+    @field_validator("base_url")
+    @classmethod
+    def _url(cls, value: str | None) -> str | None:
+        return normalise_commvault_url(value) if value and value.strip() else None
+
+    @field_validator("username", "account_id", "tenant_guid")
+    @classmethod
+    def _text(cls, value: str | None) -> str | None:
+        return value.strip() or None if value else None
+
+    @field_validator("collector")
+    @classmethod
+    def _collector(cls, value: str | None) -> str | None:
+        return check_collector(value)
+
+    def block_data(self) -> dict[str, Any]:
+        """The block's fields, checked: one way to sign in, and an address."""
+        url = self.base_url
+        if url is None:
+            if self.deployment == "software":
+                raise ValueError("A CommServe needs its address.")
+            url = COMMVAULT_CLOUD_URL
+        token = self.access_token.get_secret_value() if self.access_token else ""
+        password = self.password.get_secret_value() if self.password else ""
+        if token and (self.username or password):
+            raise ValueError("Either a user name and password, or a token: not both.")
+        if not token and not (self.username and password):
+            raise ValueError("A user name and password, or an access token.")
+        if self.refresh_token and not token:
+            raise ValueError("A refresh token goes with its access token.")
+        return {
+            "base_url": url,
+            "deployment": self.deployment,
+            "username": self.username if not token else None,
+            "password": password or None,
+            "access_token": token or None,
+            "refresh_token": self.refresh_token.get_secret_value() if self.refresh_token else None,
+            "account_id": self.account_id,
+            "tenant_guid": self.tenant_guid,
+            "verify_tls": self.verify_tls,
+            "collect": self.collect,
+            "collector": self.collector,
+            "options": {},
+        }
+
+
+class RubrikServiceAccountIn(BaseModel):
+    """The JSON file Rubrik Security Cloud hands out for a service account
+    (Settings -> Users -> Service Accounts), as it is."""
+
+    client_id: str = Field(description="client_id from the file.")
+    client_secret: SecretStr = Field(description="client_secret from the file.")
+    access_token_uri: str = Field(
+        description="access_token_uri from the file: "
+        "https://<account>.my.rubrik.com/api/client_token."
+    )
+    name: str | None = Field(default=None, description="name from the file.")
+
+    @field_validator("access_token_uri")
+    @classmethod
+    def _uri(cls, value: str) -> str:
+        parts = urlsplit(value.strip())
+        if parts.scheme != "https" or not parts.hostname:
+            raise ValueError("An https address.")
+        if not parts.path.rstrip("/").endswith(RUBRIK_TOKEN_PATH):
+            raise ValueError(
+                f"It should end with {RUBRIK_TOKEN_PATH}: is this an RSC service account file?"
+            )
+        return value.strip().rstrip("/")
+
+    @field_validator("client_id")
+    @classmethod
+    def _id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Empty.")
+        return value.strip()
+
+
+class RubrikAccountIn(BaseModel):
+    """A Rubrik Security Cloud account to add, by its service account. It
+    starts with collection off, so it can be checked first."""
+
+    name: str = Field(
+        description="blt's name for it: lower case letters, digits and dashes.",
+        examples=["rsc-prod"],
+    )
+    service_account: RubrikServiceAccountIn = Field(description="The service account's file.")
+    verify_tls: bool = Field(default=True, description="Check RSC's TLS certificate.")
+    collect: bool = Field(default=False, description="Collected by the scheduled flows.")
+    collector: str | None = Field(
+        default=None,
+        description="The remote collector that reaches it; none: blt's own worker.",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "rsc-prod",
+                    "service_account": {
+                        "client_id": "client|...",
+                        "client_secret": "...",
+                        "access_token_uri": "https://example.my.rubrik.com/api/client_token",
+                        "name": "blt-reader",
+                    },
+                }
+            ]
+        }
+    }
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return _block_name(value)
+
+    @field_validator("collector")
+    @classmethod
+    def _collector(cls, value: str | None) -> str | None:
+        return check_collector(value)
+
+    def block_data(self) -> dict[str, Any]:
+        account = self.service_account
+        return {
+            "client_id": account.client_id,
+            "client_secret": account.client_secret.get_secret_value(),
+            "access_token_uri": account.access_token_uri,
+            "service_account_name": account.name,
+            "verify_tls": self.verify_tls,
+            "collect": self.collect,
+            "collector": self.collector,
+        }
+
+
 class SourceBlockPatch(BaseModel):
-    """What to change; anything left out stays as it is. `collect` and
-    `collector` apply to every source; the rest are NetBackup's."""
+    """What to change; anything left out stays as it is. `collect`,
+    `collector` and `verify_tls` apply to every source; the rest belong to
+    one product each, as their descriptions say."""
 
     collect: bool | None = Field(default=None, description="Collected by the scheduled flows.")
     collector: str | None = Field(
@@ -192,7 +431,7 @@ class SourceBlockPatch(BaseModel):
         default=None, description="NetBackup: a new CA certificate; an empty string removes it."
     )
     verify_tls: bool | None = Field(
-        default=None, description="NetBackup: check the primary's TLS certificate."
+        default=None, description="Check the source's TLS certificate (any product)."
     )
     legacy_keys: bool | None = Field(
         default=None,
@@ -202,12 +441,83 @@ class SourceBlockPatch(BaseModel):
         "checked.",
     )
 
+    base_url: str | None = Field(default=None, description="Commvault: a new address.")
+    username: str | None = Field(
+        default=None, description="Commvault: sign in as this user (with `password`)."
+    )
+    password: SecretStr | None = Field(default=None, description="Commvault: a new password.")
+    access_token: SecretStr | None = Field(
+        default=None,
+        description="Commvault: a new access token, in place of the one kept (or of the user "
+        "name and password).",
+    )
+    refresh_token: SecretStr | None = Field(
+        default=None, description="Commvault: the new access token's refresh token."
+    )
+    service_account: RubrikServiceAccountIn | None = Field(
+        default=None, description="Rubrik: a new service account file, in place of the one kept."
+    )
+
     model_config = {"json_schema_extra": {"examples": [{"collect": True}]}}
 
     @field_validator("url")
     @classmethod
     def _url(cls, value: str | None) -> str | None:
         return None if value is None else normalise_netbackup_url(value)
+
+    @field_validator("base_url")
+    @classmethod
+    def _base_url(cls, value: str | None) -> str | None:
+        return None if value is None else normalise_commvault_url(value)
+
+    def commvault_changes(self) -> dict[str, Any]:
+        """The Commvault fields given, as block data. A new way to sign in
+        replaces the old one whole: a token clears the user and password,
+        a password the tokens."""
+        changes: dict[str, Any] = {}
+        if self.base_url:
+            changes["base_url"] = self.base_url
+        token = self.access_token.get_secret_value() if self.access_token else ""
+        password = self.password.get_secret_value() if self.password else ""
+        if token and (password or self.username):
+            raise ValueError("Either a user name and password, or a token: not both.")
+        if self.refresh_token and not token:
+            raise ValueError("A refresh token goes with its access token.")
+        if token:
+            changes.update(
+                access_token=token,
+                refresh_token=(
+                    self.refresh_token.get_secret_value() if self.refresh_token else None
+                ),
+                token_expires_at=None,
+                token_renewable_until=None,
+                username=None,
+                password=None,
+            )
+        elif password:
+            changes.update(
+                password=password,
+                access_token=None,
+                refresh_token=None,
+                token_expires_at=None,
+                token_renewable_until=None,
+            )
+            if self.username:
+                changes["username"] = self.username.strip()
+        elif self.username:
+            changes["username"] = self.username.strip()
+        return changes
+
+    def rubrik_changes(self) -> dict[str, Any]:
+        account = self.service_account
+        if account is None:
+            return {}
+        return {
+            "client_id": account.client_id,
+            "client_secret": account.client_secret.get_secret_value(),
+            "access_token_uri": account.access_token_uri,
+            "service_account_name": account.name,
+        }
 
     @field_validator("collector")
     @classmethod
@@ -465,6 +775,9 @@ def source_out(document: dict[str, Any]) -> SourceBlockOut | None:
         legacy_keys=bool(data.get("legacy_keys")) if kind == "netbackup" else None,
         has_ca_certificate=bool(data.get("ca_certificate")) if kind == "netbackup" else None,
         collector=data.get("collector") or None,
+        deployment=(data.get("deployment") or "software") if kind == "commvault" else None,
+        login=data.get("username") if kind == "commvault" else data.get("service_account_name"),
+        credentials_from=data.get("credentials") if kind == "commvault" else None,
         secrets_set=secrets_set,
         updated=document.get("updated"),
     )
@@ -584,6 +897,47 @@ def admin_router(
         guarded(lambda: prefect.create_block(SLUG_OF["netbackup"], body.name, data))
         return source_out(find_source(prefect, "netbackup", body.name))  # type: ignore[return-value]
 
+    def add_block(
+        prefect: PrefectApi, kind: SourceKind, name: str, data: Callable[[], dict[str, Any]]
+    ) -> SourceBlockOut:
+        if guarded(lambda: prefect.block_document(SLUG_OF[kind], name)) is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"A {kind} source {name!r} exists")
+        try:
+            fields = data()
+        except ValueError as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        guarded(lambda: prefect.create_block(SLUG_OF[kind], name, fields))
+        return source_out(find_source(prefect, kind, name))  # type: ignore[return-value]
+
+    @router.post(
+        "/sources/commvault",
+        status_code=status.HTTP_201_CREATED,
+        summary="Add a CommCell or Commvault Cloud tenant",
+        responses={
+            409: {"description": "A source by that name exists"},
+            422: {"description": "No way to sign in, or two, or no address"},
+        },
+    )
+    def add_commvault(body: CommCellIn, prefect: PrefectDep) -> SourceBlockOut:
+        """Saves the CommCell's block: a user name and password, or a
+        token pair from Command Center (renewed into the block from then
+        on). Collection starts off: check it first (`.../check`), then
+        turn `collect` on."""
+        return add_block(prefect, "commvault", body.name, body.block_data)
+
+    @router.post(
+        "/sources/rubrik",
+        status_code=status.HTTP_201_CREATED,
+        summary="Add a Rubrik Security Cloud account",
+        responses={409: {"description": "A source by that name exists"}},
+    )
+    def add_rubrik(body: RubrikAccountIn, prefect: PrefectDep) -> SourceBlockOut:
+        """Saves the account's block from its service account file's
+        fields. The secret is kept in the block and never shown again; the
+        file is not needed after. Collection starts off: check it first
+        (`.../check`), then turn `collect` on."""
+        return add_block(prefect, "rubrik", body.name, body.block_data)
+
     @router.patch("/sources/{source_type}/{source_name}", summary="Change a source's block")
     def change_source(
         source_type: SourceType,
@@ -591,31 +945,53 @@ def admin_router(
         body: SourceBlockPatch,
         prefect: PrefectDep,
     ) -> SourceBlockOut:
-        """Changes only what is given. For CommCells and Rubrik accounts
-        that is `collect`; their credentials are set with
-        blt-prefect-import / blt-rubrik."""
+        """Changes only what is given: `collect`, `collector` and
+        `verify_tls` for any source, and each product's own fields for its
+        sources (a 422 for another product's). New credentials replace the
+        old ones whole; check the source again after."""
         document = find_source(prefect, source_type, source_name)
         changes: dict[str, Any] = {}
         if body.collect is not None:
             changes["collect"] = body.collect
         if body.collector is not None:
             changes["collector"] = body.collector or None
-        netbackup: dict[str, Any] = {
-            "url": body.url,
-            "api_key": body.api_key.get_secret_value() if body.api_key else None,
-            "ca_certificate": body.ca_certificate,
-            "verify_tls": body.verify_tls,
-            "legacy_keys": body.legacy_keys,
+        if body.verify_tls is not None:
+            changes["verify_tls"] = body.verify_tls
+        own: dict[str, dict[str, Any]] = {
+            "netbackup": {
+                "url": body.url,
+                "api_key": body.api_key.get_secret_value() if body.api_key else None,
+                "ca_certificate": body.ca_certificate,
+                "legacy_keys": body.legacy_keys,
+            },
+            "commvault": {
+                "base_url": body.base_url,
+                "username": body.username,
+                "password": body.password,
+                "access_token": body.access_token,
+                "refresh_token": body.refresh_token,
+            },
+            "rubrik": {"service_account": body.service_account},
         }
-        given: dict[str, Any] = {k: v for k, v in netbackup.items() if v is not None}
-        if given and source_type != "netbackup":
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"Only collect and collector can be changed here for a {source_type} source.",
-            )
-        if "ca_certificate" in given and given["ca_certificate"] == "":
-            given["ca_certificate"] = None
-        changes.update(given)
+        for kind, fields in own.items():
+            named = [k for k, v in fields.items() if v is not None]
+            if named and kind != source_type:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"{', '.join(named)}: not fields of a {source_type} source.",
+                )
+        try:
+            if source_type == "netbackup":
+                given = {k: v for k, v in own["netbackup"].items() if v is not None}
+                if given.get("ca_certificate") == "":
+                    given["ca_certificate"] = None
+                changes.update(given)
+            elif source_type == "commvault":
+                changes.update(body.commvault_changes())
+            else:
+                changes.update(body.rubrik_changes())
+        except ValueError as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
         if changes:
             guarded(lambda: prefect.update_block(document["id"], changes))
         return source_out(find_source(prefect, source_type, source_name))  # type: ignore[return-value]
@@ -634,19 +1010,24 @@ def admin_router(
         guarded(lambda: prefect.delete_block(document["id"]))
 
     @router.post(
-        "/sources/netbackup/{source_name}/check",
+        "/sources/{source_type}/{source_name}/check",
         status_code=status.HTTP_201_CREATED,
-        summary="Check a NetBackup primary, from a worker",
+        summary="Check a source, from a worker",
     )
-    def check_netbackup(source_name: SourceName, prefect: PrefectDep) -> FlowRunOut:
-        """Starts blt-netbackup-check for the primary: it signs in with
-        the block's key and tries each read blt makes (storage, SLP
-        images, jobs), and logs what it found. Watch the run's log."""
-        document = find_source(prefect, "netbackup", source_name)
+    def check_source(
+        source_type: SourceType, source_name: SourceName, prefect: PrefectDep
+    ) -> FlowRunOut:
+        """Starts the product's check for the source, on the collector
+        that reaches it: it signs in with what the block holds and tries
+        each read blt makes - storage, jobs, and for NetBackup its SLP
+        images, for Rubrik inventory and SLA domains - logging one OK or
+        FAIL line for each. Watch the run's log."""
+        document = find_source(prefect, source_type, source_name)
+        flow, parameter = CHECKS[source_type]
         return start(
             prefect,
-            NETBACKUP_CHECK,
-            {"primary": source_name},
+            flow,
+            {parameter: source_name},
             f"check-{source_name}",
             queue_for(document.get("data") or {}),
         )

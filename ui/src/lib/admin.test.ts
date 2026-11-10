@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { answeredAtInLog, certificatesInLog, collectorChoices, collectorLabel, collectorTone, cronText, isFinal, runTone, type Collector } from './admin';
+import {
+	answeredAtInLog,
+	certificatesInLog,
+	collectorChoices,
+	collectorLabel,
+	collectorTone,
+	cronText,
+	isAddable,
+	isFinal,
+	parseServiceAccount,
+	runTone,
+	sourceKindLabel,
+	type Collector
+} from './admin';
 
 describe('schedules', () => {
 	it('read as words where they are simple', () => {
@@ -136,5 +149,34 @@ describe('certificatesInLog, legacy key sizes', () => {
 		]);
 		expect(found.verifies).toBe(true);
 		expect(found.legacy).toBe(true);
+	});
+});
+
+describe('adding a source', () => {
+	it('reads a Rubrik service account file, and says plainly when it is the wrong one', () => {
+		const good = JSON.stringify({
+			client_id: 'client|x',
+			client_secret: 's3cret',
+			access_token_uri: 'https://acme.my.rubrik.com/api/client_token',
+			name: 'blt-reader'
+		});
+		expect(parseServiceAccount(good)).toEqual({
+			client_id: 'client|x',
+			client_secret: 's3cret',
+			access_token_uri: 'https://acme.my.rubrik.com/api/client_token',
+			name: 'blt-reader'
+		});
+		expect(parseServiceAccount('{nope')).toHaveProperty('problem');
+		expect(parseServiceAccount('[]')).toHaveProperty('problem');
+		const partial = parseServiceAccount(JSON.stringify({ client_id: 'x' }));
+		expect(partial).toEqual({ problem: expect.stringContaining('client_secret, access_token_uri') });
+	});
+
+	it('knows which kinds can be added, and names a Cloud tenant as one', () => {
+		expect(isAddable('rubrik')).toBe(true);
+		expect(isAddable('veeam')).toBe(false);
+		expect(isAddable(null)).toBe(false);
+		expect(sourceKindLabel({ type: 'commvault', deployment: 'saas' })).toBe('Commvault Cloud tenant');
+		expect(sourceKindLabel({ type: 'commvault', deployment: 'software' })).toBe('Commvault CommCell');
 	});
 });

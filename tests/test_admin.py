@@ -45,7 +45,13 @@ class FakePrefect:
         self.documents: dict[str, dict[str, Any]] = {}
         self.flows = {
             name: _id()
-            for name in ("blt-collect-jobs", "blt-netbackup-check", "blt-netbackup-fetch-ca")
+            for name in (
+                "blt-collect-jobs",
+                "blt-netbackup-check",
+                "blt-netbackup-fetch-ca",
+                "blt-commvault-check",
+                "blt-rubrik-check",
+            )
         }
         self.deployments: dict[str, dict[str, Any]] = {}
         self.runs: dict[str, dict[str, Any]] = {}
@@ -58,6 +64,8 @@ class FakePrefect:
         self.add_deployment("blt-collect-jobs", "hourly", cron="7 * * * *")
         self.add_deployment("blt-netbackup-check", "by-hand", parameters={})
         self.add_deployment("blt-netbackup-fetch-ca", "by-hand", parameters={})
+        self.add_deployment("blt-commvault-check", "by-hand", parameters={})
+        self.add_deployment("blt-rubrik-check", "by-hand", parameters={})
 
     def add_deployment(
         self,
@@ -348,7 +356,7 @@ def test_changes_touch_only_what_is_given(http: TestClient, prefect: FakePrefect
     assert data["url"] == "https://a:1556/netbackup"
 
 
-def test_only_collect_changes_for_a_commcell(http: TestClient, prefect: FakePrefect) -> None:
+def test_another_product_s_fields_are_refused(http: TestClient, prefect: FakePrefect) -> None:
     prefect.add_block("blt-commvault-commcell", "cv", {"base_url": "https://cv/api"})
     assert http.patch("/v1/admin/sources/commvault/cv", json={"collect": False}).status_code == 200
     refused = http.patch("/v1/admin/sources/commvault/cv", json={"url": "nbu01"})
@@ -356,6 +364,161 @@ def test_only_collect_changes_for_a_commcell(http: TestClient, prefect: FakePref
     assert (
         http.patch("/v1/admin/sources/commvault/nope", json={"collect": False}).status_code == 404
     )
+
+
+def test_a_commcell_is_added_with_a_password_switched_off(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    response = http.post(
+        "/v1/admin/sources/commvault",
+        json={"name": "cv-01", "base_url": "cs01.example.com", "username": "blt", "password": "pw"},
+    )
+    assert response.status_code == 201, response.text
+    added = response.json()
+    assert added["type"] == "commvault" and added["collect"] is False
+    assert added["address"] == "https://cs01.example.com/commandcenter/api"
+    assert added["deployment"] == "software" and added["login"] == "blt"
+    assert added["secrets_set"] == ["password"]
+    assert '"pw"' not in response.text
+    (stored,) = prefect.documents.values()
+    assert stored["data"]["password"] == "pw" and stored["data"]["access_token"] is None
+    assert stored["data"]["options"] == {}
+    again = http.post(
+        "/v1/admin/sources/commvault",
+        json={"name": "cv-01", "base_url": "cs01", "username": "blt", "password": "pw"},
+    )
+    assert again.status_code == 409
+
+
+def test_a_commvault_cloud_tenant_is_added_with_a_token_pair(
+    http: TestClient, prefect: FakePrefect
+) -> None:
+    added = http.post(
+        "/v1/admin/sources/commvault",
+        json={
+            "name": "cv-cloud",
+            "deployment": "saas",
+            "access_token": "AT",
+            "refresh_token": "RT",
+            "account_id": " 42 ",
+        },
+    ).json()
+    assert added["address"] == "https://api.metallic.io" and added["deployment"] == "saas"
+    assert added["secrets_set"] == ["access_token", "refresh_token"]
+    (stored,) = prefect.documents.values()
+    assert stored["data"]["account_id"] == "42" and stored["data"]["username"] is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"base_url": "cs01"},  # no way to sign in
+        {"username": "u", "password": "p"},  # a CommServe with no address
+        {"base_url": "cs01", "username": "u", "password": "p", "access_token": "t"},  # both
+        {"base_url": "cs01", "username": "u", "password": "p", "refresh_token": "r"},
+        {"base_url": "http://cs01", "username": "u", "password": "p"},
+        {"base_url": "cs01", "username": "u"},  # no password
+        {"name": "CV 01", "base_url": "cs01", "username": "u", "password": "p"},
+    ],
+)
+def test_a_bad_commcell_is_refused(http: TestClient, prefect: FakePrefect, body: dict) -> None:
+    response = http.post("/v1/admin/sources/commvault", json={"name": "cv-01", **body})
+    assert response.status_code == 422, response.text
+    assert prefect.documents == {}
+
+
+@pytest.mark.parametrize(
+    ("given", "url"),
+    [
+        ("cs01", "https://cs01/commandcenter/api"),
+        ("https://cs01:8443", "https://cs01:8443/commandcenter/api"),
+        ("https://cs01/webconsole/api/", "https://cs01/webconsole/api"),
+    ],
+)
+def test_commvault_addresses(given: str, url: str) -> None:
+    from blt.api.admin import normalise_commvault_url
+
+    assert normalise_commvault_url(given) == url
+
+
+RSC_FILE = {
+    "client_id": "client|abc",
+    "client_secret": "RSC-SECRET",
+    "access_token_uri": "https://acme.my.rubrik.com/api/client_token",
+    "name": "blt-reader",
+}
+
+
+def test_a_rubrik_account_is_added_from_its_file(http: TestClient, prefect: FakePrefect) -> None:
+    response = http.post(
+        "/v1/admin/sources/rubrik", json={"name": "rsc-acme", "service_account": RSC_FILE}
+    )
+    assert response.status_code == 201, response.text
+    added = response.json()
+    assert added["collect"] is False and added["login"] == "blt-reader"
+    assert added["address"] == RSC_FILE["access_token_uri"]
+    assert added["secrets_set"] == ["client_secret"]
+    assert "RSC-SECRET" not in response.text
+    (stored,) = prefect.documents.values()
+    assert stored["data"]["client_secret"] == "RSC-SECRET"
+    assert stored["data"]["service_account_name"] == "blt-reader"
+
+
+def test_a_file_that_is_not_a_service_account_is_refused(http: TestClient) -> None:
+    wrong = {**RSC_FILE, "access_token_uri": "https://acme.my.rubrik.com/api/graphql"}
+    response = http.post(
+        "/v1/admin/sources/rubrik", json={"name": "rsc-acme", "service_account": wrong}
+    )
+    assert response.status_code == 422
+    assert "client_token" in response.text and "RSC-SECRET" not in response.text
+
+
+def test_a_commcell_s_login_is_replaced_whole(http: TestClient, prefect: FakePrefect) -> None:
+    block_id = prefect.add_block(
+        "blt-commvault-commcell",
+        "cv",
+        {"base_url": "https://cv/api", "username": "u", "password": "old"},
+    )
+    http.patch("/v1/admin/sources/commvault/cv", json={"access_token": "AT", "refresh_token": "RT"})
+    data = prefect.documents[block_id]["data"]
+    assert (data["access_token"], data["refresh_token"]) == ("AT", "RT")
+    assert data["username"] is None and data["password"] is None
+    assert data["token_expires_at"] is None
+
+    http.patch("/v1/admin/sources/commvault/cv", json={"username": "v", "password": "new"})
+    data = prefect.documents[block_id]["data"]
+    assert (data["username"], data["password"], data["access_token"]) == ("v", "new", None)
+
+    both = http.patch("/v1/admin/sources/commvault/cv", json={"password": "p", "access_token": "t"})
+    assert both.status_code == 422
+
+
+def test_a_rubrik_account_s_file_is_replaced(http: TestClient, prefect: FakePrefect) -> None:
+    block_id = prefect.add_block("blt-rubrik-account", "rsc", {"client_secret": "old"})
+    new = {**RSC_FILE, "client_secret": "NEW"}
+    changed = http.patch("/v1/admin/sources/rubrik/rsc", json={"service_account": new})
+    assert changed.status_code == 200, changed.text
+    assert prefect.documents[block_id]["data"]["client_secret"] == "NEW"
+    other = http.patch("/v1/admin/sources/rubrik/rsc", json={"api_key": "k"})
+    assert other.status_code == 422 and "api_key" in other.text
+
+
+@pytest.mark.parametrize(
+    ("kind", "slug", "flow", "parameter"),
+    [
+        ("commvault", "blt-commvault-commcell", "blt-commvault-check", "commcell"),
+        ("rubrik", "blt-rubrik-account", "blt-rubrik-check", "account"),
+    ],
+)
+def test_any_source_is_checked_by_its_product_s_check(
+    http: TestClient, prefect: FakePrefect, kind: str, slug: str, flow: str, parameter: str
+) -> None:
+    prefect.add_block(slug, "src-1", {"collector": "uk"})
+    run = http.post(f"/v1/admin/sources/{kind}/src-1/check")
+    assert run.status_code == 201, run.text
+    assert run.json()["flow_name"] == flow
+    assert run.json()["parameters"] == {parameter: "src-1"}
+    assert prefect.runs[run.json()["id"]]["work_queue_name"] == "uk"
 
 
 def test_a_source_is_removed(http: TestClient, prefect: FakePrefect) -> None:
