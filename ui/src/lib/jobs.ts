@@ -157,3 +157,17 @@ export function stateColour(state: string): string {
 			return 'var(--color-zinc-400)';
 	}
 }
+
+/** What each product calls the system a job came from. */
+export const SOURCE_NOUN: Record<string, string> = {
+	commvault: 'CommCell',
+	netbackup: 'Primary server',
+	rubrik: 'Rubrik account'
+};
+
+/** The heading over a job's raw record: whose record it is, e.g.
+ * "CommCell cv-toaster's own record". */
+export function recordLabel(sourceType: string | null | undefined, sourceName: string | null | undefined): string {
+	const noun = SOURCE_NOUN[sourceType ?? ''] ?? 'Source';
+	return sourceName ? `${noun} ${sourceName}'s own record` : `The ${noun.toLowerCase()}'s own record`;
+}
