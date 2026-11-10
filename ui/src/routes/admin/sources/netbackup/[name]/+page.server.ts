@@ -18,8 +18,8 @@ const path = (name: string) => ({ params: { path: { source_type: 'netbackup' as 
 export const actions: Actions = {
 	check: async ({ locals, params }) => {
 		requireAdmin(locals.user);
-		const run = await locals.api.POST('/v1/admin/sources/netbackup/{source_name}/check', {
-			params: { path: { source_name: params.name } }
+		const run = await locals.api.POST('/v1/admin/sources/{source_type}/{source_name}/check', {
+			params: { path: { source_type: 'netbackup', source_name: params.name } }
 		});
 		if (!run.data) return refused(run);
 		redirect(303, `?run=${run.data.id}`);

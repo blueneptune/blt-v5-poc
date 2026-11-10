@@ -39,6 +39,13 @@ network ([remote-collector.md](remote-collector.md)). Above the table,
 **Collectors** lists each worker, with whether it is online and how
 many sources it reaches.
 
+**Add a source** (the drop-down above the table) opens the form for the
+product chosen: a NetBackup primary, a Commvault CommCell, or a Rubrik
+account. Each saves the source's block with collection **off**, starts a
+check on the worker that reaches it, and opens the source's page to watch
+the check's log: one OK or FAIL line per read blt makes, with why. Turn
+collection on there once the reads pass.
+
 **A NetBackup primary** is added here end to end:
 
 1. **Collected by** (only offered once a remote collector exists): the
@@ -74,8 +81,44 @@ many sources it reaches.
 6. **Turn on** collection once storage passes.
 
 Its page also takes a new key, address or CA certificate, and removes it
-(typing its name to confirm). CommCells and Rubrik accounts still get
-their credentials from `blt-prefect-import` and `blt-rubrik`.
+(typing its name to confirm).
+
+**A Commvault CommCell** - a CommServe you run, or a Commvault Cloud
+tenant:
+
+1. **Where it runs.** A CommServe needs its address: a host name is
+   enough (`https://<host>/commandcenter/api` is made from it; give a
+   whole URL for another path, such as `.../webconsole/api`). Commvault
+   Cloud needs none (`https://api.metallic.io`); an MSP's customer also
+   takes the customer's account id or tenant GUID.
+2. **Signing in**, one of:
+   - a **user name and password** for a Commvault user whose role may only
+     read - blt signs in for each run;
+   - an **access token** from Command Center, with its **refresh token**
+     so blt renews it into the block. Once blt has the pair, use it
+     nowhere else: a renewal anywhere else ends blt's (TODO 15), and a new
+     token has to be made. Without a refresh token it simply expires.
+3. **Save and check**: sign-in (the CommServe's name and version), jobs of
+   the last 24 hours, storage.
+
+Its page changes the address, or replaces the way it signs in whole (a
+token clears the user and password, a password the tokens), and switches
+TLS verification - off only for a lab CommServe with a self-signed
+certificate.
+
+**A Rubrik account** is added from its **service account file**: make a
+service account in Rubrik Security Cloud (Settings -> Users -> Service
+Accounts) with a read-only role and download its JSON file, then choose
+that file. The page reads `client_id`, `client_secret` and
+`access_token_uri` from it and sends them to the API; the secret is kept
+in the block and never shown again, and blt does not need the file after.
+A file that is not a service account (no `/api/client_token` address) is
+refused, saying so. The check signs in and reads jobs, inventory and SLA
+domains. Its page takes a new file after the secret is rotated in RSC.
+
+The command-line imports still work: `blt-prefect-import` for CommCells'
+`.env` files (and an MSP's credentials block, which the form does not
+make), and `blt-rubrik add`.
 
 ### The NetBackup account
 
@@ -176,6 +219,7 @@ browser --(signed-in session)--> blt UI (server side) --(X-API-Key)--> blt API /
 
 ## Not yet
 
-- Adding CommCells (with their token handover) and Rubrik accounts here.
+- An MSP's shared credentials block for Commvault Cloud (one login lent to
+  many customer blocks): still `blt-prefect-import`.
 - Users and roles: one admin account until Zitadel.
 - The other UIs (Harbor, Rancher, Longhorn).

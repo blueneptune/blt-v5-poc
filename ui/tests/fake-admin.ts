@@ -99,6 +99,26 @@ const deployments: Deployment[] = [
 	{
 		id: id(2),
 		name: 'by-hand',
+		flow_name: 'blt-commvault-check',
+		description: 'Checks one CommCell.',
+		paused: false,
+		schedules: [],
+		parameters: {},
+		parameter_schema: schema({ commcell: { type: 'string', title: 'commcell' } }, ['commcell'])
+	},
+	{
+		id: id(2),
+		name: 'by-hand',
+		flow_name: 'blt-rubrik-check',
+		description: 'Checks one Rubrik account.',
+		paused: false,
+		schedules: [],
+		parameters: {},
+		parameter_schema: schema({ account: { type: 'string', title: 'account' } }, ['account'])
+	},
+	{
+		id: id(2),
+		name: 'by-hand',
 		flow_name: 'blt-netbackup-fetch-ca',
 		description: 'Fetches a CA certificate.',
 		paused: false,
@@ -141,6 +161,26 @@ addRun(deployments[0], {}, 'brave-otter', [['INFO', 'cv-toaster: 12 jobs']], 'CO
 addRun(deployments[0], {}, 'calm-heron', [['ERROR', 'cv-toaster: 401 from the CommCell']], 'FAILED', 113);
 
 const flow = (name: string) => deployments.find((d) => d.flow_name === name)!;
+
+function startSourceCheck(source: Source): Run {
+	if (source.type === 'commvault')
+		return addRun(flow('blt-commvault-check'), { commcell: source.name }, `check-${source.name}`, [
+			['INFO', `Checking CommCell ${source.name} at ${source.address}`],
+			['INFO', 'OK   sign in: CommServe cs01 version 11.36'],
+			['INFO', 'OK   jobs: readable (12 in the last 24 hours)'],
+			['INFO', 'OK   storage (pools, libraries): 3 storage targets'],
+			['INFO', '3 of 3 checks passed']
+		]);
+	if (source.type === 'rubrik')
+		return addRun(flow('blt-rubrik-check'), { account: source.name }, `check-${source.name}`, [
+			['INFO', `Checking Rubrik account ${source.name} as ${source.login ?? 'its service account'}`],
+			['INFO', 'OK   sign in and jobs: signed in; jobs readable (some lately)'],
+			['INFO', 'OK   inventory: readable (5 objects in a first look)'],
+			['INFO', 'OK   SLA domains: readable (4 SLA domains in a first page)'],
+			['INFO', '3 of 3 checks passed']
+		]);
+	return startCheck(source.name);
+}
 
 function startCheck(primary: string): Run {
 	return addRun(flow('blt-netbackup-check'), { primary }, `check-${primary}`, [
@@ -212,15 +252,68 @@ export function admin(method: string, path: string, q: URLSearchParams, body: an
 		sources.push(added);
 		return [201, added];
 	}
+	if (rest === '/sources/commvault' && method === 'POST') {
+		if (sources.some((s) => s.type === 'commvault' && s.name === body.name)) return [409, { detail: `A commvault source '${body.name}' exists` }];
+		const token = !!body.access_token;
+		if (token === !!(body.username || body.password)) return [422, { detail: 'Either a user name and password, or a token: not both.' }];
+		if (!token && !(body.username && body.password)) return [422, { detail: 'A user name and password, or an access token.' }];
+		const saas = body.deployment === 'saas';
+		if (!saas && !body.base_url) return [422, { detail: 'A CommServe needs its address.' }];
+		const host = String(body.base_url ?? '').replace(/^https:\/\//, '').split('/')[0];
+		const added: Source = {
+			type: 'commvault',
+			name: body.name,
+			block_id: id(1),
+			collect: false,
+			address: body.base_url ? `https://${host}/commandcenter/api` : 'https://api.metallic.io',
+			verify_tls: body.verify_tls ?? true,
+			collector: body.collector ?? null,
+			deployment: saas ? 'saas' : 'software',
+			login: token ? null : body.username,
+			secrets_set: token ? ['access_token', ...(body.refresh_token ? ['refresh_token'] : [])] : ['password'],
+			updated: new Date().toISOString()
+		};
+		sources.push(added);
+		return [201, added];
+	}
+	if (rest === '/sources/rubrik' && method === 'POST') {
+		if (sources.some((s) => s.type === 'rubrik' && s.name === body.name)) return [409, { detail: `A rubrik source '${body.name}' exists` }];
+		const account = body.service_account ?? {};
+		if (!String(account.access_token_uri ?? '').endsWith('/api/client_token'))
+			return [422, { detail: [{ loc: ['body', 'service_account', 'access_token_uri'], msg: 'Value error, It should end with /api/client_token: is this an RSC service account file?' }] }];
+		const added: Source = {
+			type: 'rubrik',
+			name: body.name,
+			block_id: id(1),
+			collect: false,
+			address: account.access_token_uri,
+			verify_tls: true,
+			collector: body.collector ?? null,
+			login: account.name ?? null,
+			secrets_set: ['client_secret'],
+			updated: new Date().toISOString()
+		};
+		sources.push(added);
+		return [201, added];
+	}
 	const source = rest.match(/^\/sources\/(commvault|rubrik|netbackup)\/([^/]+)(\/check)?$/);
 	if (source) {
 		const found = sources.find((s) => s.type === source[1] && s.name === source[2]);
 		if (!found) return [404, { detail: `No ${source[1]} source '${source[2]}'` }];
-		if (source[3]) return [201, startCheck(found.name)];
+		if (source[3]) return [201, startSourceCheck(found)];
 		if (method === 'PATCH') {
 			if (body.collect !== undefined && body.collect !== null) found.collect = body.collect;
 			if (body.collector !== undefined && body.collector !== null) found.collector = body.collector || null;
 			if (body.legacy_keys !== undefined && body.legacy_keys !== null) found.legacy_keys = body.legacy_keys;
+			if (body.verify_tls !== undefined && body.verify_tls !== null) found.verify_tls = body.verify_tls;
+			if (body.access_token) {
+				found.secrets_set = ['access_token', ...(body.refresh_token ? ['refresh_token'] : [])];
+				found.login = null;
+			} else if (body.password) {
+				found.secrets_set = ['password'];
+				if (body.username) found.login = body.username;
+			}
+			if (body.service_account) found.login = body.service_account.name ?? null;
 			if (body.ca_certificate === '') found.has_ca_certificate = false;
 			else if (body.ca_certificate) found.has_ca_certificate = true;
 			found.updated = new Date().toISOString();

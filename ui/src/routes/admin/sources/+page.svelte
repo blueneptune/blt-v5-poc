@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { Plus } from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
-	import { SOURCE_LABELS, collectorLabel, collectorTone } from '$lib/admin';
+	import { ADD_SOURCE_CHOICES, collectorLabel, collectorTone, sourceKindLabel } from '$lib/admin';
 	import { ago } from '$lib/format';
 	import { stateClass } from '$lib/jobs';
 	import CollectorSelect from '$lib/components/CollectorSelect.svelte';
@@ -19,9 +20,26 @@
 			Where blt collects from, and how it signs in. Secrets are never shown: only whether each is set.
 		</p>
 	</div>
-	<a href="/admin/sources/netbackup/new" class={buttonVariants({ size: 'sm' })}>
-		<Plus class="size-4" /> Add a NetBackup primary
-	</a>
+	<form method="GET" action="/admin/sources/new" class="flex items-center gap-2">
+		<label class="sr-only" for="add-type">Kind of source to add</label>
+		<select
+			id="add-type"
+			name="type"
+			class="bg-background h-8 rounded-md border px-2 text-sm"
+			onchange={(e) => {
+				const type = e.currentTarget.value;
+				if (type) goto(`/admin/sources/${type}/new`);
+			}}
+		>
+			<option value="">Add a source…</option>
+			{#each ADD_SOURCE_CHOICES as choice (choice.type)}
+				<option value={choice.type}>{choice.label}</option>
+			{/each}
+		</select>
+		<noscript>
+			<button type="submit" class={buttonVariants({ size: 'sm' })}><Plus class="size-4" /> Add</button>
+		</noscript>
+	</form>
 </div>
 
 {#if data.problem}
@@ -77,13 +95,9 @@
 			{#each data.sources as source (source.block_id)}
 				<tr class="border-b last:border-0">
 					<td class="px-4 py-2 font-medium">
-						{#if source.type === 'netbackup'}
-							<a href="/admin/sources/netbackup/{source.name}" class="hover:underline">{source.name}</a>
-						{:else}
-							{source.name}
-						{/if}
+						<a href="/admin/sources/{source.type}/{source.name}" class="hover:underline">{source.name}</a>
 					</td>
-					<td class="px-4 py-2">{SOURCE_LABELS[source.type] ?? source.type}</td>
+					<td class="px-4 py-2">{sourceKindLabel(source)}</td>
 					<td class="text-muted-foreground max-w-56 truncate px-4 py-2" title={source.address ?? ''}>
 						{source.address ?? '—'}
 						{#if source.legacy_keys}
@@ -148,6 +162,6 @@
 </div>
 
 <p class="text-muted-foreground mt-4 text-xs">
-	CommCells and Rubrik accounts get their credentials from blt-prefect-import and blt-rubrik for now
-	(docs/admin.md); here they can be switched on and off, and given a collector.
+	Each source starts with collection off: check it from its page, then turn it on. The command-line imports
+	(blt-prefect-import, blt-rubrik) still work too (docs/admin.md).
 </p>

@@ -47,8 +47,8 @@ export const actions: Actions = {
 			}
 		});
 		if (!added.data) return refused(added);
-		const check = await locals.api.POST('/v1/admin/sources/netbackup/{source_name}/check', {
-			params: { path: { source_name: name } }
+		const check = await locals.api.POST('/v1/admin/sources/{source_type}/{source_name}/check', {
+			params: { path: { source_type: 'netbackup', source_name: name } }
 		});
 		redirect(303, `/admin/sources/netbackup/${name}${check.data ? `?run=${check.data.id}` : ''}`);
 	}
