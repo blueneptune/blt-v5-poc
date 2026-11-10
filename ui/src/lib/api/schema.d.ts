@@ -217,6 +217,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/sources/commvault": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a CommCell or Commvault Cloud tenant
+         * @description Saves the CommCell's block: a user name and password, or a
+         *     token pair from Command Center (renewed into the block from then
+         *     on). Collection starts off: check it first (`.../check`), then
+         *     turn `collect` on.
+         */
+        post: operations["add_commvault_v1_admin_sources_commvault_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/sources/rubrik": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a Rubrik Security Cloud account
+         * @description Saves the account's block from its service account file's
+         *     fields. The secret is kept in the block and never shown again; the
+         *     file is not needed after. Collection starts off: check it first
+         *     (`.../check`), then turn `collect` on.
+         */
+        post: operations["add_rubrik_v1_admin_sources_rubrik_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/sources/{source_type}/{source_name}": {
         parameters: {
             query?: never;
@@ -237,14 +283,15 @@ export interface paths {
         head?: never;
         /**
          * Change a source's block
-         * @description Changes only what is given. For CommCells and Rubrik accounts
-         *     that is `collect`; their credentials are set with
-         *     blt-prefect-import / blt-rubrik.
+         * @description Changes only what is given: `collect`, `collector` and
+         *     `verify_tls` for any source, and each product's own fields for its
+         *     sources (a 422 for another product's). New credentials replace the
+         *     old ones whole; check the source again after.
          */
         patch: operations["change_source_v1_admin_sources__source_type___source_name__patch"];
         trace?: never;
     };
-    "/v1/admin/sources/netbackup/{source_name}/check": {
+    "/v1/admin/sources/{source_type}/{source_name}/check": {
         parameters: {
             query?: never;
             header?: never;
@@ -254,12 +301,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Check a NetBackup primary, from a worker
-         * @description Starts blt-netbackup-check for the primary: it signs in with
-         *     the block's key and tries each read blt makes (storage, SLP
-         *     images, jobs), and logs what it found. Watch the run's log.
+         * Check a source, from a worker
+         * @description Starts the product's check for the source, on the collector
+         *     that reaches it: it signs in with what the block holds and tries
+         *     each read blt makes - storage, jobs, and for NetBackup its SLP
+         *     images, for Rubrik inventory and SLA domains - logging one OK or
+         *     FAIL line for each. Watch the run's log.
          */
-        post: operations["check_netbackup_v1_admin_sources_netbackup__source_name__check_post"];
+        post: operations["check_source_v1_admin_sources__source_type___source_name__check_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1175,6 +1224,86 @@ export interface components {
              * @description The sources it reaches, as type/name.
              */
             sources: string[];
+        };
+        /**
+         * CommCellIn
+         * @description A CommCell - a CommServe you run, or a Commvault Cloud tenant - to
+         *     add. Either a user name and password, or a token pair from Command
+         *     Center. It starts with collection off, so it can be checked first.
+         * @example {
+         *       "base_url": "cs01.example.com",
+         *       "name": "cv-prod-01",
+         *       "password": "...",
+         *       "username": "blt-reader"
+         *     }
+         */
+        CommCellIn: {
+            /**
+             * Name
+             * @description blt's name for it: lower case letters, digits and dashes.
+             * @example cv-prod-01
+             */
+            name: string;
+            /**
+             * Deployment
+             * @description software: a CommServe you run. saas: Commvault Cloud (Metallic).
+             * @default software
+             * @enum {string}
+             */
+            deployment: "software" | "saas";
+            /**
+             * Base Url
+             * @description The CommServe's address: a host name, or its API's URL (https://<host>/commandcenter/api). Commvault Cloud: leave it out for https://api.metallic.io.
+             * @example cs01.example.com
+             */
+            base_url?: string | null;
+            /**
+             * Username
+             * @description A Commvault user blt signs in as.
+             */
+            username?: string | null;
+            /**
+             * Password
+             * @description That user's password.
+             */
+            password?: string | null;
+            /**
+             * Access Token
+             * @description Or an access token, made in Command Center.
+             */
+            access_token?: string | null;
+            /**
+             * Refresh Token
+             * @description Its refresh token, so blt renews the access token itself. Once blt has the pair, use it nowhere else: a renewal elsewhere ends blt's.
+             */
+            refresh_token?: string | null;
+            /**
+             * Account Id
+             * @description Commvault Cloud MSP: the customer's account id (lhAccountId).
+             */
+            account_id?: string | null;
+            /**
+             * Tenant Guid
+             * @description Commvault Cloud MSP: or the customer's tenant GUID.
+             */
+            tenant_guid?: string | null;
+            /**
+             * Verify Tls
+             * @description Check the CommServe's TLS certificate.
+             * @default true
+             */
+            verify_tls: boolean;
+            /**
+             * Collect
+             * @description Collected by the scheduled flows.
+             * @default false
+             */
+            collect: boolean;
+            /**
+             * Collector
+             * @description The remote collector that reaches it; none: blt's own worker.
+             */
+            collector?: string | null;
         };
         /**
          * CommonJobDetail
@@ -2903,6 +3032,47 @@ export interface components {
             detail: string;
         };
         /**
+         * RubrikAccountIn
+         * @description A Rubrik Security Cloud account to add, by its service account. It
+         *     starts with collection off, so it can be checked first.
+         * @example {
+         *       "name": "rsc-prod",
+         *       "service_account": {
+         *         "access_token_uri": "https://example.my.rubrik.com/api/client_token",
+         *         "client_id": "client|...",
+         *         "client_secret": "...",
+         *         "name": "blt-reader"
+         *       }
+         *     }
+         */
+        RubrikAccountIn: {
+            /**
+             * Name
+             * @description blt's name for it: lower case letters, digits and dashes.
+             * @example rsc-prod
+             */
+            name: string;
+            /** @description The service account's file. */
+            service_account: components["schemas"]["RubrikServiceAccountIn"];
+            /**
+             * Verify Tls
+             * @description Check RSC's TLS certificate.
+             * @default true
+             */
+            verify_tls: boolean;
+            /**
+             * Collect
+             * @description Collected by the scheduled flows.
+             * @default false
+             */
+            collect: boolean;
+            /**
+             * Collector
+             * @description The remote collector that reaches it; none: blt's own worker.
+             */
+            collector?: string | null;
+        };
+        /**
          * RubrikJobBatch
          * @description Jobs collected in one go, sent during a run.
          * @example {
@@ -3837,6 +4007,34 @@ export interface components {
             lookup_seconds: number;
         };
         /**
+         * RubrikServiceAccountIn
+         * @description The JSON file Rubrik Security Cloud hands out for a service account
+         *     (Settings -> Users -> Service Accounts), as it is.
+         */
+        RubrikServiceAccountIn: {
+            /**
+             * Client Id
+             * @description client_id from the file.
+             */
+            client_id: string;
+            /**
+             * Client Secret
+             * Format: password
+             * @description client_secret from the file.
+             */
+            client_secret: string;
+            /**
+             * Access Token Uri
+             * @description access_token_uri from the file: https://<account>.my.rubrik.com/api/client_token.
+             */
+            access_token_uri: string;
+            /**
+             * Name
+             * @description name from the file.
+             */
+            name?: string | null;
+        };
+        /**
          * RunBrief
          * @description A flow run, briefly.
          */
@@ -4214,6 +4412,21 @@ export interface components {
              */
             has_ca_certificate?: boolean | null;
             /**
+             * Deployment
+             * @description Commvault: software (a CommServe you run) or saas (Cloud).
+             */
+            deployment?: string | null;
+            /**
+             * Login
+             * @description Who blt signs in as, where that is not a secret: a Commvault user name, a Rubrik service account's name.
+             */
+            login?: string | null;
+            /**
+             * Credentials From
+             * @description Commvault: the block its credentials come from (an MSP login).
+             */
+            credentials_from?: string | null;
+            /**
              * Secrets Set
              * @description The secret fields that have a value.
              */
@@ -4226,8 +4439,9 @@ export interface components {
         };
         /**
          * SourceBlockPatch
-         * @description What to change; anything left out stays as it is. `collect` and
-         *     `collector` apply to every source; the rest are NetBackup's.
+         * @description What to change; anything left out stays as it is. `collect`,
+         *     `collector` and `verify_tls` apply to every source; the rest belong to
+         *     one product each, as their descriptions say.
          * @example {
          *       "collect": true
          *     }
@@ -4260,7 +4474,7 @@ export interface components {
             ca_certificate?: string | null;
             /**
              * Verify Tls
-             * @description NetBackup: check the primary's TLS certificate.
+             * @description Check the source's TLS certificate (any product).
              */
             verify_tls?: boolean | null;
             /**
@@ -4268,6 +4482,33 @@ export interface components {
              * @description NetBackup: Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still checked.
              */
             legacy_keys?: boolean | null;
+            /**
+             * Base Url
+             * @description Commvault: a new address.
+             */
+            base_url?: string | null;
+            /**
+             * Username
+             * @description Commvault: sign in as this user (with `password`).
+             */
+            username?: string | null;
+            /**
+             * Password
+             * @description Commvault: a new password.
+             */
+            password?: string | null;
+            /**
+             * Access Token
+             * @description Commvault: a new access token, in place of the one kept (or of the user name and password).
+             */
+            access_token?: string | null;
+            /**
+             * Refresh Token
+             * @description Commvault: the new access token's refresh token.
+             */
+            refresh_token?: string | null;
+            /** @description Rubrik: a new service account file, in place of the one kept. */
+            service_account?: components["schemas"]["RubrikServiceAccountIn"] | null;
         };
         /**
          * SourceOut
@@ -5318,6 +5559,116 @@ export interface operations {
             };
         };
     };
+    add_commvault_v1_admin_sources_commvault_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommCellIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceBlockOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A source by that name exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No way to sign in, or two, or no address */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    add_rubrik_v1_admin_sources_rubrik_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RubrikAccountIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceBlockOut"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A source by that name exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Prefect is not set up for the API, or cannot be reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     remove_source_v1_admin_sources__source_type___source_name__delete: {
         parameters: {
             query?: never;
@@ -5420,11 +5771,13 @@ export interface operations {
             };
         };
     };
-    check_netbackup_v1_admin_sources_netbackup__source_name__check_post: {
+    check_source_v1_admin_sources__source_type___source_name__check_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description The product. */
+                source_type: "commvault" | "rubrik" | "netbackup";
                 /** @description The source's block name. */
                 source_name: string;
             };

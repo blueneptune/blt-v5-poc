@@ -230,3 +230,66 @@ export function collectorChoices(
 		}))
 	];
 }
+
+/** The kinds of source that can be added, for "Add a source". */
+export const ADD_SOURCE_CHOICES = [
+	{
+		type: 'netbackup',
+		label: 'NetBackup primary',
+		description: 'A primary server, by its address and an API key.'
+	},
+	{
+		type: 'commvault',
+		label: 'Commvault CommCell',
+		description: 'A CommServe you run, or a Commvault Cloud tenant: a user and password, or a token pair.'
+	},
+	{
+		type: 'rubrik',
+		label: 'Rubrik account',
+		description: "A Rubrik Security Cloud account, by its service account's JSON file."
+	}
+] as const;
+
+export type AddableSource = (typeof ADD_SOURCE_CHOICES)[number]['type'];
+
+export function isAddable(type: string | null | undefined): type is AddableSource {
+	return ADD_SOURCE_CHOICES.some((c) => c.type === type);
+}
+
+export interface ServiceAccountFile {
+	client_id: string;
+	client_secret: string;
+	access_token_uri: string;
+	name: string | null;
+}
+
+/** A Rubrik service account file's fields, or why it is not one. The
+ * API checks them again; this only says early, and plainly, that the
+ * wrong file was chosen. */
+export function parseServiceAccount(text: string): ServiceAccountFile | { problem: string } {
+	let raw: unknown;
+	try {
+		raw = JSON.parse(text);
+	} catch {
+		return { problem: 'It is not JSON: choose the file RSC gave when the service account was made.' };
+	}
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { problem: 'It is not a service account file.' };
+	const file = raw as Record<string, unknown>;
+	const missing = ['client_id', 'client_secret', 'access_token_uri'].filter(
+		(key) => typeof file[key] !== 'string' || !(file[key] as string).trim()
+	);
+	if (missing.length) return { problem: `It has no ${missing.join(', ')}: is it an RSC service account file?` };
+	return {
+		client_id: String(file.client_id).trim(),
+		client_secret: String(file.client_secret),
+		access_token_uri: String(file.access_token_uri).trim(),
+		name: typeof file.name === 'string' && file.name.trim() ? file.name.trim() : null
+	};
+}
+
+/** What a source's product calls it, more exactly than SOURCE_LABELS:
+ * a Commvault source may be a Commvault Cloud tenant. */
+export function sourceKindLabel(source: { type: string; deployment?: string | null }): string {
+	if (source.type === 'commvault' && source.deployment === 'saas') return 'Commvault Cloud tenant';
+	return SOURCE_LABELS[source.type] ?? source.type;
+}

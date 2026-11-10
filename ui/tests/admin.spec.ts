@@ -97,7 +97,8 @@ test('a NetBackup primary added for a remote collector keeps it', async ({ page 
 
 test('a NetBackup primary: fetch its CA, save, and watch the check', async ({ page }) => {
 	await page.goto('/admin/sources');
-	await page.getByRole('link', { name: 'Add a NetBackup primary' }).click();
+	await page.getByLabel('Kind of source to add').selectOption('NetBackup primary');
+	await expect(page).toHaveURL(/\/admin\/sources\/netbackup\/new$/);
 	await page.getByLabel('Name in blt').fill('nbu-work-01');
 	await page.getByLabel('Address').fill('nbu01.example.com');
 	await page.getByLabel('API key').fill('typed-by-the-admin');
@@ -174,6 +175,91 @@ test('a NetBackup primary is removed only by typing its name', async ({ page }) 
 	await expect(page.getByRole('row', { name: /nbu-work-01/ })).toHaveCount(0);
 });
 
+test('add a source: a choice of product, also without the drop-down', async ({ page }) => {
+	await page.goto('/admin/sources/new');
+	await expect(page.getByRole('heading', { name: 'Add a source' })).toBeVisible();
+	await page.getByRole('link', { name: /Rubrik account/ }).click();
+	await expect(page).toHaveURL(/\/admin\/sources\/rubrik\/new$/);
+	// the drop-down's form, as it is sent without JavaScript
+	await page.goto('/admin/sources/new?type=commvault');
+	await expect(page).toHaveURL(/\/admin\/sources\/commvault\/new$/);
+});
+
+test('a CommCell: added with a password, checked, its sign-in changed to a token', async ({ page }) => {
+	await page.goto('/admin/sources');
+	await page.getByLabel('Kind of source to add').selectOption('Commvault CommCell');
+	await expect(page).toHaveURL(/\/admin\/sources\/commvault\/new$/);
+	await page.getByLabel('Name in blt').fill('cv-prod-01');
+	await page.getByLabel('Address').fill('cs01.example.com');
+	await page.getByLabel('User name', { exact: true }).fill('blt-reader');
+	await page.getByLabel('Password', { exact: true }).fill('typed-by-the-admin');
+	await page.getByRole('button', { name: 'Save and check' }).click();
+
+	await expect(page).toHaveURL(/\/admin\/sources\/commvault\/cv-prod-01\?run=/);
+	await expect(page.getByText('3 of 3 checks passed')).toBeVisible();
+	await expect(page.getByText('as blt-reader')).toBeVisible();
+	await expect(page.getByText('Collecting:')).toContainText('off');
+	await expect(page.getByText('typed-by-the-admin')).toHaveCount(0);
+
+	await page.getByRole('radio', { name: 'Access token' }).check();
+	await page.getByLabel('New access token').fill('AT');
+	await page.getByLabel('Its refresh token').fill('RT');
+	await page.getByRole('button', { name: 'Save changes' }).click();
+	await expect(page.getByRole('status')).toHaveText('Saved. Check it again to be sure.');
+	await expect(page.getByText('with an access token, renewed by blt')).toBeVisible();
+
+	await page.goto('/admin/sources');
+	await expect(page.getByRole('row', { name: /cv-prod-01/ })).toContainText('Commvault CommCell');
+});
+
+test('a Commvault Cloud tenant needs no address, and is named as one', async ({ page }) => {
+	await page.goto('/admin/sources/commvault/new');
+	await page.getByLabel('Name in blt').fill('cv-cloud');
+	await page.getByRole('radio', { name: /Commvault Cloud/ }).check();
+	await expect(page.getByLabel('Address')).toHaveAttribute('placeholder', 'https://api.metallic.io');
+	await page.getByRole('radio', { name: /Access token/ }).check();
+	await page.getByLabel('Access token', { exact: true }).fill('AT');
+	await page.getByRole('button', { name: 'Save and check' }).click();
+	await expect(page).toHaveURL(/\/admin\/sources\/commvault\/cv-cloud\?run=/);
+	await expect(page.getByText('Commvault Cloud tenant')).toBeVisible();
+	await expect(page.getByText('no refresh token: it will expire')).toBeVisible();
+});
+
+const serviceAccount = (uri = 'https://acme.my.rubrik.com/api/client_token') => ({
+	name: 'blt-reader.json',
+	mimeType: 'application/json',
+	buffer: Buffer.from(
+		JSON.stringify({ client_id: 'client|x', client_secret: 'rsc-secret-123', access_token_uri: uri, name: 'blt-reader' })
+	)
+});
+
+test('a Rubrik account: added from its service account file, and checked', async ({ page }) => {
+	await page.goto('/admin/sources');
+	await page.getByLabel('Kind of source to add').selectOption('Rubrik account');
+	await page.getByLabel('Name in blt').fill('rsc-acme');
+	await page.getByLabel('Service account file').setInputFiles(serviceAccount());
+	await page.getByRole('button', { name: 'Save and check' }).click();
+
+	await expect(page).toHaveURL(/\/admin\/sources\/rubrik\/rsc-acme\?run=/);
+	await expect(page.getByText('3 of 3 checks passed')).toBeVisible();
+	await expect(page.getByText('blt-reader · secret set')).toBeVisible();
+	await expect(page.getByText('rsc-secret-123')).toHaveCount(0);
+});
+
+test('a file that is not a service account is refused, saying so', async ({ page }) => {
+	await page.goto('/admin/sources/rubrik/new');
+	await page.getByLabel('Name in blt').fill('rsc-wrong');
+	await page
+		.getByLabel('Service account file')
+		.setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"hello": 1}') });
+	await page.getByRole('button', { name: 'Save and check' }).click();
+	await expect(page.getByRole('alert')).toContainText('is it an RSC service account file?');
+
+	await page.getByLabel('Service account file').setInputFiles(serviceAccount('https://acme.my.rubrik.com/api/graphql'));
+	await page.getByRole('button', { name: 'Save and check' }).click();
+	await expect(page.getByRole('alert')).toContainText('should end with /api/client_token');
+});
+
 test('schedules: read as words, paused and resumed', async ({ page }) => {
 	await page.goto('/admin/schedules');
 	const row = page.getByRole('row', { name: /blt-collect-jobs/ });
@@ -228,7 +314,15 @@ test('runs: filtered by state, each with its log', async ({ page }) => {
 
 test('on a phone nothing spills sideways', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 800 });
-	for (const path of ['/admin/sources', '/admin/schedules', '/admin/runs', '/admin/sources/netbackup/new']) {
+	for (const path of [
+		'/admin/sources',
+		'/admin/schedules',
+		'/admin/runs',
+		'/admin/sources/netbackup/new',
+		'/admin/sources/commvault/new',
+		'/admin/sources/rubrik/new',
+		'/admin/sources/new'
+	]) {
 		await page.goto(path);
 		const sideways = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
 		expect(sideways, path).toBe(false);

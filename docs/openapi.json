@@ -1105,13 +1105,132 @@
         ]
       }
     },
+    "/v1/admin/sources/commvault": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Add a CommCell or Commvault Cloud tenant",
+        "description": "Saves the CommCell's block: a user name and password, or a\ntoken pair from Command Center (renewed into the block from then\non). Collection starts off: check it first (`.../check`), then\nturn `collect` on.",
+        "operationId": "add_commvault_v1_admin_sources_commvault_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommCellIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceBlockOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "409": {
+            "description": "A source by that name exists"
+          },
+          "422": {
+            "description": "No way to sign in, or two, or no address"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/v1/admin/sources/rubrik": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Add a Rubrik Security Cloud account",
+        "description": "Saves the account's block from its service account file's\nfields. The secret is kept in the block and never shown again; the\nfile is not needed after. Collection starts off: check it first\n(`.../check`), then turn `collect` on.",
+        "operationId": "add_rubrik_v1_admin_sources_rubrik_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RubrikAccountIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceBlockOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Prefect is not set up for the API, or cannot be reached"
+          },
+          "409": {
+            "description": "A source by that name exists"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
     "/v1/admin/sources/{source_type}/{source_name}": {
       "patch": {
         "tags": [
           "admin"
         ],
         "summary": "Change a source's block",
-        "description": "Changes only what is given. For CommCells and Rubrik accounts\nthat is `collect`; their credentials are set with\nblt-prefect-import / blt-rubrik.",
+        "description": "Changes only what is given: `collect`, `collector` and\n`verify_tls` for any source, and each product's own fields for its\nsources (a 422 for another product's). New credentials replace the\nold ones whole; check the source again after.",
         "operationId": "change_source_v1_admin_sources__source_type___source_name__patch",
         "security": [
           {
@@ -1264,20 +1383,36 @@
         }
       }
     },
-    "/v1/admin/sources/netbackup/{source_name}/check": {
+    "/v1/admin/sources/{source_type}/{source_name}/check": {
       "post": {
         "tags": [
           "admin"
         ],
-        "summary": "Check a NetBackup primary, from a worker",
-        "description": "Starts blt-netbackup-check for the primary: it signs in with\nthe block's key and tries each read blt makes (storage, SLP\nimages, jobs), and logs what it found. Watch the run's log.",
-        "operationId": "check_netbackup_v1_admin_sources_netbackup__source_name__check_post",
+        "summary": "Check a source, from a worker",
+        "description": "Starts the product's check for the source, on the collector\nthat reaches it: it signs in with what the block holds and tries\neach read blt makes - storage, jobs, and for NetBackup its SLP\nimages, for Rubrik inventory and SLA domains - logging one OK or\nFAIL line for each. Watch the run's log.",
+        "operationId": "check_source_v1_admin_sources__source_type___source_name__check_post",
         "security": [
           {
             "APIKeyHeader": []
           }
         ],
         "parameters": [
+          {
+            "name": "source_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "commvault",
+                "rubrik",
+                "netbackup"
+              ],
+              "type": "string",
+              "description": "The product.",
+              "title": "Source Type"
+            },
+            "description": "The product."
+          },
           {
             "name": "source_name",
             "in": "path",
@@ -5168,6 +5303,159 @@
         "title": "CollectorOut",
         "description": "A worker that runs blt's flows: blt's own, or a remote collector."
       },
+      "CommCellIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "blt's name for it: lower case letters, digits and dashes.",
+            "examples": [
+              "cv-prod-01"
+            ]
+          },
+          "deployment": {
+            "type": "string",
+            "enum": [
+              "software",
+              "saas"
+            ],
+            "title": "Deployment",
+            "description": "software: a CommServe you run. saas: Commvault Cloud (Metallic).",
+            "default": "software"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url",
+            "description": "The CommServe's address: a host name, or its API's URL (https://<host>/commandcenter/api). Commvault Cloud: leave it out for https://api.metallic.io.",
+            "examples": [
+              "cs01.example.com"
+            ]
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username",
+            "description": "A Commvault user blt signs in as."
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "description": "That user's password."
+          },
+          "access_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token",
+            "description": "Or an access token, made in Command Center."
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token",
+            "description": "Its refresh token, so blt renews the access token itself. Once blt has the pair, use it nowhere else: a renewal elsewhere ends blt's."
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id",
+            "description": "Commvault Cloud MSP: the customer's account id (lhAccountId)."
+          },
+          "tenant_guid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Guid",
+            "description": "Commvault Cloud MSP: or the customer's tenant GUID."
+          },
+          "verify_tls": {
+            "type": "boolean",
+            "title": "Verify Tls",
+            "description": "Check the CommServe's TLS certificate.",
+            "default": true
+          },
+          "collect": {
+            "type": "boolean",
+            "title": "Collect",
+            "description": "Collected by the scheduled flows.",
+            "default": false
+          },
+          "collector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collector",
+            "description": "The remote collector that reaches it; none: blt's own worker."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CommCellIn",
+        "description": "A CommCell - a CommServe you run, or a Commvault Cloud tenant - to\nadd. Either a user name and password, or a token pair from Command\nCenter. It starts with collection off, so it can be checked first.",
+        "examples": [
+          {
+            "base_url": "cs01.example.com",
+            "name": "cv-prod-01",
+            "password": "...",
+            "username": "blt-reader"
+          }
+        ]
+      },
       "CommonJobDetail": {
         "properties": {
           "id": {
@@ -8353,6 +8641,64 @@
         "title": "Problem",
         "description": "An error: what went wrong, in words."
       },
+      "RubrikAccountIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "blt's name for it: lower case letters, digits and dashes.",
+            "examples": [
+              "rsc-prod"
+            ]
+          },
+          "service_account": {
+            "$ref": "#/components/schemas/RubrikServiceAccountIn",
+            "description": "The service account's file."
+          },
+          "verify_tls": {
+            "type": "boolean",
+            "title": "Verify Tls",
+            "description": "Check RSC's TLS certificate.",
+            "default": true
+          },
+          "collect": {
+            "type": "boolean",
+            "title": "Collect",
+            "description": "Collected by the scheduled flows.",
+            "default": false
+          },
+          "collector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collector",
+            "description": "The remote collector that reaches it; none: blt's own worker."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "service_account"
+        ],
+        "title": "RubrikAccountIn",
+        "description": "A Rubrik Security Cloud account to add, by its service account. It\nstarts with collection off, so it can be checked first.",
+        "examples": [
+          {
+            "name": "rsc-prod",
+            "service_account": {
+              "access_token_uri": "https://example.my.rubrik.com/api/client_token",
+              "client_id": "client|...",
+              "client_secret": "...",
+              "name": "blt-reader"
+            }
+          }
+        ]
+      },
       "RubrikJobBatch": {
         "properties": {
           "run_id": {
@@ -10248,6 +10594,47 @@
           }
         ]
       },
+      "RubrikServiceAccountIn": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "Client Id",
+            "description": "client_id from the file."
+          },
+          "client_secret": {
+            "type": "string",
+            "format": "password",
+            "title": "Client Secret",
+            "description": "client_secret from the file.",
+            "writeOnly": true
+          },
+          "access_token_uri": {
+            "type": "string",
+            "title": "Access Token Uri",
+            "description": "access_token_uri from the file: https://<account>.my.rubrik.com/api/client_token."
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "name from the file."
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id",
+          "client_secret",
+          "access_token_uri"
+        ],
+        "title": "RubrikServiceAccountIn",
+        "description": "The JSON file Rubrik Security Cloud hands out for a service account\n(Settings -> Users -> Service Accounts), as it is."
+      },
       "RunBrief": {
         "properties": {
           "id": {
@@ -10874,6 +11261,42 @@
             "title": "Has Ca Certificate",
             "description": "NetBackup: a CA certificate is kept for it."
           },
+          "deployment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment",
+            "description": "Commvault: software (a CommServe you run) or saas (Cloud)."
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login",
+            "description": "Who blt signs in as, where that is not a secret: a Commvault user name, a Rubrik service account's name."
+          },
+          "credentials_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credentials From",
+            "description": "Commvault: the block its credentials come from (an MSP login)."
+          },
           "secrets_set": {
             "items": {
               "type": "string"
@@ -10982,7 +11405,7 @@
               }
             ],
             "title": "Verify Tls",
-            "description": "NetBackup: check the primary's TLS certificate."
+            "description": "Check the source's TLS certificate (any product)."
           },
           "legacy_keys": {
             "anyOf": [
@@ -10995,11 +11418,88 @@
             ],
             "title": "Legacy Keys",
             "description": "NetBackup: Accept TLS keys today's defaults call too weak (1024-bit RSA), for a primary whose NetBackup CA predates 2048-bit keys. Chain, expiry and host name are still checked."
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url",
+            "description": "Commvault: a new address."
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username",
+            "description": "Commvault: sign in as this user (with `password`)."
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password",
+            "description": "Commvault: a new password."
+          },
+          "access_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Token",
+            "description": "Commvault: a new access token, in place of the one kept (or of the user name and password)."
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh Token",
+            "description": "Commvault: the new access token's refresh token."
+          },
+          "service_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RubrikServiceAccountIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rubrik: a new service account file, in place of the one kept."
           }
         },
         "type": "object",
         "title": "SourceBlockPatch",
-        "description": "What to change; anything left out stays as it is. `collect` and\n`collector` apply to every source; the rest are NetBackup's.",
+        "description": "What to change; anything left out stays as it is. `collect`,\n`collector` and `verify_tls` apply to every source; the rest belong to\none product each, as their descriptions say.",
         "examples": [
           {
             "collect": true
