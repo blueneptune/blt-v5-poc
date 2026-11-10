@@ -1,179 +1,124 @@
 # TODO
 
-Open items, roughly in the order they matter. Struck through when done.
+Open items, roughly in the order they matter, grouped by area. Numbers
+never change, so a number in a commit or a conversation still finds its
+item; finished ones move to [Done](#done) at the end, one line each.
 
-## Needs a live CommServe to settle
+## Next up (asked for 2026-11-09 and 2026-11-10)
 
-1. ~~**Test renewing an access token *after* it has expired.**~~
-   **Done 2026-10-05**, by the first real renewal (`lab/10-setup.sh`,
-   about four hours after the token was created, two after it expired).
-   - Renewal after expiry works.
-   - The response has the assumed fields: the new pair and expiry were
-     parsed and written back to `config/cv-toaster.env`.
-   - `renewableUntil` did not move (still 2026-12-05), so the 60 days
-     look fixed from when the token was first created. One data point.
+29. **One "Add a source" button** (asked for 2026-11-10). The Sources
+    page's "Add a NetBackup primary" becomes "Add a source", with a
+    choice of product, each opening its own form:
+    - **NetBackup primary** - today's form (address, fetch its CA, API
+      key, legacy key sizes);
+    - **CommCell** (Commvault on-prem, and Commvault Cloud) - address,
+      CA, user name and password or token, as blt-prefect-import takes
+      them today;
+    - **Rubrik account** - upload the service account's JSON file, as
+      blt-rubrik takes it today; the secret goes to the source's block
+      and is never shown again.
+    Each saves through the admin API (new POST endpoints beside the
+    NetBackup one) and runs Check. The CLI imports stay, and the note
+    "CommCells and Rubrik accounts get their credentials from
+    blt-prefect-import and blt-rubrik for now" goes.
 
-   Not yet known: whether the expired token in the `Authtoken` header was
-   accepted on the renewal call or the no-header retry was what worked.
+27. **Jobs page** (asked for 2026-11-09). Columns and widths are done
+    (see Done). Still to do: in a job's detail, "the product's own
+    record" named for the source it came from: the CommCell, the primary
+    server, the Rubrik account.
 
-2. **Check the job listing against real jobs.** Partly done 2026-10-05:
-   six real jobs (download, sync, four backups ending Completed, Failed
-   and Killed) collected with the right type, level, subclient, sizes and
-   failure reason, and no `unknown` states. Still to see against the real
-   CommServe: a job caught while Suspended/Running and followed to its
-   end (done 2026-10-06: jobs followed through Pending, Running,
-   Suspended and Kill Pending), paging past one page (done 2026-10-06:
-   a `--full` run with `CV_PAGE_SIZE=10` collected all 66 jobs over
-   seven pages), the reconcile pass, and incrementals.
+24. **Per-source collection timing** (asked for 2026-11-09). Today each
+    kind of collection has one schedule in `prefect.yaml` and every
+    source with Collect on runs at the same moment. With 20-30 sources
+    that bunches the load, so:
+    - a **Collection schedule** on each source, set on its edit page:
+      "default" (the product's schedule), every N hours, or daily at a
+      time; plus an optional quiet window ("not between 22:00 and
+      04:00") for a domain's busy backup hours;
+    - an **automatic spread** for sources left on "default": each gets a
+      stable offset inside the interval (from its UUID), so 30 primaries
+      on "hourly" don't all start at :27;
+    - the parent flow still fires on the finest interval and skips any
+      source not due, so there is still one schedule per product to
+      pause; the product's interval is the finest a source can get;
+    - Administration shows each source's next run, and a per-source
+      pause next to the Collect switch.
 
-3. **Confirm whether the token lifetime (2 h) is configurable** when a
-   token is created, and what the right value is for a scheduled
-   collector.
+25. **Remote collectors, what is left** (the collectors themselves are
+    done: see Done, and docs/remote-collector.md). The direction
+    (2026-11-10): a small Kubernetes cluster in each location runs a
+    Prefect worker for that location's work pool, and each source's run
+    is its own pod. Toward that:
+    - a per-source lock held in Prefect, not in a file on one machine,
+      so two machines - or two pods - never run the same source at once,
+      and never renew one CommCell's tokens at once;
+    - a location cluster's worker: a Kubernetes work pool and its
+      manifests, straight to core's ingresses (no tunnel);
+    - keeping the desktop's tunnel up without a terminal (a systemd user
+      unit in WSL);
+    - an API key that may only collect, for collectors (with Zitadel).
 
-## Collector
+30. **Policies, read only** (asked for 2026-11-10). For each backup
+    product, a read view of its storage policies and its backup
+    policies: Commvault plans and storage policies, NetBackup policies
+    and storage lifecycle policies, Rubrik SLA domains. Collected like
+    storage, shown on their own page, nothing changed in the product.
 
-4. ~~**Decide what "as far back as it can" should mean on a large
-   CommCell.**~~ **Done 2026-10-06:** the first run takes only the last
-   24 hours, and `--backfill` fetches older history in bounded batches
-   of time slices (see docs/blt-flow.md). Tested with mocks and a real
-   Postgres; the time-slice query itself was checked against the lab
-   CommServe, but **a whole backfill has not yet been run against a real
-   CommServe** - the eval VM was unreachable when it was finished.
-   For a production version: run the backfill automatically alongside
-   regular collections instead of only on request.
+22. **Ready-made imports for API tools** (asked for 2026-10-30):
+    collections for Bruno, Postman and Insomnia generated from
+    `docs/openapi.json`, an environment per install (lab, work, a
+    customer's) with the key left blank, and example requests for the
+    common tasks. Generated like the spec, so they cannot drift.
 
-5. **Job detail beyond the summary** (`GET /Job/{id}` details, failure
-   reasons, per-attempt info) - not collected today; only `jobSummary`.
-6. **Certificate pinning** as an alternative to `CV_VERIFY_TLS=false`
-   for CommServes with a self-signed certificate whose name doesn't
-   match (the eval OVA).
+## Later, decided but not started
 
-## API / database
+23. **Proof jobs: a heartbeat per backup domain** (asked for 2026-11-02).
+    A small, known backup that blt sets up in each domain it collects
+    from (a CommCell, an RSC account, a NetBackup primary, a Veeam
+    server) - a tiny file or folder on a schedule - and expects to see
+    succeed within its window. If it does not appear, something in the
+    chain is broken: the product, its scheduling, or blt's own
+    collection. It proves the whole path end to end, which no single job
+    can. To decide: what it backs up and where in each product, how blt
+    tells its own proof jobs apart (a naming convention or a dedicated
+    plan / SLA / policy), and alerting when one is late. Shown as kind
+    `proof` or similar, in the engineering view (see docs/common-jobs.md,
+    decision 3). Each domain's setup shown and agreed before anything is
+    created on it.
 
-7. **Stale `running` rows in `collection_run`.** A collector killed
-   outright (power loss, `kill -9`) never reports its run as failed. It
-   doesn't affect the watermark, but nothing marks the run abandoned.
-8. **Read-side endpoints** for whatever consumes this data next
-   (reporting, alerting) - today the API has only what the collector
-   itself needs.
+20. **Prefect, what is left.** Prefect runs blt everywhere now (the lab
+    cluster, the work desktop). Still to do: failure notifications; and
+    retiring deploy/up.sh once a desktop can run deploy/kube/up.sh
+    instead. See docs/prefect.md.
 
-## Operations
-
-9. **A systemd timer unit** instead of the cron line in the README.
-10. **Backups of the `blt-pgdata` volume.**
-
-## Next iteration (requested 2026-10-06)
-
-Items 12 and 13 are first steps toward the wider direction drafted in
-[`docs/asset-refinery.md`](docs/asset-refinery.md) - a draft, not
-current work.
-
-11. **A `blt` command-line tool**, one entry point for operating this
-    instead of a shell script plus `psql`. First subcommands:
-    - `blt collect <commcell>` / `blt check <commcell>` - what
-      `collect.sh` does today (which can stay as a thin wrapper).
-    - `blt status [<commcell>]` - last run, watermark, counts by state,
-      what is still active.
-    - `blt reset <commcell>` - **throw the collection away and start
-      over**, for when it has got into a state that is easier to rebuild
-      than to repair. Deletes that CommCell's jobs and runs so the next
-      collection is a full one. Needs a matching API endpoint (the CLI
-      should not reach around the API into Postgres), a confirmation
-      prompt, and a decision on scope: one CommCell at a time, with
-      "everything" as a separate, louder option.
-
-    Open question: whether a reset should delete rows outright or keep
-    the run history and only clear the jobs and the watermark.
-
-12. **Give each collection source a UUID** - **done 2026-11-02** as
-    `common.source` (docs/common-jobs.md step 1), alongside the integer
-    ids rather than replacing them; random UUIDs, blt-generated (not
-    `csGUID`). Original note: a UUID instead of the integer
-    `commcell.id`. Today a CommCell is identified by the name in its
-    config file plus an auto-increment id that means nothing outside
-    this database. A UUID (v7, so ids still sort by creation time) is
-    stable across a reset or a database rebuild and safe to hand to
-    other systems.
-    - Decide where it comes from: generated by blt on first sight, or
-      Commvault's own `csGUID` (already returned by `GET /CommServ`),
-      which would also catch two config files pointing at one CommServe.
-    - A migration that re-keys `job` and `collection_run`; simplest done
-      together with item 13, and after a reset rather than in place.
+11. **A `blt` command-line tool**, one entry point for operating this.
+    `deploy/maintenance.sh` (run health, clearing stuck runs) is a start.
+    Still wanted:
+    - `blt status [<source>]` - last run, watermark, counts by state,
+      what is still active;
+    - `blt reset <source>` - **throw the collection away and start
+      over**, for when it is easier to rebuild than to repair. Deletes
+      that source's jobs and runs so the next collection is a full one.
+      Needs a matching API endpoint (the CLI should not reach around the
+      API into Postgres), a confirmation prompt, and a decision on scope:
+      one source at a time, with "everything" as a separate, louder
+      option. Open question: delete rows outright, or keep the run
+      history and only clear the jobs and the watermark.
 
 13. **An objects table: the assets being protected, and where each was
-    seen.** Today the only record of *what* was backed up is the
-    `client_name` / `subclient_name` text on each job row. Make that a
-    first-class table so the question "is this thing protected, and by
-    what?" doesn't depend on which product answered it - Commvault
-    today; NetBackup, ServiceNow or VMware later.
+    seen.** `common.source` (item 12) and `source_object` (item 16) are
+    the start. Still open: `job.object_id` - which asset a job protected
+    - and identity across sources: the same server is a client in
+    Commvault, a VM in VMware and a CI in ServiceNow. One `object` row
+    per source plus a table linking the ones judged to be the same asset
+    is much easier to get right than one row per real asset, and doesn't
+    block it later. Also to decide: what an "object" is for Commvault -
+    the client, the subclient, or both as parent and child. See
+    [`docs/asset-refinery.md`](docs/asset-refinery.md) - a draft, not
+    current work.
 
-    Sketch, to be argued with rather than built as-is:
-    - `source` - one row per system collected from (generalises
-      `commcell`): UUID, kind (`commvault`, `netbackup`, `servicenow`,
-      `vmware`, ...), name. Item 12 becomes this table's key.
-    - `object` - one row per asset as a given source knows it: UUID,
-      source, the source's own id for it, kind (server, VM, database,
-      file system, ...), name, first/last seen, raw JSON.
-    - `job.object_id` - which asset a job protected.
-
-    The hard part is identity across sources: the same server is a
-    client in Commvault, a VM in VMware and a CI in ServiceNow. Options
-    are one `object` row per source plus a separate table linking the
-    ones judged to be the same asset, or one row per real asset with the
-    per-source records hanging off it. The first is much easier to get
-    right and doesn't block the second later.
-
-    Also to decide: what an "object" is for Commvault - the client, the
-    subclient, or both as parent and child. And `commcell`-specific
-    names in `job` columns will want generalising at the same time (the
-    API paths already did, as `/v1/sources/commvault/{name}`).
-
-14. **MSSQL backup validation** (prototype working in the lab since
-    2026-10-06: `lab/50-sql-validate.sh` in yoki-commvault-lab, see its
-    docs/lab-noise.md stage 3.
-    What remains is turning it into part of blt proper.)
-
-    Original note: MSSQL backup validation: for each SQL Server host, compare the
-    databases that exist with the databases that were actually backed
-    up - ten databases on host X should mean ten protected.
-
-    What Commvault offers (endpoints as used by cvpysdk; **not yet run
-    here - the lab has no SQL Server agent**):
-    - `GET /sql/databases?instance=<instanceId>` - the databases
-      Commvault knows on an instance, each with its last backup time.
-    - `GET /sql/instance/<instanceId>/database/<dbId>` - one database's
-      detail.
-    - SQL subclient properties - which databases a subclient is
-      configured to protect, and whether it auto-discovers new ones.
-    - Availability-group endpoints, for databases that belong to a
-      listener rather than to one host.
-    - Job history - the per-job record blt already collects.
-
-    The catch: Commvault's list is what *its agent discovered*. A
-    database created after the last discovery, an instance nobody
-    registered, or a host with no agent at all will simply be absent -
-    and a validation built only on Commvault would call that host
-    clean. A trustworthy check needs an independent count of what
-    exists: SQL Server itself (`sys.databases`), or ServiceNow. That is
-    the first concrete case for docs/asset-refinery.md.
-
-    Also to settle: what counts as "backed up" (ever, within N days, a
-    full within N days plus log backups?), and how to treat system
-    databases, offline databases and deliberate exclusions.
-
-15. **A renewal whose reply is lost.** Token renewal replaces the pair
-    on the CommServe as soon as the request arrives. If the network
-    drops before the reply gets back, the new tokens are gone and the
-    old ones are dead; the only recovery is a new token from Command
-    Center. Rare, not preventable from this side - worth an explicit,
-    unmistakable error message when a renewal times out mid-flight.
-
-16. **Inventory and validation, first slice - done 2026-10-06**, with
-    the backup product as the only source of truth for what exists
-    (`--inventory`, `--validate`, table `source_object`; see
-    docs/blt-flow.md). Proven against the lab: 14 clients, 15 instances,
-    14 SQL databases; 11 ok + 3 unverified; all stale under a 30-minute
-    limit. Follow-ons, roughly in order:
+16. **Inventory and validation, follow-ons** (the first slice is done:
+    see Done). Roughly in order:
     - **More witnesses.** A second source for "what exists" - SQL Server
       itself, ServiceNow - compared against Commvault's rows. This is
       what closes the blind spot (databases Commvault has not yet seen).
@@ -192,133 +137,106 @@ current work.
     - **History of verdicts**, if "since when has this been unprotected"
       matters; today only the current answer is kept.
 
+14. **MSSQL backup validation** - a prototype has worked in the lab since
+    2026-10-06 (`lab/50-sql-validate.sh` in yoki-commvault-lab, its
+    docs/lab-noise.md stage 3). What remains is making it part of blt:
+    for each SQL Server host, compare the databases that exist with the
+    databases that were backed up - ten databases on host X should mean
+    ten protected.
+
+    Commvault's list is what *its agent discovered*: a database created
+    after the last discovery, an unregistered instance or a host with no
+    agent is simply absent, and a check built only on Commvault would
+    call that host clean. A trustworthy check needs an independent count
+    of what exists (`sys.databases`, or ServiceNow) - the first concrete
+    case for docs/asset-refinery.md. Also to settle: what counts as
+    "backed up" (ever, within N days, a full within N days plus log
+    backups?), and how to treat system databases, offline databases and
+    deliberate exclusions.
+
+## Needs a live system to settle
+
 17. **First production trial** (planned 2026-10-06; steps in
     docs/production-setup.md). Things it is expected to settle, none of
     which the eval CommServe could: how long a 500-job page and a
     one-day backfill slice take on a large CommServe; which statuses
-    come back as `unknown`; whether any job summaries fail to parse
-    (now a logged skip, not a failed run); the minimum Commvault role
-    that still sees every job and client; how long `--inventory` takes
-    with thousands of clients; and whether the token lifetime and
-    60-day renewal window are the same there.
+    come back as `unknown`; whether any job summaries fail to parse (now
+    a logged skip, not a failed run); the minimum Commvault role that
+    still sees every job and client; how long `--inventory` takes with
+    thousands of clients; and whether the token lifetime and 60-day
+    renewal window are the same there.
 
-18. **Commvault Cloud (SaaS / Metallic)** - support added 2026-10-09
-    from the documentation (`CV_DEPLOYMENT=saas`: the `Authorization`
-    header, an hourly call budget, `--probe`, a `--check` that does not
-    need CommServe details). **Not yet run against a tenant.** First
-    steps and everything still unknown are in docs/saas-setup.md; the
-    output of `./collect.sh <tenant> --probe` is what will settle most
-    of it. Likely follow-ons once it has: SaaS workload types in the
-    inventory (Microsoft 365, cloud databases, VMs) alongside SQL
-    Server; honouring the `X-RateLimit-*` headers on a 429; a budget
-    shared across runs rather than per process.
+18. **Commvault Cloud (SaaS / Metallic)** - supported from the
+    documentation since 2026-10-09 (`CV_DEPLOYMENT=saas`). **Not yet run
+    against a tenant.** First steps and everything still unknown are in
+    docs/saas-setup.md; the output of `--probe` against a tenant will
+    settle most of it. Likely follow-ons: SaaS workload types in the
+    inventory (Microsoft 365, cloud databases, VMs); honouring the
+    `X-RateLimit-*` headers on a 429; a call budget shared across runs
+    rather than per process.
 
-19. ~~**Separate the Commvault SDK**~~ **Done 2026-10-10.** It is its
-    own repository, `yoki-py-commvault-sdk` (package `commvault-sdk`),
-    and blt pins its tag v0.1.0. Changes to Commvault calls are made
-    there and released as a new tag.
+2. **Check the job listing against real jobs** - mostly done 2026-10-05
+   and 2026-10-06 (real jobs of each ending, jobs followed through
+   Pending, Running, Suspended and Kill Pending, paging over seven
+   pages). Still to see against a real CommServe: the reconcile pass,
+   and incrementals.
 
-20. **Prefect** (started 2026-10-15, branch 2026.10.W04/F/Prefect_framework).
-    Server + worker + blocks + flows + Kubernetes manifest, working on
-    Linux. Next: run it on the WSL desktop; move CommCells over with
-    blt-prefect-import; failure notifications; phase out deploy/up.sh
-    once deploy/kube/up.sh has proven itself. See docs/prefect.md.
+3. **Is the Commvault token lifetime (2 h) configurable** when a token is
+   created, and what is the right value for a scheduled collector?
 
-21. ~~**Remove the API paths from before /v1** (`/commcells/{name}/...`,
-    `/rubrik/{name}/...`)~~ **Done 2026-10-30**, for 2026.10.30.3: the lab
-    and the work desktop both ran /v1 releases, nothing in the repository
-    or the lab API log called the old paths. Added 2026-10-29 with `/v1/sources/...`. They
-    are kept so a collector on the previous release keeps working
-    during an upgrade. Remove them in the release after the one that
-    ships /v1 - after checking nothing still calls them (each answer
-    carries `Deprecation: true`; the API log shows the paths called).
-    Scripts outside this repository that use curl are the likely
-    stragglers.
+## Collector
 
-22. **Ready-made imports for API tools** (asked for 2026-10-30, later):
-    collections for Bruno, Postman and Insomnia generated from
-    `docs/openapi.json`, an environment per install (lab, work, a
-    customer's) with the key left blank, and example requests for the
-    common tasks. Generated like the spec, so they cannot drift.
+5. **Job detail beyond the summary** (`GET /Job/{id}` details, failure
+   reasons, per-attempt info) - today only `jobSummary` is collected.
 
-23. **Proof jobs: a heartbeat per backup domain** (asked for 2026-11-02,
-    later). A small, known backup that blt sets up in each domain it
-    collects from (a CommCell, an RSC account, a NetBackup primary, a
-    Veeam server) - a tiny file or folder on a schedule - and expects to
-    see succeed within its window. If it does not appear, something in
-    the chain is broken: the product, its scheduling, or blt's own
-    collection. It proves the whole path end to end, which no single
-    job can. To decide: what it backs up and where in each product,
-    how blt tells its own proof jobs apart (a naming convention or a
-    dedicated plan / SLA / policy), and alerting when one is late. Shown
-    as kind `proof` or similar, in the engineering view (see
-    docs/common-jobs.md, decision 3). Each domain's setup shown and agreed
-    before anything is created on it.
+6. **Certificate pinning for a CommServe** with a self-signed
+   certificate whose name doesn't match (the eval OVA), instead of
+   `CV_VERIFY_TLS=false`. NetBackup primaries already keep their own CA
+   certificate; a CommCell could do the same.
 
-24. **Per-source collection timing** (asked for 2026-11-09, after the
-    image catalog work is under way). Today each kind of collection has
-    one schedule in `prefect.yaml` and every source with Collect on runs
-    at the same moment. With 20-30 sources that bunches the load, so:
-    - a **Collection schedule** on each source, set on its edit page:
-      "default" (the product's schedule), every N hours, or daily at a
-      time; plus an optional quiet window ("not between 22:00 and
-      04:00") for a domain's busy backup hours;
-    - an **automatic spread** for sources left on "default": each gets a
-      stable offset inside the interval (from its UUID), so 30 primaries
-      on "hourly" don't all start at :27;
-    - the parent flow still fires on the finest interval and skips any
-      source not due, so there is still one schedule per product to
-      pause; the product's interval is the finest a source can get;
-    - Administration shows each source's next run, and a per-source
-      pause next to the Collect switch.
+7. **Stale `running` rows in `collection_run`.** A collector killed
+   outright (power loss, `kill -9`) never reports its run as failed. It
+   doesn't affect the watermark, but nothing marks the run abandoned.
+   (Prefect's side is handled - item 26 - but blt's own run record is
+   not.)
 
-25. **Remote collectors - done 2026-11-09** (docs/remote-collector.md).
-    Each source names the collector that reaches it; its runs go to that
-    collector's Prefect work queue. `deploy/collector.sh` puts a collector
-    on a tools server over ssh, with an `ssh -R` tunnel back to a podman
-    desktop. Regions (omaha, uk, asia) are one collector each, and may
-    have several machines. Still to do:
-    - a per-source lock held in Prefect, not on one machine, so two
-      machines of one collector never run the same source at once;
-    - `collector.sh` for blt on the cluster (straight to its ingresses);
-    - keeping the tunnel up without a terminal (autossh, or a systemd
-      user unit in WSL);
-    - an API key that may only collect, for collectors (with Zitadel).
+15. **A renewal whose reply is lost.** Token renewal replaces the pair on
+    the CommServe as soon as the request arrives. If the network drops
+    before the reply gets back, the new tokens are gone and the old ones
+    are dead; the only recovery is a new token from Command Center. Rare,
+    not preventable from this side - worth an explicit, unmistakable
+    error message when a renewal times out mid-flight.
 
-26. **Stuck runs - done 2026-11-09** (docs/admin.md, "Stuck runs"). On
-    the work desktop every run sat in RUNNING after an upgrade: the
-    Prefect server forgot who held the collection slots when it
-    restarted. Now its leases are on disk (`blt-prefect-home`), silent
-    runs are marked Crashed (`blt-crash-silent-runs`), and Schedules shows
-    run health with a confirmed **Clear stuck runs**
-    (`deploy/maintenance.sh` without the UI).
+## Done
 
-27. **Jobs page** (asked for 2026-11-09):
-    - resizable columns, and a choice of columns - done 2026-11-09: a
-      Columns picker (18 fields, among them job id, ended, protected,
-      reduction, attempt, product status) and widths dragged or keyed,
-      kept per browser (ui/src/lib/jobColumns.ts);
-    - in a job's detail, "the product's own record" named for the source
-      it came from: the CommCell, the primary server, ...
-
-28. **Legacy TLS keys - done 2026-11-09.** A 10.5.0.1 primary at work has
-    its 2017 NetBackup CA, 1024-bit, which OpenSSL 3 refuses. Each primary
-    may accept legacy key sizes (`legacy_keys`: security level 1, chain,
-    expiry and host name still checked). Follow-up for that site: a
-    NetBackup CA migration, then turn the setting off.
-
-29. **One "Add a source" button** (asked for 2026-11-10). The Sources
-    page's "Add a NetBackup primary" becomes "Add a source", with a
-    choice of product, each opening its own form:
-    - **NetBackup primary** - today's form (address, fetch its CA, API
-      key, legacy key sizes);
-    - **CommCell** (Commvault on-prem, and Commvault Cloud) - address,
-      CA, user name and password or token, as blt-prefect-import takes
-      them today;
-    - **Rubrik account** - upload the service account's JSON file, as
-      blt-rubrik takes it today; the secret goes to the source's block
-      and is never shown again.
-    Each saves through the admin API (new POST endpoints beside the
-    NetBackup one) and runs Check. The CLI imports stay, and the note
-    "CommCells and Rubrik accounts get their credentials from
-    blt-prefect-import and blt-rubrik for now" goes.
+1. Renewing an access token after it expired - works (2026-10-05);
+   `renewableUntil` did not move, so the 60 days look fixed from the
+   token's creation.
+4. "As far back as it can" on a large CommCell - the first run takes 24
+   hours, `--backfill` the rest in bounded slices (2026-10-06).
+8. Read-side endpoints - `/v1/jobs`, `/v1/jobs/summary`, `/v1/storage`
+   and the UI on top of them.
+9. A systemd timer instead of cron - superseded: Prefect schedules the
+   collections, and `deploy/backup.sh` has its own systemd user timer.
+10. Backups of `blt-pgdata` - `deploy/backup.sh`, nightly (2026-10-30).
+12. A UUID for each source - `common.source` (2026-11-02).
+16. Inventory and validation, first slice - `--inventory`,
+    `--validate`, `source_object` (2026-10-06); follow-ons are item 16
+    above.
+19. The Commvault SDK in its own repository, `yoki-py-commvault-sdk`
+    (2026-10-10).
+21. The API paths from before /v1 removed (2026-10-30, 2026.10.30.3).
+25. Remote collectors (2026-11-09): each source names its collector,
+    runs go to its work queue, `deploy/collector.sh` sets one up over
+    ssh (docs/remote-collector.md). What is left is item 25 above.
+26. Stuck runs (2026-11-09): Prefect's leases on disk
+    (`blt-prefect-home`), silent runs marked Crashed
+    (`blt-crash-silent-runs`), run health and **Clear stuck runs** on
+    Schedules, `deploy/maintenance.sh` (docs/admin.md, "Stuck runs").
+27. Jobs page columns (2026-11-09): a Columns picker over 18 fields, and
+    widths dragged or keyed, kept per browser (ui/src/lib/jobColumns.ts).
+    What is left is item 27 above.
+28. Legacy TLS keys (2026-11-09): a primary may accept 1024-bit keys
+    (`legacy_keys`), for the 2017 CA at work; chain, expiry and host name
+    still checked. Follow-up for that site: a NetBackup CA migration,
+    then turn the setting off.
