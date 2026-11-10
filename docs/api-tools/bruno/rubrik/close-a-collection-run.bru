@@ -1,0 +1,26 @@
+meta {
+  name: Close a collection run
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/rubrik/{{source_name}}/runs/{{run_id}}/finish
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "finished_at": "2026-10-29T14:01:40Z",
+    "jobs_collected": 180,
+    "status": "succeeded"
+  }
+}
+
+docs {
+  Records how the run went. A succeeded job run becomes the new
+  watermark; a succeeded inventory run marks every object it did not
+  list as no longer present, and points jobs at the objects they ran
+  on (common.job.source_object_id).
+}

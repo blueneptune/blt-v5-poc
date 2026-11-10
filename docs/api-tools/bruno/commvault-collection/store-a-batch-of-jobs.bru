@@ -1,0 +1,41 @@
+meta {
+  name: Store a batch of jobs
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/jobs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-10-29T14:01:00Z",
+    "jobs": [
+      {
+        "app_type": "File System",
+        "backup_level": "Incremental",
+        "client_name": "fs-01",
+        "end_time": "2026-10-29T13:12:30Z",
+        "job_id": 4711,
+        "job_type": "Backup",
+        "percent_complete": 100,
+        "size_of_application": 52428800,
+        "size_of_media": 10485760,
+        "start_time": "2026-10-29T13:00:00Z",
+        "status": "Completed",
+        "storage_policy": "Server Plan",
+        "subclient_name": "default"
+      }
+    ],
+    "run_id": 1234
+  }
+}
+
+docs {
+  Inserts new jobs and updates known ones, keyed by Commvault's
+  job id. A job collected earlier than what is stored is left alone.
+  `written` counts the jobs actually inserted or changed.
+}

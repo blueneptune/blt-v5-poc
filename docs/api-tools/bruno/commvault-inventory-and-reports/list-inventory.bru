@@ -1,0 +1,15 @@
+meta {
+  name: List inventory
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/objects
+  body: none
+  auth: inherit
+}
+
+docs {
+  What the CommCell says exists, by kind then name.
+}

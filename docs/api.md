@@ -12,6 +12,7 @@ from the code, so it can't drift from what the API actually does.
 | **Interactive** (Swagger UI): try every endpoint from the browser | `/docs` on a running API |
 | **Reading** (ReDoc): one long page, good for reading through | `/redoc` |
 | **Machine-readable** (OpenAPI 3.1): for Postman, Insomnia, client generators | `/openapi.json`, and [openapi.json](openapi.json) in this repository |
+| **Ready-made imports** for Bruno, Postman and Insomnia, with an environment per install and common tasks | [api-tools/](api-tools/README.md) (`blt-api-collections` makes them) |
 
 A running API is at:
 

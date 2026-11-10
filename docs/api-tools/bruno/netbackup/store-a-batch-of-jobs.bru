@@ -1,0 +1,39 @@
+meta {
+  name: Store a batch of jobs
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/jobs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-11-08T14:02:00Z",
+    "jobs": [
+      {
+        "backup_id": "app01.example.com_1794150000",
+        "client_name": "app01.example.com",
+        "end_time": "2026-11-08T13:21:00Z",
+        "is_active": false,
+        "job_id": 48211,
+        "job_type": "BACKUP",
+        "last_update_time": "2026-11-08T13:21:00Z",
+        "policy_name": "vm-gold",
+        "start_time": "2026-11-08T13:00:00Z",
+        "state": "DONE",
+        "status": 0,
+        "storage_unit": "msdp-stu-01"
+      }
+    ],
+    "run_id": 12
+  }
+}
+
+docs {
+  Inserts new jobs and updates known ones, keyed by `job_id`. A job
+  collected earlier than what is stored is left alone.
+}

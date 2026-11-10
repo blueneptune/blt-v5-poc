@@ -1,0 +1,16 @@
+meta {
+  name: Cancel a flow run
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/runs/{{run_id}}/cancel
+  body: none
+  auth: inherit
+}
+
+docs {
+  Asks the worker to stop the run: it goes to CANCELLING, then
+  CANCELLED once the worker has stopped it.
+}

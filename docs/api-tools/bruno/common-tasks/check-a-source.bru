@@ -1,0 +1,15 @@
+meta {
+  name: Check a source
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/sources/{{sourceType}}/{{sourceName}}/check
+  body: none
+  auth: inherit
+}
+
+docs {
+  Starts the source's check on its collector; follow it with GET /v1/admin/runs/{id}.
+}

@@ -1,0 +1,47 @@
+meta {
+  name: Store a batch of inventory
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/objects
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-10-29T14:05:00Z",
+    "objects": [
+      {
+        "kind": "client",
+        "name": "sql-01",
+        "source_key": "12"
+      },
+      {
+        "app_type": "SQL Server",
+        "kind": "instance",
+        "name": "sql-01\\MSSQLSERVER",
+        "parent_key": "12",
+        "parent_kind": "client",
+        "source_key": "34"
+      },
+      {
+        "app_type": "SQL Server",
+        "kind": "database",
+        "name": "sales",
+        "parent_key": "34",
+        "parent_kind": "instance",
+        "source_key": "34/sales"
+      }
+    ],
+    "run_id": 1235
+  }
+}
+
+docs {
+  Clients, instances and databases as the CommCell lists them,
+  during an inventory run. Parents go before their children: clients,
+  then instances, then databases.
+}

@@ -1,0 +1,18 @@
+meta {
+  name: Are runs getting through?
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/runs/health
+  body: none
+  auth: inherit
+}
+
+docs {
+  The collection slots against the runs that could hold them, and
+  the runs that look stuck. A slot is leaked when a run that held it
+  is gone - its worker restarted, or the Prefect server did while it
+  kept them only in memory - and runs then queue for it for ever.
+}

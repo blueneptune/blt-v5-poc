@@ -1,0 +1,16 @@
+meta {
+  name: What runs, and when
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/deployments
+  body: none
+  auth: inherit
+}
+
+docs {
+  Every deployment, with its schedules, its last finished run and
+  its next scheduled one.
+}

@@ -45,6 +45,7 @@ blt-prefect-block = "blt.flows.manage:main"
 blt-rubrik = "blt.rubrik.cli:main"
 blt-netbackup = "blt.netbackup.cli:main"
 blt-openapi = "blt.api.openapi:main"
+blt-api-collections = "blt.api.collections:main"
 
 [tool.uv.sources]
 sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", tag = "v0.2.0" }

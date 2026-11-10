@@ -1,0 +1,16 @@
+meta {
+  name: How far back history has been collected
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/backfill
+  body: none
+  auth: inherit
+}
+
+docs {
+  Where the next backfill chunk should end, and whether backfill
+  has reached the start of the CommCell's history.
+}

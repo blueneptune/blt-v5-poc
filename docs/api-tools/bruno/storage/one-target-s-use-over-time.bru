@@ -1,0 +1,16 @@
+meta {
+  name: One target's use over time
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/v1/storage/{{storage_id}}/samples
+  body: none
+  auth: inherit
+}
+
+docs {
+  Oldest first. `every=day` gives one sample a day (the last of
+  it), for long ranges.
+}

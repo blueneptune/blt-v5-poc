@@ -1,0 +1,20 @@
+meta {
+  name: Job counts by state, per source
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/v1/jobs/summary?group=source&since={{since}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  group: source
+  since: {{since}}
+}
+
+docs {
+  How many jobs ended each way, per source, since `since`.
+}

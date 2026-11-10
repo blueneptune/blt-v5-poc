@@ -1,0 +1,15 @@
+meta {
+  name: Run health
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/runs/health
+  body: none
+  auth: inherit
+}
+
+docs {
+  Are runs getting through: slots taken against runs collecting, and stuck runs.
+}

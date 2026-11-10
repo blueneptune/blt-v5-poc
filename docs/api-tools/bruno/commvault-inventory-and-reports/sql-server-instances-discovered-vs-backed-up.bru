@@ -1,0 +1,16 @@
+meta {
+  name: SQL Server instances: discovered vs backed up
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/instance-report
+  body: none
+  auth: inherit
+}
+
+docs {
+  Databases discovered against databases backed up, per SQL
+  Server instance, for its most recent full backup.
+}

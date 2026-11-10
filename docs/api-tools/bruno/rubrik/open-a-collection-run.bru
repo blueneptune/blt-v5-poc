@@ -1,0 +1,24 @@
+meta {
+  name: Open a collection run
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/rubrik/{{source_name}}/runs
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "lookup_seconds": 3900,
+    "mode": "delta",
+    "started_at": "2026-10-29T14:00:00Z"
+  }
+}
+
+docs {
+  Opens a run (status `running`); send its `id` with each batch.
+  The account is created on its first run.
+}

@@ -1,0 +1,16 @@
+meta {
+  name: One job
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/jobs/{{job_id}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  One job by Commvault's job id, with its full Commvault record in
+  `raw`.
+}

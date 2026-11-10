@@ -1,0 +1,27 @@
+meta {
+  name: Add a CommCell or Commvault Cloud tenant
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/sources/commvault
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "base_url": "cs01.example.com",
+    "name": "cv-prod-01",
+    "password": "...",
+    "username": "blt-reader"
+  }
+}
+
+docs {
+  Saves the CommCell's block: a user name and password, or a
+  token pair from Command Center (renewed into the block from then
+  on). Collection starts off: check it first (`.../check`), then
+  turn `collect` on.
+}

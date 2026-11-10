@@ -1,0 +1,17 @@
+meta {
+  name: List jobs from every product
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/jobs
+  body: none
+  auth: inherit
+}
+
+docs {
+  Jobs from every source, newest start first (jobs not yet started
+  first of all). The `X-Total-Count` header holds how many match,
+  for paging.
+}

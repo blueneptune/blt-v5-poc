@@ -1,0 +1,16 @@
+meta {
+  name: Where the last job collection got to
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/last-run
+  body: none
+  auth: inherit
+}
+
+docs {
+  The primary's watermark and its most recent job run. An unknown
+  primary is not an error: no watermark means do an initial run.
+}

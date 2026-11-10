@@ -1,0 +1,21 @@
+meta {
+  name: Failed jobs, last 24 hours
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/jobs?state=failed&since={{since}}&limit=100
+  body: none
+  auth: inherit
+}
+
+params:query {
+  state: failed
+  since: {{since}}
+  limit: 100
+}
+
+docs {
+  Every product's failed jobs since `since` (an ISO time, e.g. 2026-11-10T00:00:00Z).
+}

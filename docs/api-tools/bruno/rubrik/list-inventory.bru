@@ -1,0 +1,15 @@
+meta {
+  name: List inventory
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/rubrik/{{source_name}}/objects
+  body: none
+  auth: inherit
+}
+
+docs {
+  What RSC says exists, by type then name.
+}

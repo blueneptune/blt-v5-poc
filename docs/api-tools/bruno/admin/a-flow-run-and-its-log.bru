@@ -1,0 +1,16 @@
+meta {
+  name: A flow run and its log
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/runs/{{run_id}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  The run and its log lines, oldest first. Poll with `log_offset`
+  set to the lines already shown to get only new ones.
+}

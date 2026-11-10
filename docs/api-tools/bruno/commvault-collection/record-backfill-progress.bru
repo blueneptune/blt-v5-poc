@@ -1,0 +1,22 @@
+meta {
+  name: Record backfill progress
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/backfill
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "backfilled_to": "2026-09-01T00:00:00Z",
+    "complete": false
+  }
+}
+
+docs {
+  Called by the backfill flow after each chunk it collects.
+}

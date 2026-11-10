@@ -1,0 +1,16 @@
+meta {
+  name: One job
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/v1/jobs/{{job_id}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  One job in the common shape, with the product's full record of
+  it in `product`.
+}

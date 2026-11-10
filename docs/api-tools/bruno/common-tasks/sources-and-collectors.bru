@@ -1,0 +1,15 @@
+meta {
+  name: Sources and collectors
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/v1/admin/sources
+  body: none
+  auth: inherit
+}
+
+docs {
+  Every source, its collector, its timing and next starts; secrets only as set or not.
+}

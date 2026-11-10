@@ -1,0 +1,16 @@
+meta {
+  name: Remove a source's block
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/v1/admin/sources/{{source_type}}/{{source_name}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  Removes the block, so nothing collects from it any more. What
+  was collected stays in blt.
+}

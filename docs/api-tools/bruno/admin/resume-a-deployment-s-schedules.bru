@@ -1,0 +1,15 @@
+meta {
+  name: Resume a deployment's schedules
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/v1/admin/deployments/{{deployment_id}}/resume
+  body: none
+  auth: inherit
+}
+
+docs {
+  Its schedules make runs again.
+}

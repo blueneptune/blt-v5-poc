@@ -1,0 +1,16 @@
+meta {
+  name: List jobs
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/commvault/{{source_name}}/jobs
+  body: none
+  auth: inherit
+}
+
+docs {
+  Jobs in job id order. The collector uses `active=true` to find
+  jobs to check on, and `unseen_in_run` to find ones to reconcile.
+}
