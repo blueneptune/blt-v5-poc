@@ -13,7 +13,7 @@
 		<li>
 			<a
 				href="/admin/sources/{choice.type}/new"
-				class="bg-card hover:border-foreground/30 flex h-full flex-col rounded-xl border p-4 transition-colors"
+				class="bg-card hover:border-foreground/30 flex h-full flex-col rounded-xl border shadow-sm p-4 transition-colors"
 			>
 				<span class="font-medium">{choice.label}</span>
 				<span class="text-muted-foreground mt-1 text-sm">{choice.description}</span>

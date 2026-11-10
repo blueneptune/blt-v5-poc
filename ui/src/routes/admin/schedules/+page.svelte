@@ -43,7 +43,7 @@
 
 {#snippet table(rows: typeof data.deployments, heading: string)}
 	<h2 class="mt-8 text-lg font-semibold">{heading}</h2>
-	<div class="bg-card relative mt-3 overflow-x-auto rounded-xl border">
+	<div class="bg-card relative mt-3 overflow-x-auto rounded-xl border shadow-sm">
 		<table class="w-full text-sm">
 			<thead class="text-muted-foreground border-b text-left text-xs">
 				<tr>
@@ -54,7 +54,7 @@
 					<th class="px-4 py-2 font-medium"><span class="sr-only">Actions</span></th>
 				</tr>
 			</thead>
-			<tbody>
+			<tbody class="striped">
 				{#each rows as d (d.id)}
 					<tr class="border-b last:border-0 align-top">
 						<td class="px-4 py-2">

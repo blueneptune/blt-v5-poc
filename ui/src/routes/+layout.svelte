@@ -35,7 +35,7 @@
 	<main class="min-w-0 p-4 md:p-6">{@render children()}</main>
 {:else}
 <div class="flex min-h-svh flex-col md:flex-row">
-	<aside class="bg-muted/60 flex shrink-0 flex-col border-b md:w-56 md:border-r md:border-b-0">
+	<aside class="bg-card flex shrink-0 flex-col border-b md:w-56 md:border-r md:border-b-0">
 		<div class="flex items-center gap-1 px-4 py-4">
 			<a href="/" class="mr-auto text-lg font-semibold tracking-tight">blt</a>
 			<button

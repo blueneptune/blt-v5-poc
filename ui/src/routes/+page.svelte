@@ -33,13 +33,13 @@
 </div>
 
 <div class="mt-6 grid gap-6 lg:grid-cols-2">
-	<section class="bg-card rounded-xl border p-4">
+	<section class="bg-card rounded-xl border shadow-sm p-4">
 		<h2 class="font-medium">Last 24 hours, by source</h2>
 		{#if data.bySource.length === 0}
 			<p class="text-muted-foreground mt-3 text-sm">No jobs started in the last day.</p>
 		{:else}
 			<table class="mt-3 w-full text-sm">
-				<tbody>
+				<tbody class="striped">
 					{#each data.bySource as row (`${row.source_type}/${row.source_name}`)}
 						<tr>
 							<td class="py-1.5 pr-3 whitespace-nowrap">
@@ -57,10 +57,10 @@
 		{/if}
 	</section>
 
-	<section class="bg-card rounded-xl border p-4">
+	<section class="bg-card rounded-xl border shadow-sm p-4">
 		<h2 class="font-medium">Last 14 days</h2>
 		<table class="mt-3 w-full text-sm">
-			<tbody>
+			<tbody class="striped">
 				{#each data.byDay as row (row.day)}
 					<tr>
 						<td class="text-muted-foreground py-1 pr-3 whitespace-nowrap tabular-nums">{row.day ?? 'not started'}</td>
@@ -73,7 +73,7 @@
 	</section>
 </div>
 
-<section class="bg-card mt-6 rounded-xl border p-4">
+<section class="bg-card mt-6 rounded-xl border shadow-sm p-4">
 	<h2 class="font-medium">Recent failures</h2>
 	{#if data.failures.length === 0}
 		<p class="text-muted-foreground mt-3 text-sm">Nothing failed in the last day.</p>

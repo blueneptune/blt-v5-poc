@@ -233,7 +233,7 @@
 		</div>
 
 		<!-- The filter bar: kinds first, Backup on by default (decision 3). -->
-		<div class="bg-card mt-4 space-y-3 rounded-xl border p-3">
+		<div class="bg-card mt-4 space-y-3 rounded-xl border shadow-sm p-3">
 			<div class="flex flex-wrap items-center gap-1.5">
 				<span class="text-muted-foreground w-14 text-xs">Kind</span>
 				<a href={link({ kinds: [] })} class={chip(filters.kinds.length === 0)}>all</a>
@@ -302,7 +302,7 @@
 
 	{#if data.grouped}
 		<!-- The rollup: one line per source and protection. -->
-		<div class="bg-card mt-4 min-h-0 overflow-auto rounded-xl border">
+		<div class="bg-card mt-4 min-h-0 overflow-auto rounded-xl border shadow-sm">
 			<table class="w-full text-sm">
 				<thead
 					class="text-muted-foreground bg-card sticky top-0 z-10 text-left text-xs shadow-[inset_0_-1px_0_var(--border)]"
@@ -314,7 +314,7 @@
 						<th class="px-3 py-2 text-right font-medium">Jobs</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y">
+				<tbody class="striped divide-y">
 					{#each data.groups as row (`${row.source_name}/${row.protection}`)}
 						<tr class="hover:bg-muted/50">
 							<td class="px-3 py-2">
@@ -345,7 +345,7 @@
 			</table>
 		</div>
 	{:else}
-		<div class="bg-card mt-4 min-h-0 overflow-auto rounded-xl border">
+		<div class="bg-card mt-4 min-h-0 overflow-auto rounded-xl border shadow-sm">
 			<!-- Fixed layout: each column is as wide as its <col> says; the last,
 			     empty one takes what a wide window has left over. -->
 			<table class="table-fixed text-sm" style="width: max(100%, {tableWidth}px)">
@@ -387,7 +387,7 @@
 						<th aria-hidden="true"></th>
 					</tr>
 				</thead>
-				<tbody class="divide-y">
+				<tbody class="striped divide-y">
 					{#each data.jobs as job (job.id)}
 						<tr
 							class="hover:bg-muted/50 cursor-pointer {job.state === 'failed' ? 'bg-red-50/60 dark:bg-red-950/20' : ''}"

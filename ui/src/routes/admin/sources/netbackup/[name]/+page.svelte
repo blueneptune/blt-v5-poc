@@ -56,7 +56,7 @@
 	<p class="mt-4 text-sm" role="status">{form.saved}</p>
 {/if}
 
-<section class="mt-8 max-w-3xl">
+<section class="bg-card mt-6 max-w-3xl rounded-xl border p-5 shadow-sm">
 	<div class="flex flex-wrap items-center gap-3">
 		<h2 class="text-lg font-semibold">Check</h2>
 		<form method="POST" action="?/check" use:enhance>
@@ -83,7 +83,7 @@
 	<TimingForm timing={source.timing ?? {}} nextStarts={source.next_starts ?? []} collecting={source.collect} product={'NetBackup'} />
 {/key}
 
-<section class="mt-10 max-w-2xl">
+<section class="bg-card mt-6 max-w-2xl rounded-xl border p-5 shadow-sm">
 	<h2 class="text-lg font-semibold">Change</h2>
 	<p class="text-muted-foreground mt-1 text-sm">Fill in only what changes.</p>
 	<form method="POST" action="?/change" use:enhance class="mt-3 grid gap-4">
@@ -113,7 +113,7 @@
 	</form>
 </section>
 
-<section class="mt-10 max-w-2xl">
+<section class="bg-card mt-6 max-w-2xl rounded-xl border p-5 shadow-sm">
 	<h2 class="text-lg font-semibold">Remove</h2>
 	<p class="text-muted-foreground mt-1 text-sm">
 		Removes its block: nothing collects from it any more. What blt collected stays.

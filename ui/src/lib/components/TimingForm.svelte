@@ -22,7 +22,7 @@
 	const input = 'bg-background h-9 rounded-md border px-3 text-sm';
 </script>
 
-<section class="mt-10 max-w-2xl" aria-labelledby="timing">
+<section class="bg-card mt-6 max-w-2xl rounded-xl border p-5 shadow-sm" aria-labelledby="timing">
 	<h2 id="timing" class="text-lg font-semibold">Collection timing</h2>
 	<p class="text-muted-foreground mt-1 text-sm">
 		When its jobs are collected. On {product}'s own schedule, each source starts at an offset of its own, so they

@@ -89,7 +89,7 @@
 				onupdate={(_, lines) => fetched(lines)}
 			/>
 			{#each found as certificate, i (i)}
-				<div class="bg-card rounded-xl border p-3 text-sm">
+				<div class="bg-card rounded-xl border shadow-sm p-3 text-sm">
 					<p class="font-medium">{certificate.subject ?? `Certificate ${i + 1}`}</p>
 					<p class="text-muted-foreground mt-1 font-mono text-xs break-all">SHA-256 {certificate.sha256}</p>
 					<p class="mt-1 text-xs">
