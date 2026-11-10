@@ -306,3 +306,19 @@ current work.
     may accept legacy key sizes (`legacy_keys`: security level 1, chain,
     expiry and host name still checked). Follow-up for that site: a
     NetBackup CA migration, then turn the setting off.
+
+29. **One "Add a source" button** (asked for 2026-11-10). The Sources
+    page's "Add a NetBackup primary" becomes "Add a source", with a
+    choice of product, each opening its own form:
+    - **NetBackup primary** - today's form (address, fetch its CA, API
+      key, legacy key sizes);
+    - **CommCell** (Commvault on-prem, and Commvault Cloud) - address,
+      CA, user name and password or token, as blt-prefect-import takes
+      them today;
+    - **Rubrik account** - upload the service account's JSON file, as
+      blt-rubrik takes it today; the secret goes to the source's block
+      and is never shown again.
+    Each saves through the admin API (new POST endpoints beside the
+    NetBackup one) and runs Check. The CLI imports stay, and the note
+    "CommCells and Rubrik accounts get their credentials from
+    blt-prefect-import and blt-rubrik for now" goes.
