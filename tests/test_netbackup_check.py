@@ -48,7 +48,9 @@ def _nbu(**overrides: Any) -> NetBackupClient:
         server=SimpleNamespace(
             info=lambda: {"serverName": "nbu01", "nbuVersion": "NetBackup_10.5.0.1"}
         ),
-        jobs=SimpleNamespace(sample=lambda limit=5: (42, [])),
+        jobs=SimpleNamespace(
+            sample=lambda limit=5, updated_after=None: (42 if updated_after is None else 7, [])
+        ),
         raw=SimpleNamespace(
             catalog=SimpleNamespace(list_slp_images=lambda page_limit=None: {"data": []}),
             storage=SimpleNamespace(
@@ -79,7 +81,7 @@ def test_every_read_is_tried_and_said() -> None:
         "OK   sign in and server: nbu01, NetBackup 10.5.0.1, API version 12.0",
         "OK   storage (disk pools, storage units): 1 storage targets (MSDP)",
         "OK   SLP images (for the SLP backlog): readable (none waiting or kept just now)",
-        "OK   jobs: readable (42 jobs)",
+        "OK   jobs: readable (42 jobs); 7 changed in the last 24 h",
     ]
 
 
@@ -99,9 +101,17 @@ def test_a_missing_permission_or_endpoint_is_one_failed_line() -> None:
             }
         )
     )
-    assert [c.ok for c in checks] == [True, False, False, True]
+    assert [c.ok for c in checks] == [True, False, True, True]
     assert "read access" in checks[1].detail
-    assert "does not have it" in checks[2].detail
+    # NetBackup 10.0 has no SLP images listing: said, not failed - nothing collects it yet.
+    assert "not on this NetBackup version" in checks[2].detail
+
+
+def test_a_netbackup_without_a_last_update_filter_is_said_in_the_jobs_line() -> None:
+    nbu = _nbu()
+    nbu.delta_style = "ended-or-active"  # type: ignore[misc]
+    jobs = check_primary(nbu)[-1]
+    assert jobs.ok and "takes no lastUpdateTime filter" in jobs.detail
 
 
 def test_ca_certificates_come_with_fingerprints(monkeypatch: pytest.MonkeyPatch) -> None:

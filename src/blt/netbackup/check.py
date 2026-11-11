@@ -29,6 +29,7 @@ import ssl
 import tempfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -91,13 +92,30 @@ def check_primary(nbu: NetBackupClient) -> list[Check]:
         return f"{len(targets)} storage targets ({', '.join(kinds) or 'none'})"
 
     def slp_images() -> str:
-        answer = nbu.raw.catalog.list_slp_images(page_limit=1) or {}
+        try:
+            answer = nbu.raw.catalog.list_slp_images(page_limit=1) or {}
+        except NotFoundError:
+            # NetBackup 10.0 has no /catalog/slp-images. Nothing collects
+            # it yet; the SLP backlog, when it comes, does without it.
+            return "not on this NetBackup version (404) - only the SLP backlog, to come, uses it"
         found = len(answer.get("data") or [])
         return "readable" + ("" if found else " (none waiting or kept just now)")
 
     def jobs() -> str:
         total, recent = nbu.jobs.sample(1)
-        return f"readable ({total if total is not None else len(recent)} jobs)"
+        line = f"readable ({total if total is not None else len(recent)} jobs)"
+        # The question each collection asks: jobs changed since a time.
+        changed, _ = nbu.jobs.sample(1, updated_after=datetime.now(UTC) - timedelta(hours=24))
+        line += f"; {changed if changed is not None else 'some'} changed in the last 24 h"
+        style = getattr(nbu, "delta_style", None)
+        if style == "updated-seconds":
+            line += " (asked to the second: this NetBackup refuses milliseconds)"
+        elif style == "ended-or-active":
+            line += (
+                " (this NetBackup takes no lastUpdateTime filter: collected as the jobs"
+                " ended since, plus those still running)"
+            )
+        return line
 
     first = _attempt("sign in and server", server)
     if not first.ok:
