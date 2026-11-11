@@ -146,6 +146,12 @@ never on a command line. The tools server therefore holds the keys to
 every source in Prefect, so treat it as you would blt's own machine.
 `stop` deletes the file.
 
+## When blt itself moves to the tools server
+
+`deploy/move.sh HOST --adopt-collector NAME` moves blt to the server the
+collector runs on and points the collector at it directly: no tunnel.
+docs/moving.md has the steps.
+
 ## blt on the cluster, and location clusters
 
 On the cluster, Prefect and the API are https ingresses (prefect.blt...,
