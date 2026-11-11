@@ -520,3 +520,119 @@ def test_the_tunnel_from_the_service_never_waits_at_a_prompt(tmp_path: Path) -> 
     assert result.returncode == 0, result.stderr
     ((args, _),) = calls(tmp_path, "ssh")
     assert "BatchMode=yes" in args and args[-1] == "tools-box"
+
+
+# --- moving blt to another machine (deploy/move.sh) ---
+
+MOVE_FAKE = """#!/usr/bin/env bash
+# Records each call like FAKE, and answers what move.sh asks.
+{{ printf '%s\\n' "$@"; echo "--stdin--"; [[ -t 0 ]] || cat; echo "--end--"; }} >> {log}
+case "$*" in
+    *"volume exists"*) exit {volume} ;;
+    *"test -f"*) exit 1 ;;
+    *"unprivileged_port_start"*) echo {lowest} ;;
+    *hostname*) echo tools.example.test ;;
+    *"container inspect"*) echo true ;;
+    *"image inspect"*) echo {image_id} ;;
+    *pg_dump*) echo dump-bytes ;;
+esac
+"""
+
+
+def move(
+    tmp_path: Path, *args: str, volume: int = 1, lowest: int = 443
+) -> subprocess.CompletedProcess[str]:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(ENV + "BLT_PREFECT_BIND_ADDRESS=127.0.0.1\n")
+    tools = {}
+    for name, image_id in (("ssh", "sha-old"), ("podman", "sha-new")):
+        path = tmp_path / name
+        path.write_text(
+            MOVE_FAKE.format(
+                log=tmp_path / f"{name}.log", volume=volume, lowest=lowest, image_id=image_id
+            )
+        )
+        path.chmod(0o755)
+        tools[name] = str(path)
+    return subprocess.run(
+        ["bash", "deploy/move.sh", "tools-box", *args],
+        cwd=ROOT,
+        env={
+            **clean_environment(),
+            "BLT_ENV_FILE": str(env_file),
+            "BLT_MOVE_SSH": tools["ssh"],
+            "BLT_MOVE_PODMAN": tools["podman"],
+            "BLT_SKIP_BUILD": "true",
+        },
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+
+
+def needs_clean_checkout() -> None:
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True
+    ).stdout
+    if dirty.strip():
+        pytest.skip("move.sh refuses a checkout with uncommitted changes")
+
+
+def test_a_move_sends_settings_on_input_with_the_ui_on_its_new_port(tmp_path: Path) -> None:
+    needs_clean_checkout()
+    result = move(tmp_path, "--adopt-collector", "us")
+    assert result.returncode == 0, result.stderr
+    ssh = calls(tmp_path, "ssh")
+    sent = next(stdin for args, stdin in ssh if "cat > 'blt/config/blt.env'" in args[-1])
+    assert "BLT_API_KEY=key-1" in sent
+    assert sent.rstrip().splitlines()[-3:] == [
+        "BLT_UI_BIND_ADDRESS=0.0.0.0",
+        "BLT_UI_PORT=443",
+        "BLT_UI_ORIGIN=http://tools.example.test:443",
+    ]
+    commands = [args[-1] for args, _ in ssh]
+    # Started empty, stopped, both databases restored, started again.
+    starts = [i for i, c in enumerate(commands) if "BLT_SKIP_BUILD=true ./deploy/up.sh" in c]
+    restores = [i for i, c in enumerate(commands) if "pg_restore --clean" in c]
+    assert len(starts) == 2 and len(restores) == 2 and starts[0] < restores[0] < starts[1]
+    assert any("-d blt" in commands[i] for i in restores)
+    assert any("-d prefect" in commands[i] for i in restores)
+    # The adopted collector goes to the Prefect and API beside it.
+    adopt = next(c for c in commands if "blt-collector-us" in c and "sed -i" in c)
+    assert "PREFECT_API_URL=http://127.0.0.1:4200/api" in adopt
+    assert "BLT_API_URL=http://127.0.0.1:8188" in adopt
+    every_argument = "\n".join(
+        a for name in ("ssh", "podman") for c, _ in calls(tmp_path, name) for a in c
+    )
+    for secret in ("key-1", "pg-secret", "prefect-secret", "ui-secret", "session-secret"):
+        assert secret not in every_argument
+
+
+def test_a_move_never_lands_on_blt_s_data(tmp_path: Path) -> None:
+    result = move(tmp_path, volume=0)
+    assert result.returncode == 1 and "already has blt's data" in result.stderr
+    assert not any("tar -x" in args[-1] for args, _ in calls(tmp_path, "ssh"))
+
+
+def test_a_ui_port_below_1024_needs_the_host_to_allow_it(tmp_path: Path) -> None:
+    result = move(tmp_path, lowest=1024)
+    assert result.returncode == 1 and "ip_unprivileged_port_start=443" in result.stderr
+    assert not any("tar -x" in args[-1] for args, _ in calls(tmp_path, "ssh"))
+
+
+def test_an_upgrade_backs_up_first_and_keeps_the_data_and_settings_there(tmp_path: Path) -> None:
+    needs_clean_checkout()
+    result = move(tmp_path, "--upgrade", volume=0)
+    assert result.returncode == 0, result.stderr
+    commands = [args[-1] for args, _ in calls(tmp_path, "ssh")]
+    backup = next(i for i, c in enumerate(commands) if "./deploy/backup.sh" in c)
+    unpack = next(i for i, c in enumerate(commands) if "tar -x" in c)
+    assert backup < unpack
+    assert "blt.previous" in commands[unpack] and "config/." in commands[unpack]
+    assert not any("pg_restore" in c or "cat > 'blt/config/blt.env'" in c for c in commands)
+    assert any("BLT_SKIP_BUILD=true ./deploy/up.sh" in c for c in commands[unpack:])
+
+
+def test_an_upgrade_needs_a_blt_there(tmp_path: Path) -> None:
+    result = move(tmp_path, "--upgrade", volume=1)
+    assert result.returncode == 1 and "no blt in blt to upgrade" in result.stderr

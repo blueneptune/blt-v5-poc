@@ -179,7 +179,13 @@ check_ui_sign_in() {
     fi
 }
 
+# BLT_SKIP_BUILD=true uses the images already on this machine: on one
+# that got them from deploy/move.sh, with no internet to build them.
 build_images() {
+    if [[ "${BLT_SKIP_BUILD:-}" == true ]]; then
+        echo "Using the images already here (BLT_SKIP_BUILD=true)."
+        return 0
+    fi
     podman build -t blt-api -f Containerfile .
     [[ "$UI_ENABLED" == true ]] && podman build -t blt-ui -f ui/Containerfile ui
     if [[ "$PREFECT_ENABLED" == true ]]; then
