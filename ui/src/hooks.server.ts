@@ -1,11 +1,15 @@
 import { error, redirect, type Handle } from '@sveltejs/kit';
 import { apiFor } from '$lib/server/api';
 import { currentUser, signInConfig } from '$lib/server/auth';
+import { isForeignForm } from '$lib/server/origin';
 
 /** Served to anyone: the probe, and the page to sign in on. */
 const PUBLIC = ['/healthz', '/login'];
 
 export const handle: Handle = async ({ event, resolve }) => {
+	if (isForeignForm(event.request, event.url.origin)) {
+		error(403, 'Cross-site form submissions are forbidden');
+	}
 	const config = signInConfig();
 	const user = currentUser(event, config);
 	event.locals.user = user;

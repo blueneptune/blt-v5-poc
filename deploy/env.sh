@@ -144,9 +144,10 @@ if [[ "$UI_ENABLED" == true ]]; then
         exit 1
     fi
     UI_PORT="${BLT_UI_PORT:-8090}"
-    # The address browsers use for it. The UI's server refuses a form post
-    # (sign-in included) from any other origin, and without this it
-    # assumes https.
+    # The address browsers use for it: its protocol decides whether the
+    # session cookie is https-only (without this the UI assumes https). A
+    # form posted to the UI by any name of this machine is accepted, one
+    # from another site refused (ui/src/lib/server/origin.ts).
     UI_ORIGIN="${BLT_UI_ORIGIN:-http://localhost:${UI_PORT}}"
     UI_SIGN_IN=on
     [[ "${BLT_UI_SIGN_IN:-on}" == "off" ]] && UI_SIGN_IN=off
