@@ -32,6 +32,7 @@ from typing import Protocol
 
 from loguru import logger
 
+from blt.progress import Progress, since_line
 from blt.schemas import (
     MISSING_STATUS,
     BackfillUpdate,
@@ -94,15 +95,16 @@ def run_collection(
     run = store.start_run(
         RunStart(mode=mode, started_at=started_at, lookup_seconds=lookup_seconds)  # type: ignore[arg-type]
     )
-    logger.info(
-        "Run {} started: mode={} watermark={} lookup={}s", run.id, mode, watermark, lookup_seconds
-    )
+    since = started_at - timedelta(seconds=lookup_seconds)
+    logger.info("Commvault run {} started - {}", run.id, since_line(mode, since, started_at))
+    progress = Progress(f"Commvault run {run.id}")
 
     collected = reconciled = missing = 0
     try:
         for page in source.iter_pages(lookup_seconds):
             store.upsert_jobs(run.id, now(), page)
             collected += len(page)
+            progress.page(len(page))
 
         for stale in store.iter_active_unseen(run.id):
             current = source.get(stale.job_id)
@@ -142,8 +144,9 @@ def run_collection(
         ),
     )
     logger.info(
-        "Run {} succeeded: {} collected, {} reconciled, {} missing",
+        "Commvault run {} succeeded in {}: {} collected, {} reconciled, {} missing",
         run.id,
+        progress.elapsed(),
         collected,
         reconciled,
         missing,

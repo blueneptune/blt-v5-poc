@@ -24,6 +24,8 @@ from typing import Protocol
 
 from loguru import logger
 
+from blt.progress import Progress, since_line
+
 from .schemas import (
     NetBackupJobIn,
     NetBackupRunFinish,
@@ -72,13 +74,15 @@ def run_netbackup_collection(
             lookup_seconds=int((started_at - since).total_seconds()),
         )
     )
-    logger.info("NetBackup run {} started: mode={} changes since {}", run.id, mode, since)
+    logger.info("NetBackup run {} started - {}", run.id, since_line(mode, since, started_at))
+    progress = Progress(f"NetBackup run {run.id}")
 
     collected = 0
     try:
         for page in source.iter_pages(since):
             store.upsert_jobs(run.id, now(), page)
             collected += len(page)
+            progress.page(len(page))
     except BaseException as exc:
         store.finish_run(
             run.id,
@@ -95,5 +99,5 @@ def run_netbackup_collection(
         run.id,
         NetBackupRunFinish(status="succeeded", finished_at=now(), jobs_collected=collected),
     )
-    logger.info("NetBackup run {} succeeded: {} jobs", run.id, collected)
+    logger.info("NetBackup run {} succeeded in {}: {} jobs", run.id, progress.elapsed(), collected)
     return finished
