@@ -12,7 +12,11 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter()
+			adapter: adapter(),
+			// Checked per request in hooks.server.ts instead (lib/server/origin.ts):
+			// SvelteKit's check knows only ORIGIN, and a tools server has more
+			// than one name.
+			csrf: { trustedOrigins: ['*'] }
 		})
 	],
 	test: {
