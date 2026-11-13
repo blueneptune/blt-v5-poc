@@ -39,3 +39,24 @@ uv run --extra collector blt-lookup --commcell <commcell> --job <job-id>
   and it is *not* wall-clock time: it stops while a job is suspended or
   waiting. A job that started 73 seconds before it ended has been seen
   to report 23. For "how long has this been going", use the start time.
+
+## nbu-flows-check.sh - can blt draw NetBackup's Sankey?
+
+```
+scripts/nbu-flows-check.sh        # the last 7 days
+scripts/nbu-flows-check.sh 30
+```
+
+Read-only, on the machine blt's pod runs on. Four tables:
+
+1. **Jobs per primary and type**: backups, duplications, replications
+   and imports that ended in the window. Replications on one primary
+   and imports on the other are what the Sankey joins.
+2. **Replications, matched or not**: each to the primary whose import
+   of the same image (same backup id) blt has. `(not matched)` rows are
+   drawn to the storage unit the job names, and counted under the chart.
+3. **Storage units in no collected disk pool**: jobs that wrote there
+   land on a node of that name instead of a pool (tape, or a pool whose
+   storage is not collected).
+4. **A few replication jobs as NetBackup gave them**, to see what it
+   names as their destination.
