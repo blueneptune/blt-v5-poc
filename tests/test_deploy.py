@@ -198,6 +198,17 @@ def test_the_ui_stays_local_when_the_rest_is_opened(tmp_path: Path) -> None:
     assert ui_origin(found) == "https://blt.example.test"
 
 
+def test_the_api_alone_can_be_opened_while_postgres_stays_local(tmp_path: Path) -> None:
+    found = containers(render(tmp_path, "BLT_API_BIND_ADDRESS=0.0.0.0\n"))
+    assert found["api"]["ports"][0]["hostIP"] == "0.0.0.0"
+    assert found["postgres"]["ports"][0]["hostIP"] == "127.0.0.1"
+    # On the host's network the API itself listens there; Postgres does not.
+    found = containers(render(tmp_path, "BLT_API_BIND_ADDRESS=0.0.0.0\nBLT_POD_NETWORK=host\n"))
+    api_env = {e["name"]: e.get("value") for e in found["api"]["env"]}
+    assert api_env["BLT_LISTEN_HOST"] == "0.0.0.0"
+    assert "listen_addresses=127.0.0.1" in found["postgres"]["args"]
+
+
 def ui_origin(found: dict) -> str:
     return {e["name"]: e.get("value") for e in found["ui"]["env"]}["ORIGIN"]
 

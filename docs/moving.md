@@ -70,7 +70,10 @@ The server's firewall must also let 443 in, which is the reason for that
 port.
 
 The API (8088), Prefect (4200) and Postgres stay on the server's loopback,
-as they did in WSL. A remote collector elsewhere reaches them through a
+as they did in WSL. To let people on the network use the API and its
+reference (`http://<server>:8088/docs`), add `BLT_API_BIND_ADDRESS=0.0.0.0`
+to `config/blt.env` there and run `./deploy/down.sh` then `./deploy/up.sh`
+(the data is kept). Postgres stays local. The firewall must let 8088 in. A remote collector elsewhere reaches them through a
 tunnel from this server, `deploy/collector.sh tunnel` run there.
 
 **Plain HTTP:** the sign-in password crosses the network unencrypted. A
