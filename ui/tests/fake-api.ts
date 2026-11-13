@@ -12,7 +12,7 @@
 import { createServer, type ServerResponse } from 'node:http';
 import type { components } from '../src/lib/api/schema';
 import { admin } from './fake-admin.ts';
-import { API_KEY, JOBS, SAMPLES, SOURCES, STORAGE, type Job } from './fixtures.ts';
+import { API_KEY, FLOWS, JOBS, SAMPLES, SOURCES, STORAGE, type Job } from './fixtures.ts';
 
 type JobDetail = components['schemas']['CommonJobDetail'];
 type SummaryRow = components['schemas']['SummaryRow'];
@@ -94,6 +94,7 @@ createServer(async (req, res) => {
 		});
 	}
 	if (path === '/v1/storage') return send(res, 200, STORAGE);
+	if (path === '/v1/storage/flows') return send(res, 200, FLOWS);
 	const target = path.match(/^\/v1\/storage\/([0-9a-f-]{36})(\/samples)?$/);
 	if (target) {
 		const found = STORAGE.find((t) => t.id === target[1]);
