@@ -235,6 +235,21 @@ test('storage: totals, each target with how full it is', async ({ page }) => {
 	await expect(page.getByRole('row', { name: /pool-steady/ })).toContainText('26 days');
 });
 
+test("storage: where NetBackup's data goes, and how full each pool is", async ({ page }) => {
+	await page.goto('/storage');
+	const flows = page.getByRole('region', { name: "Where NetBackup's data goes" });
+	await expect(flows.getByRole('img', { name: /2 flows into 1 pools/ })).toBeVisible();
+	await expect(flows.getByRole('list', { name: 'Legend' })).toContainText('Replicated to another primary');
+	await expect(flows.getByText(/msdp-a/).first()).toBeVisible();
+	await expect(flows.getByText('Nearly full').first()).toBeVisible();
+	await expect(flows.getByText(/2 replication jobs/)).toBeVisible();
+	await expect(flows.getByText(/Nothing written in this window: .*idle-pool/)).toBeVisible();
+	await flows.getByText('Show as a table').click();
+	await expect(flows.getByRole('row', { name: /Backups on nbu-a msdp-a Backups 12 TiB 40/ })).toBeVisible();
+	await flows.getByRole('link', { name: '30 days' }).click();
+	await expect(page).toHaveURL(/flow=30/);
+});
+
 test('storage: by MediaAgent, a shared pool is under each', async ({ page }) => {
 	await page.goto('/storage');
 	await page.getByRole('link', { name: 'MediaAgent / media server' }).click();

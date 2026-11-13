@@ -99,6 +99,30 @@ blt-netbackup storage eth00bck01  # one collection now, from this host
   dashed line, a readout on hover, the samples as a table, its mount
   paths.
 
+### Where NetBackup's data goes (the Sankey)
+
+At the top of the page, once a NetBackup primary's storage is collected:
+backups and copies that ended in the last 24 hours, 7 days or 30 days,
+from where they came to the disk pool they landed in
+(`GET /v1/storage/flows`, blt.api.storage_flows).
+
+- Left: **Backups on <primary>** and **Copies from <pool>**. Right: each
+  pool once, drawn as a meter that fills as the pool does, in its
+  health's colour, with the icon, the word and when it will be full.
+  So a pool filling up shows with what is filling it.
+- Bands: backups, duplications (same primary) and replications (AIR, to
+  another primary), each its own colour, with a legend; hover for the
+  figures; **Show as a table** for the same figures as rows.
+- Sizes are what the jobs say they wrote (`kilobytes_transferred`),
+  before deduplication: the pressure on a pool, not what it took on disk.
+  A multi-stream or VMware parent job is left out, its children counted.
+- A job finds its pool through the pool's storage units. A replication
+  is joined to the receiving primary's import of the same image (same
+  backup id): both primaries must be collected. One whose import is not
+  collected (yet) is drawn to the storage unit the job names, and counted
+  under the chart.
+- Pools nothing was written to in the window are listed under it.
+
 ## Next
 
 - NetBackup MSDP dedupe ratio (not in the disk pool answer), tape.

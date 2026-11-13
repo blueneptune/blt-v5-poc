@@ -133,6 +133,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/storage/flows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where NetBackup's data goes: backups and copies per pool
+         * @description For the Storage page's Sankey: what each NetBackup primary's
+         *     backups wrote into each disk pool, and what was copied from one
+         *     pool to another - duplicated on one primary, or replicated to
+         *     another (matched to that primary's import of the same image) -
+         *     with every pool's use and trend. Bytes as the jobs report them,
+         *     before deduplication.
+         */
+        get: operations["get_flows_v1_storage_flows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/storage/{storage_id}": {
         parameters: {
             query?: never;
@@ -1647,6 +1672,71 @@ export interface components {
             last_run?: components["schemas"]["RunBrief"] | null;
             /** @description Its next scheduled run. */
             next_run?: components["schemas"]["RunBrief"] | null;
+        };
+        /**
+         * FlowLink
+         * @description Data that went from one node to another, summed over the window.
+         */
+        FlowLink: {
+            /**
+             * Source
+             * @description The node data comes from.
+             */
+            source: string;
+            /**
+             * Target
+             * @description The node it lands in.
+             */
+            target: string;
+            /**
+             * Kind
+             * @description backup, duplicate (same primary) or replicate (AIR).
+             * @enum {string}
+             */
+            kind: "backup" | "duplicate" | "replicate";
+            /**
+             * Bytes
+             * @description What the jobs wrote, before deduplication.
+             */
+            bytes: number;
+            /**
+             * Jobs
+             * @description How many jobs.
+             */
+            jobs: number;
+        };
+        /**
+         * FlowNode
+         * @description One end of a flow: where data comes from (column 0), or the pool or
+         *     storage unit it goes to (column 1).
+         */
+        FlowNode: {
+            /**
+             * Id
+             * @description The node's id within this answer.
+             */
+            id: string;
+            /**
+             * Column
+             * @description 0: where data comes from; 1: where it lands.
+             * @enum {integer}
+             */
+            column: 0 | 1;
+            /**
+             * Label
+             * @description What to call it.
+             */
+            label: string;
+            /**
+             * Source Name
+             * @description The NetBackup primary it is on.
+             */
+            source_name: string;
+            /**
+             * Storage Id
+             * @description The storage target (`targets`), when it is a known pool.
+             */
+            storage_id?: string | null;
         };
         /**
          * FlowRunDetail
@@ -4633,6 +4723,44 @@ export interface components {
             targets: components["schemas"]["StorageIn"][];
         };
         /**
+         * StorageFlows
+         * @description Where NetBackup's data went in the window, and every pool's use.
+         */
+        StorageFlows: {
+            /**
+             * Since
+             * Format: date-time
+             * @description Jobs that ended from here...
+             */
+            since: string;
+            /**
+             * Until
+             * Format: date-time
+             * @description ...to here.
+             */
+            until: string;
+            /**
+             * Nodes
+             * @description Where data came from and where it landed.
+             */
+            nodes: components["schemas"]["FlowNode"][];
+            /**
+             * Links
+             * @description How much went from each to each.
+             */
+            links: components["schemas"]["FlowLink"][];
+            /**
+             * Targets
+             * @description Every NetBackup pool, with its use and trend - also those nothing wrote to in the window.
+             */
+            targets: components["schemas"]["StorageOut"][];
+            /**
+             * Unmatched Replications
+             * @description Replication jobs whose import on the other primary is not collected (yet): drawn to the storage unit the job names.
+             */
+            unmatched_replications: number;
+        };
+        /**
          * StorageIn
          * @description One storage target as the collector read it: what it is, and how
          *     full it is now. Sizes in bytes, whatever unit the product used.
@@ -5392,6 +5520,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StorageOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_flows_v1_storage_flows_get: {
+        parameters: {
+            query?: {
+                /** @description Jobs that ended in the last so many days. */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageFlows"];
                 };
             };
             /** @description Missing or invalid `X-API-Key` */

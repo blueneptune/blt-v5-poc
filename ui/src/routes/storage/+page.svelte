@@ -1,4 +1,5 @@
 <script lang="ts">
+	import StorageFlows from '$lib/components/StorageFlows.svelte';
 	import StorageMeter from '$lib/components/StorageMeter.svelte';
 	import { bytes, ago } from '$lib/format';
 	import { GROUPS, GROUP_LABEL, fullIn, grouped, totals } from '$lib/storage';
@@ -36,11 +37,37 @@
 	</div>
 </div>
 
+{#if data.flows.targets.length > 0}
+	<section class="bg-card mt-6 rounded-xl border p-4 shadow-sm" aria-labelledby="flows-title">
+		<div class="flex flex-wrap items-baseline justify-between gap-2">
+			<div>
+				<h2 id="flows-title" class="text-sm font-medium">Where NetBackup's data goes</h2>
+				<p class="text-muted-foreground text-xs">
+					Backups and copies that ended in the last {data.days === 1 ? 'day' : `${data.days} days`}, into each
+					disk pool. Sizes as the jobs report them, before deduplication.
+				</p>
+			</div>
+			<div class="flex items-center gap-1 text-xs" role="group" aria-label="Window">
+				{#each data.windows as days (days)}
+					<a
+						href="?by={data.by}&flow={days}"
+						aria-current={data.days === days ? 'true' : undefined}
+						class="rounded-full border px-2.5 py-0.5 {data.days === days
+							? 'bg-accent text-accent-foreground font-medium'
+							: 'text-muted-foreground hover:bg-accent'}">{days === 1 ? '24 hours' : `${days} days`}</a
+					>
+				{/each}
+			</div>
+		</div>
+		<div class="mt-3"><StorageFlows flows={data.flows} /></div>
+	</section>
+{/if}
+
 <div class="mt-6 flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Group by">
 	<span class="text-muted-foreground">Group by</span>
 	{#each GROUPS as group (group)}
 		<a
-			href="?by={group}"
+			href="?by={group}&flow={data.days}"
 			aria-current={data.by === group ? 'true' : undefined}
 			class="rounded-full border px-3 py-1 {data.by === group
 				? 'bg-accent text-accent-foreground font-medium'

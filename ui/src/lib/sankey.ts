@@ -1,0 +1,161 @@
+/** A two-column Sankey, laid out by hand (no library): where NetBackup's
+ * data comes from on the left, the pools it lands in on the right
+ * (GET /v1/storage/flows, blt.api.storage_flows).
+ *
+ * A node is as tall as the larger of what flows in and out of it, every
+ * node on one scale; each link is a band from its source to its target,
+ * stacked within each node in the order of the nodes at its other end,
+ * so bands cross as little as two columns allow. */
+import type { components } from '$lib/api/schema';
+
+export type Flows = components['schemas']['StorageFlows'];
+export type FlowNode = components['schemas']['FlowNode'];
+export type FlowLink = components['schemas']['FlowLink'];
+export type FlowKind = FlowLink['kind'];
+
+export interface Box {
+	node: FlowNode;
+	x: number;
+	y: number;
+	height: number;
+	value: number;
+}
+
+export interface Band {
+	link: FlowLink;
+	path: string;
+	/** Its thickness at either end. */
+	width: number;
+	source: Box;
+	target: Box;
+}
+
+export interface Layout {
+	boxes: Box[];
+	bands: Band[];
+	height: number;
+}
+
+export interface Size {
+	width: number;
+	height: number;
+	nodeWidth: number;
+	/** Gap between nodes in a column. */
+	gap: number;
+	/** Where each column's nodes start, from the left. */
+	columns: [number, number];
+	/** The thinnest a node or band is drawn, so a small one stays visible. */
+	minimum: number;
+}
+
+export const SIZE: Size = {
+	width: 960,
+	height: 420,
+	nodeWidth: 14,
+	gap: 14,
+	columns: [240, 560],
+	minimum: 2
+};
+
+/** The order of a column: by primary, then the largest first. */
+function ordered(boxes: Box[]): Box[] {
+	return [...boxes].sort(
+		(a, b) => a.node.source_name.localeCompare(b.node.source_name) || b.value - a.value
+	);
+}
+
+export function layout(flows: Pick<Flows, 'nodes' | 'links'>, size: Size = SIZE): Layout {
+	const inflow = new Map<string, number>();
+	const outflow = new Map<string, number>();
+	for (const link of flows.links) {
+		outflow.set(link.source, (outflow.get(link.source) ?? 0) + link.bytes);
+		inflow.set(link.target, (inflow.get(link.target) ?? 0) + link.bytes);
+	}
+	const used = flows.nodes.filter((n) => inflow.has(n.id) || outflow.has(n.id));
+	const columns: Box[][] = [0, 1].map((c) =>
+		ordered(
+			used
+				.filter((n) => n.column === c)
+				.map((node) => ({
+					node,
+					x: size.columns[c as 0 | 1],
+					y: 0,
+					height: 0,
+					value: Math.max(inflow.get(node.id) ?? 0, outflow.get(node.id) ?? 0)
+				}))
+		)
+	);
+
+	// One scale for both columns: the fuller one fills the height.
+	const scale = Math.min(
+		...columns
+			.filter((c) => c.length > 0)
+			.map((c) => {
+				const room = size.height - size.gap * (c.length - 1);
+				const total = c.reduce((sum, b) => sum + b.value, 0);
+				return total > 0 ? room / total : Infinity;
+			})
+	);
+	const k = Number.isFinite(scale) ? scale : 0;
+	let height = 0;
+	for (const column of columns) {
+		let y = 0;
+		for (const box of column) {
+			box.y = y;
+			box.height = Math.max(box.value * k, size.minimum);
+			y += box.height + size.gap;
+		}
+		height = Math.max(height, y - size.gap);
+	}
+
+	const boxes = new Map(columns.flat().map((b) => [b.node.id, b]));
+	const centre = (id: string) => {
+		const b = boxes.get(id);
+		return b ? b.y + b.height / 2 : 0;
+	};
+	const links = flows.links.filter((l) => boxes.has(l.source) && boxes.has(l.target));
+	// Where the next band starts within each node, on each side.
+	const outAt = new Map<string, number>();
+	const inAt = new Map<string, number>();
+	const byTarget = [...links].sort((a, b) => centre(a.target) - centre(b.target));
+	const sourceY = new Map<FlowLink, number>();
+	for (const link of byTarget) {
+		const box = boxes.get(link.source)!;
+		const at = outAt.get(link.source) ?? box.y;
+		sourceY.set(link, at);
+		outAt.set(link.source, at + Math.max(link.bytes * k, size.minimum));
+	}
+	const bySource = [...links].sort((a, b) => centre(a.source) - centre(b.source));
+	const bands: Band[] = bySource.map((link) => {
+		const source = boxes.get(link.source)!;
+		const target = boxes.get(link.target)!;
+		const width = Math.max(link.bytes * k, size.minimum);
+		const ty = inAt.get(link.target) ?? target.y;
+		inAt.set(link.target, ty + width);
+		const sy = sourceY.get(link)!;
+		const x0 = source.x + size.nodeWidth;
+		const x1 = target.x;
+		const xm = (x0 + x1) / 2;
+		const path =
+			`M${x0},${sy} C${xm},${sy} ${xm},${ty} ${x1},${ty} ` +
+			`L${x1},${ty + width} C${xm},${ty + width} ${xm},${sy + width} ${x0},${sy + width} Z`;
+		return { link, path, width, source, target };
+	});
+	return { boxes: [...boxes.values()], bands, height };
+}
+
+export const KIND_LABEL: Record<FlowKind, string> = {
+	backup: 'Backups',
+	replicate: 'Replicated to another primary',
+	duplicate: 'Duplicated on the same primary'
+};
+
+/** Categorical slots 1-3 of the chart palette, in fixed order (app.css). */
+export const KIND_COLOUR: Record<FlowKind, string> = {
+	backup: 'var(--series-1)',
+	replicate: 'var(--series-2)',
+	duplicate: 'var(--series-3)'
+};
+
+/** The windows the Storage page offers, in days. */
+export const WINDOWS = [1, 7, 30] as const;

@@ -821,6 +821,69 @@
         }
       }
     },
+    "/v1/storage/flows": {
+      "get": {
+        "tags": [
+          "storage"
+        ],
+        "summary": "Where NetBackup's data goes: backups and copies per pool",
+        "description": "For the Storage page's Sankey: what each NetBackup primary's\nbackups wrote into each disk pool, and what was copied from one\npool to another - duplicated on one primary, or replicated to\nanother (matched to that primary's import of the same image) -\nwith every pool's use and trend. Bytes as the jobs report them,\nbefore deduplication.",
+        "operationId": "get_flows_v1_storage_flows_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 90,
+              "exclusiveMinimum": 0,
+              "description": "Jobs that ended in the last so many days.",
+              "default": 7,
+              "title": "Days"
+            },
+            "description": "Jobs that ended in the last so many days."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageFlows"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/storage/{storage_id}": {
       "get": {
         "tags": [
@@ -6081,6 +6144,100 @@
         ],
         "title": "DeploymentOut",
         "description": "Something Prefect runs: a flow, how it is started, and when."
+      },
+      "FlowLink": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "The node data comes from."
+          },
+          "target": {
+            "type": "string",
+            "title": "Target",
+            "description": "The node it lands in."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "backup",
+              "duplicate",
+              "replicate"
+            ],
+            "title": "Kind",
+            "description": "backup, duplicate (same primary) or replicate (AIR)."
+          },
+          "bytes": {
+            "type": "integer",
+            "title": "Bytes",
+            "description": "What the jobs wrote, before deduplication."
+          },
+          "jobs": {
+            "type": "integer",
+            "title": "Jobs",
+            "description": "How many jobs."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "kind",
+          "bytes",
+          "jobs"
+        ],
+        "title": "FlowLink",
+        "description": "Data that went from one node to another, summed over the window."
+      },
+      "FlowNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The node's id within this answer."
+          },
+          "column": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "title": "Column",
+            "description": "0: where data comes from; 1: where it lands."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "What to call it."
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name",
+            "description": "The NetBackup primary it is on."
+          },
+          "storage_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Id",
+            "description": "The storage target (`targets`), when it is a known pool."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "column",
+          "label",
+          "source_name"
+        ],
+        "title": "FlowNode",
+        "description": "One end of a flow: where data comes from (column 0), or the pool or\nstorage unit it goes to (column 1)."
       },
       "FlowRunDetail": {
         "properties": {
@@ -11704,6 +11861,62 @@
             ]
           }
         ]
+      },
+      "StorageFlows": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since",
+            "description": "Jobs that ended from here..."
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Until",
+            "description": "...to here."
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/FlowNode"
+            },
+            "type": "array",
+            "title": "Nodes",
+            "description": "Where data came from and where it landed."
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/FlowLink"
+            },
+            "type": "array",
+            "title": "Links",
+            "description": "How much went from each to each."
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/StorageOut"
+            },
+            "type": "array",
+            "title": "Targets",
+            "description": "Every NetBackup pool, with its use and trend - also those nothing wrote to in the window."
+          },
+          "unmatched_replications": {
+            "type": "integer",
+            "title": "Unmatched Replications",
+            "description": "Replication jobs whose import on the other primary is not collected (yet): drawn to the storage unit the job names."
+          }
+        },
+        "type": "object",
+        "required": [
+          "since",
+          "until",
+          "nodes",
+          "links",
+          "targets",
+          "unmatched_replications"
+        ],
+        "title": "StorageFlows",
+        "description": "Where NetBackup's data went in the window, and every pool's use."
       },
       "StorageIn": {
         "properties": {

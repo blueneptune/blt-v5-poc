@@ -371,6 +371,26 @@
           }
         },
         {
+          "name": "Where NetBackup's data goes: backups and copies per pool",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/storage/flows",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "storage",
+                "flows"
+              ],
+              "query": []
+            },
+            "description": "For the Storage page's Sankey: what each NetBackup primary's\nbackups wrote into each disk pool, and what was copied from one\npool to another - duplicated on one primary, or replicated to\nanother (matched to that primary's import of the same image) -\nwith every pool's use and trend. Bytes as the jobs report them,\nbefore deduplication."
+          }
+        },
+        {
           "name": "One storage target",
           "request": {
             "method": "GET",

@@ -116,3 +116,33 @@ export const STORAGE: Storage[] = [
 	}),
 	storage(3, 's3-archive', { kind: 'cloud', product_type: 'CLOUD', hosts: ['ma01'] })
 ];
+
+// Where NetBackup's data goes (GET /v1/storage/flows): two primaries
+// replicating to each other, one pool nearly full.
+type Flows = components['schemas']['StorageFlows'];
+const TIB = 1024 * GIB;
+const nbuPool = (n: number, name: string, primary: string, used: number): Storage =>
+	storage(n, name, {
+		source_type: 'netbackup',
+		source_name: primary,
+		product_type: 'MSDP',
+		latest: { collected_at: new Date(now - 600_000).toISOString(), capacity_bytes: 100 * TIB, used_bytes: used * TIB, free_bytes: (100 - used) * TIB }
+	});
+const MSDP_A = nbuPool(11, 'msdp-a', 'nbu-a', 97);
+const MSDP_B = nbuPool(12, 'msdp-b', 'nbu-b', 40);
+export const FLOWS: Flows = {
+	since: new Date(now - 7 * 24 * HOUR).toISOString(),
+	until: new Date(now).toISOString(),
+	nodes: [
+		{ id: 'backups:nbu-a', column: 0, label: 'Backups on nbu-a', source_name: 'nbu-a', storage_id: null },
+		{ id: `copies:${MSDP_B.id}`, column: 0, label: 'Copies from msdp-b', source_name: 'nbu-b', storage_id: null },
+		{ id: `pool:${MSDP_A.id}`, column: 1, label: 'msdp-a', source_name: 'nbu-a', storage_id: MSDP_A.id },
+		{ id: `pool:${MSDP_B.id}`, column: 1, label: 'msdp-b', source_name: 'nbu-b', storage_id: MSDP_B.id }
+	],
+	links: [
+		{ source: 'backups:nbu-a', target: `pool:${MSDP_A.id}`, kind: 'backup', bytes: 12 * TIB, jobs: 40 },
+		{ source: `copies:${MSDP_B.id}`, target: `pool:${MSDP_A.id}`, kind: 'replicate', bytes: 5 * TIB, jobs: 9 }
+	],
+	targets: [MSDP_A, MSDP_B, nbuPool(13, 'idle-pool', 'nbu-b', 5)],
+	unmatched_replications: 2
+};
