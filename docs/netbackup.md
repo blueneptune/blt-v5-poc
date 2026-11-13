@@ -1,8 +1,9 @@
 # NetBackup in blt
 
 **Status: storage since 2026-11-05 ([storage.md](storage.md)); jobs since
-2026-11-08. Next: the image catalog with SLP state, the SLP backlog
-report, and the replication Sankey across primaries.**
+2026-11-08; the Sankey of backups and replication across primaries since
+2026-11-13 (storage.md). Next: the image catalog with SLP state, and the
+SLP backlog report.**
 
 A NetBackup primary is one source in blt, added under **Administration
 -> Sources -> Add a NetBackup primary** ([admin.md](admin.md)): one

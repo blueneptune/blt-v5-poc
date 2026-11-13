@@ -388,6 +388,24 @@ def storage_router(
         rows = session.exec(query.order_by(col(Source.type), col(Source.name), col(Storage.name)))
         return _outs(session, list(rows))
 
+    from .storage_flows import StorageFlows, storage_flows
+
+    # Before /{storage_id}, which would take "flows" for an id.
+    @router.get("/flows", summary="Where NetBackup's data goes: backups and copies per pool")
+    def get_flows(
+        session: SessionDep,
+        days: Annotated[
+            float, Query(gt=0, le=90, description="Jobs that ended in the last so many days.")
+        ] = 7,
+    ) -> StorageFlows:
+        """For the Storage page's Sankey: what each NetBackup primary's
+        backups wrote into each disk pool, and what was copied from one
+        pool to another - duplicated on one primary, or replicated to
+        another (matched to that primary's import of the same image) -
+        with every pool's use and trend. Bytes as the jobs report them,
+        before deduplication."""
+        return storage_flows(session, days)
+
     @router.get(
         "/{storage_id}", summary="One storage target", responses=not_found("storage target")
     )
