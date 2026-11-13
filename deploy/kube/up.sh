@@ -25,7 +25,7 @@ render() {
     text="${text//"# @UI_CONTAINER@"/$fragment}"
 
     local -A values=(
-        [HOST_NETWORK]="$HOST_NETWORK" [BIND]="$BIND"
+        [HOST_NETWORK]="$HOST_NETWORK" [BIND]="$BIND" [API_BIND]="$API_BIND"
         [API_PORT]="$API_PORT" [PG_PORT]="$PG_PORT"
         [API_LISTEN_HOST]="$API_LISTEN_HOST" [API_LISTEN_PORT]="$API_LISTEN_PORT"
         [PG_LISTEN_PORT]="$PG_LISTEN_PORT" [PG_LISTEN_ADDRESSES]="$PG_LISTEN_ADDRESSES"

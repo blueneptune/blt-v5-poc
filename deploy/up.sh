@@ -21,7 +21,7 @@ if ! podman pod exists blt; then
     if [[ "$HOST_NETWORK" == true ]]; then
         POD_ARGS=(--network host)
     else
-        POD_ARGS=(-p "${BIND}:${API_PORT}:8000" -p "${BIND}:${PG_PORT}:5432")
+        POD_ARGS=(-p "${API_BIND}:${API_PORT}:8000" -p "${BIND}:${PG_PORT}:5432")
         [[ "$PREFECT_ENABLED" == true ]] && POD_ARGS+=(-p "${PREFECT_BIND}:${PREFECT_PORT}:4200")
         [[ "$UI_ENABLED" == true ]] && POD_ARGS+=(-p "${UI_BIND}:${UI_PORT}:3000")
         [[ -n "${BLT_POD_NETWORK:-}" ]] && POD_ARGS+=(--network "$BLT_POD_NETWORK")

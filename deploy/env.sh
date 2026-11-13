@@ -2,7 +2,7 @@
 # check it, and work out every address and port the pod uses - one place,
 # so the two ways of starting blt cannot drift apart.
 #
-# Sets: BIND API_PORT PG_PORT HOST_NETWORK API_LISTEN_HOST API_LISTEN_PORT
+# Sets: BIND API_BIND API_PORT PG_PORT HOST_NETWORK API_LISTEN_HOST API_LISTEN_PORT
 # PG_LISTEN_PORT PG_LISTEN_ADDRESSES LOCAL API_IN_POD PREFECT_ENABLED and, when it
 # is on, PREFECT_BIND PREFECT_PORT PREFECT_LISTEN_HOST PREFECT_LISTEN_PORT
 # PREFECT_LOCAL MAX_PARALLEL, API_PREFECT_URL (where the API reaches Prefect,
@@ -59,6 +59,13 @@ if ! is_ip "$BIND"; then
 fi
 API_PORT="${BLT_API_PORT:-8088}"
 PG_PORT="${BLT_PG_PORT:-5433}"
+# The API alone may be opened wider than Postgres: BLT_API_BIND_ADDRESS,
+# by default the same as BLT_BIND_ADDRESS.
+API_BIND="${BLT_API_BIND_ADDRESS:-$BIND}"
+if ! is_ip "$API_BIND"; then
+    echo "BLT_API_BIND_ADDRESS in config/blt.env is '${API_BIND}', which is not an IP address." >&2
+    exit 1
+fi
 
 # Two ways to put the pod on the network.
 #
@@ -74,7 +81,7 @@ PG_PORT="${BLT_PG_PORT:-5433}"
 HOST_NETWORK=false
 if [[ "${BLT_POD_NETWORK:-}" == "host" ]]; then
     HOST_NETWORK=true
-    API_LISTEN_HOST="$BIND" API_LISTEN_PORT="$API_PORT" PG_LISTEN_PORT="$PG_PORT"
+    API_LISTEN_HOST="$API_BIND" API_LISTEN_PORT="$API_PORT" PG_LISTEN_PORT="$PG_PORT"
     PG_LISTEN_ADDRESSES="$BIND"
     [[ "$BIND" == "0.0.0.0" ]] && PG_LISTEN_ADDRESSES="*"
 else
@@ -90,7 +97,7 @@ LOCAL="$(local_address "$BIND")"
 # Where a container in the pod reaches the API: on the pod's own network
 # it listens on 0.0.0.0:8000; on the host's, on the published address.
 API_IN_POD="127.0.0.1"
-[[ "$HOST_NETWORK" == true ]] && API_IN_POD="$LOCAL"
+[[ "$HOST_NETWORK" == true ]] && API_IN_POD="$(local_address "$API_BIND")"
 
 # Prefect: the server and one worker, in the same pod. Off unless asked.
 PREFECT_ENABLED=false
@@ -211,7 +218,7 @@ wait_until_up() {
             curl -fsS -m 3 "$ui" 2>/dev/null | grep -q '"ok"' || ok=false
         fi
         if [[ "$ok" == true ]]; then
-            echo "blt pod is up: API on http://${BIND}:${API_PORT}, Postgres on ${BIND}:${PG_PORT}"
+            echo "blt pod is up: API on http://${API_BIND}:${API_PORT}, Postgres on ${BIND}:${PG_PORT}"
             [[ -n "$prefect" ]] && echo "Prefect API on http://${PREFECT_BIND}:${PREFECT_PORT}/api"
             [[ -n "$ui" ]] && echo "blt UI on http://${UI_BIND}:${UI_PORT}"
             return 0

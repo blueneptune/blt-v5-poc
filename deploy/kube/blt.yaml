@@ -95,6 +95,6 @@ spec:
         - name: BLT_PREFECT_AUTH
           valueFrom: {secretKeyRef: {name: blt-secrets, key: PREFECT_AUTH}}
       ports:
-        - {containerPort: ${API_LISTEN_PORT}, hostPort: ${API_PORT}, hostIP: "${BIND}"}
+        - {containerPort: ${API_LISTEN_PORT}, hostPort: ${API_PORT}, hostIP: "${API_BIND}"}
 # @UI_CONTAINER@
 # @PREFECT_CONTAINERS@
