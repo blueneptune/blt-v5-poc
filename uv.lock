@@ -469,7 +469,7 @@ requires-dist = [
     { name = "commvault-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.4.0" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'api'", specifier = ">=0.27" },
-    { name = "netbackup-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?rev=cf17d5e707bbdcd8b07190f6b4152b92c20700cf" },
+    { name = "netbackup-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?rev=fe186a40f9389caa02f94c3bd4fabcf183d68a87" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.4" },
     { name = "prefect-kubernetes", marker = "extra == 'kubernetes'", specifier = ">=0.6" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.2" },
@@ -1898,7 +1898,7 @@ wheels = [
 [[package]]
 name = "netbackup-sdk"
 version = "0.2.2"
-source = { git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?rev=cf17d5e707bbdcd8b07190f6b4152b92c20700cf#cf17d5e707bbdcd8b07190f6b4152b92c20700cf" }
+source = { git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?rev=fe186a40f9389caa02f94c3bd4fabcf183d68a87#fe186a40f9389caa02f94c3bd4fabcf183d68a87" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
