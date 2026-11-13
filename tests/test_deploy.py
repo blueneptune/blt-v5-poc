@@ -445,6 +445,14 @@ def test_the_prefect_server_keeps_its_slot_leases_on_the_volume() -> None:
     assert "python -m blt.flows.automations" in own  # blt's own worker, not a collector
 
 
+def test_prefect_sends_no_usage_data() -> None:
+    server = (ROOT / "deploy/prefect/server/Containerfile").read_text()
+    assert "PREFECT_SERVER_ANALYTICS_ENABLED=false" in server
+    assert "DO_NOT_TRACK=1" in server
+    worker = (ROOT / "deploy/prefect/worker/Containerfile").read_text()
+    assert "DO_NOT_TRACK=1" in worker
+
+
 def test_maintenance_runs_inside_the_api_container(tmp_path: Path) -> None:
     env_file = tmp_path / "blt.env"
     env_file.write_text(ENV)

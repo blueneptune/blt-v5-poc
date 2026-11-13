@@ -26,4 +26,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 # run whose process died is marked Crashed soon after
 # (blt.flows.automations), here and on remote collectors alike.
 ENV PREFECT_FLOWS_HEARTBEAT_FREQUENCY=30
+# No usage data to Prefect from the worker or any flow run it starts
+# (a run's pod on a cluster gets DO_NOT_TRACK from blt.flows.kubernetes).
+ENV DO_NOT_TRACK=1
 CMD ["blt-worker-start"]
