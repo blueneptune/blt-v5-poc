@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from loguru import logger
 from netbackup_sdk.models import job_from
 from sdk_primer import APIClient
 
@@ -324,3 +325,25 @@ def test_the_common_shape_of_a_netbackup_job() -> None:
     assert running["product_status"] == "ACTIVE"
     unknown_code = netbackup_job({**row, "status": 4207})
     assert unknown_code["message"] == "status 4207"
+
+
+def test_a_run_says_where_it_starts_and_how_it_ended(store: NetBackupStore) -> None:
+    said: list[str] = []
+    sink = logger.add(lambda message: said.append(message.record["message"]), level="INFO")
+    nbu = FakeNetBackup()
+    nbu.changed = [job(1), job(2), job(3)]
+    ticks = clock(T0)
+    try:
+        run = run_netbackup_collection(nbu, store, now=lambda: next(ticks))
+    finally:
+        logger.remove(sink)
+
+    since = T0 - timedelta(days=7)
+    assert (
+        f"NetBackup run {run.id} started - initial: "
+        f"changes since {since:%Y-%m-%d %H:%M} UTC (the last 7d)" in said
+    )
+    assert any(
+        line.startswith(f"NetBackup run {run.id} succeeded in ") and line.endswith(": 3 jobs")
+        for line in said
+    )

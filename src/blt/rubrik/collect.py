@@ -28,6 +28,8 @@ from typing import Protocol
 
 from loguru import logger
 
+from blt.progress import Progress, since_line
+
 from .schemas import (
     RubrikJobIn,
     RubrikObjectIn,
@@ -81,13 +83,15 @@ def run_rubrik_collection(
             lookup_seconds=int((started_at - since).total_seconds()),
         )
     )
-    logger.info("Rubrik run {} started: mode={} changes since {}", run.id, mode, since)
+    logger.info("Rubrik run {} started - {}", run.id, since_line(mode, since, started_at))
+    progress = Progress(f"Rubrik run {run.id}")
 
     collected = 0
     try:
         for page in source.iter_pages(since):
             store.upsert_jobs(run.id, now(), page)
             collected += len(page)
+            progress.page(len(page))
     except BaseException as exc:
         store.finish_run(
             run.id,
@@ -103,7 +107,7 @@ def run_rubrik_collection(
     finished = store.finish_run(
         run.id, RubrikRunFinish(status="succeeded", finished_at=now(), jobs_collected=collected)
     )
-    logger.info("Rubrik run {} succeeded: {} jobs", run.id, collected)
+    logger.info("Rubrik run {} succeeded in {}: {} jobs", run.id, progress.elapsed(), collected)
     return finished
 
 
