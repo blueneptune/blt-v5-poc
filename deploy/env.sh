@@ -155,7 +155,24 @@ if [[ "$UI_ENABLED" == true ]]; then
     # session cookie is https-only (without this the UI assumes https). A
     # form posted to the UI by any name of this machine is accepted, one
     # from another site refused (ui/src/lib/server/origin.ts).
-    UI_ORIGIN="${BLT_UI_ORIGIN:-http://localhost:${UI_PORT}}"
+    # HTTPS (BLT_UI_TLS=on): the UI serves config/tls/ui-cert.pem and
+    # ui-key.pem - a self-signed pair made on the first start if they are
+    # not there; put a CA's pair in their place to stop browsers warning.
+    # With it on, /prefect/api and /api pass through to Prefect and blt's
+    # API, for remote collectors that can reach this machine only on 443
+    # (docs/windows-collector.md). Never without HTTPS.
+    UI_TLS="${BLT_UI_TLS:-off}"
+    if [[ "$UI_TLS" != on && "$UI_TLS" != off ]]; then
+        echo "BLT_UI_TLS in config/blt.env must be on or off." >&2
+        exit 1
+    fi
+    UI_SCHEME=http
+    [[ "$UI_TLS" == on ]] && UI_SCHEME=https
+    UI_ORIGIN="${BLT_UI_ORIGIN:-${UI_SCHEME}://localhost:${UI_PORT}}"
+    if [[ "$UI_TLS" == on && "$UI_ORIGIN" != https://* ]]; then
+        echo "BLT_UI_TLS=on: BLT_UI_ORIGIN in config/blt.env must start with https:// (it is ${UI_ORIGIN})." >&2
+        exit 1
+    fi
     UI_SIGN_IN=on
     [[ "${BLT_UI_SIGN_IN:-on}" == "off" ]] && UI_SIGN_IN=off
     if [[ "$HOST_NETWORK" == true ]]; then
@@ -164,6 +181,37 @@ if [[ "$UI_ENABLED" == true ]]; then
         UI_LISTEN_HOST="0.0.0.0" UI_LISTEN_PORT=3000
     fi
 fi
+
+UI_TLS_DIR="${BLT_UI_TLS_DIR:-${ROOT:-.}/config/tls}"
+
+# The UI's certificate and key, made self-signed if either is missing:
+# for every name and address of this machine, and the name in
+# BLT_UI_ORIGIN. A pair put there by hand (from a CA) is left alone.
+ensure_ui_certificate() {
+    local cert="$UI_TLS_DIR/ui-cert.pem" key="$UI_TLS_DIR/ui-key.pem"
+    [[ -s "$cert" && -s "$key" ]] && return 0
+    command -v openssl >/dev/null || {
+        echo "BLT_UI_TLS=on needs openssl to make a certificate, or put ui-cert.pem and ui-key.pem in ${UI_TLS_DIR}." >&2
+        return 1
+    }
+    local names=() name address san="" origin_host
+    origin_host="${UI_ORIGIN#https://}"
+    origin_host="${origin_host%%[:/]*}"
+    for name in "$origin_host" "$(hostname -f 2>/dev/null || true)" "$(hostname -s 2>/dev/null || true)" localhost; do
+        [[ -n "$name" ]] && ! is_ip "$name" && names+=("DNS:${name}")
+    done
+    for address in 127.0.0.1 $(hostname -I 2>/dev/null || true) "$origin_host"; do
+        is_ip "$address" && names+=("IP:${address}")
+    done
+    san="$(printf '%s\n' "${names[@]}" | awk '!seen[$0]++' | paste -sd, -)"
+    mkdir -p "$UI_TLS_DIR"
+    chmod 700 "$UI_TLS_DIR"
+    (umask 077 && openssl req -x509 -newkey rsa:3072 -nodes -days 825 -sha256 \
+        -subj "/CN=${origin_host:-localhost}/O=blt" -addext "subjectAltName=${san}" \
+        -keyout "$key" -out "$cert" 2>/dev/null)
+    chmod 644 "$cert"
+    echo "Made a self-signed certificate for the UI (${san}): ${cert}"
+}
 
 # The UI's sign-in settings, checked by the start scripts only (backup.sh
 # and down.sh source this file too, and need none of it).
@@ -207,7 +255,7 @@ wait_until_up() {
     local api="http://${LOCAL}:${API_PORT}/healthz" prefect="" ui="" ok
     [[ "$PREFECT_ENABLED" == true ]] && \
         prefect="http://$(local_address "$PREFECT_BIND"):${PREFECT_PORT}/api/health"
-    [[ "$UI_ENABLED" == true ]] && ui="http://$(local_address "$UI_BIND"):${UI_PORT}/healthz"
+    [[ "$UI_ENABLED" == true ]] && ui="${UI_SCHEME}://$(local_address "$UI_BIND"):${UI_PORT}/healthz"
     for _ in $(seq 1 90); do
         ok=true
         curl -fsS -m 3 "$api" 2>/dev/null | grep -q '"ok"' || ok=false
@@ -215,12 +263,16 @@ wait_until_up() {
             curl -fsS -m 3 -u "$PREFECT_AUTH" "$prefect" >/dev/null 2>&1 || ok=false
         fi
         if [[ -n "$ui" ]]; then
-            curl -fsS -m 3 "$ui" 2>/dev/null | grep -q '"ok"' || ok=false
+            # -k: only whether it answers; the certificate may be self-signed.
+            curl -kfsS -m 3 "$ui" 2>/dev/null | grep -q '"ok"' || ok=false
         fi
         if [[ "$ok" == true ]]; then
             echo "blt pod is up: API on http://${API_BIND}:${API_PORT}, Postgres on ${BIND}:${PG_PORT}"
             [[ -n "$prefect" ]] && echo "Prefect API on http://${PREFECT_BIND}:${PREFECT_PORT}/api"
-            [[ -n "$ui" ]] && echo "blt UI on http://${UI_BIND}:${UI_PORT}"
+            [[ -n "$ui" ]] && echo "blt UI on ${UI_SCHEME}://${UI_BIND}:${UI_PORT}"
+            if [[ -n "$ui" && "$UI_TLS" == on ]]; then
+                echo "Remote collectors reach blt at ${UI_ORIGIN} (/prefect/api and /api pass through)"
+            fi
             return 0
         fi
         sleep 2

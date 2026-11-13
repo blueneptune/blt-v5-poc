@@ -93,6 +93,30 @@ loginctl enable-linger "$USER"
 @reboot /path/to/blt/deploy/up.sh >> /var/log/blt/pod.log 2>&1
 ```
 
+### HTTPS for the UI, and collectors over 443
+
+Set in `config/blt.env`, then `./deploy/up.sh`:
+
+```
+BLT_UI_TLS=on
+BLT_UI_ORIGIN=https://<this server's name>     # https://, and no :443
+```
+
+- The UI serves `config/tls/ui-cert.pem` and `ui-key.pem`. If they are
+  not there, the first start makes a **self-signed** pair for this
+  machine's names and addresses and the name in `BLT_UI_ORIGIN`
+  (browsers warn until you accept it). To use a certificate from your
+  CA, put its certificate (with any intermediates after it) and key in
+  their place, with the same names, and run `./deploy/up.sh` again.
+- The key reaches the UI's container as a podman secret, readable only
+  by the UI's own user.
+- With HTTPS on, two paths pass through to the services behind the UI,
+  for remote collectors that can reach this server only on 443:
+  `/prefect/api` (Prefect) and `/api` (blt's API). Each still asks for
+  its own credentials: Prefect's password, blt's API key. Never without
+  HTTPS.
+- Collectors' runs, logs and events (WebSockets) all go through 443.
+
 ### Nightly backups
 
 `deploy/backup.sh` dumps the `blt` database, and with Prefect on the
