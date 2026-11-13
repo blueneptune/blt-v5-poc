@@ -8,6 +8,9 @@ COPY deploy/prefect/server/start.py /opt/blt/start.py
 # No Prefect UI: blt's own UI manages sources, schedules and runs
 # (docs/admin.md). Only the API is served, behind basic auth.
 ENV PREFECT_SERVER_UI_ENABLED=false
+# No usage data to Prefect: the server's startup analytics, and the
+# client's telemetry (DO_NOT_TRACK) from anything run in this image.
+ENV PREFECT_SERVER_ANALYTICS_ENABLED=false DO_NOT_TRACK=1
 # Collection slots are leased to the runs holding them. Prefect keeps the
 # leases in memory by default, so a server restart forgot who held a slot
 # while still counting it taken - and every run after waited for ever for
