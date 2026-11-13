@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { reason, refused, requireAdmin } from '$lib/server/admin';
+import { WINDOWS_COLLECTOR, downloadHref } from '$lib/server/downloads';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -11,7 +12,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 		sources: result.data ?? [],
 		problem: result.data ? null : reason(result.error, result.response),
 		// The page works without them: then only blt's own worker is offered.
-		collectors: collectors.data ?? []
+		collectors: collectors.data ?? [],
+		// Only when this server has the bundle to give (BLT_UI_TLS=on).
+		windowsCollector: downloadHref(WINDOWS_COLLECTOR)
 	};
 };
 

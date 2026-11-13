@@ -10,9 +10,11 @@ prefect-version: 3.8.8
 # pool under podman, a Kubernetes one on a cluster (docs/kubernetes.md).
 #
 # The code is already in the worker image; a flow run only has to start
-# in the right directory.
+# in the right directory: /app where there is one, and wherever the
+# worker starts it on a Windows collector, which has none
+# (blt.flows.steps).
 pull:
-  - prefect.deployments.steps.set_working_directory:
+  - blt.flows.steps.app_directory:
       directory: /app
 
 deployments:

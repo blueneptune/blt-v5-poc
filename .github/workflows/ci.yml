@@ -45,6 +45,141 @@ jobs:
       - run: uv run mypy
       - run: uv run pytest -q -rs
 
+  # The Windows collector bundle, built as deploy/up.sh builds it (in a
+  # container, deploy/windows/Containerfile), for the job after this one.
+  windows-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: deploy/windows/build-bundle.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-bundle
+          path: dist/blt-collector-windows-*.zip
+          retention-days: 7
+
+  # The bundle on Windows, as an administrator would use it: blt and
+  # Prefect import with its own Python, the tests that matter there
+  # pass, a collector runs a flow run end to end, and install.ps1
+  # installs, restarts, upgrades and removes the service. Windows Server
+  # 2022: GitHub has retired its 2019 runners; both have Windows
+  # PowerShell 5.1 and .NET Framework 4.8, which is all this needs.
+  windows-collector:
+    needs: windows-bundle
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        # Windows PowerShell 5.1, as on Windows Server 2019; not pwsh.
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-bundle
+          path: bundle
+      - name: Unpack the bundle
+        run: |
+          $zip = Get-ChildItem bundle\blt-collector-windows-*.zip | Select-Object -First 1
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath unpacked
+          $folder = Get-ChildItem unpacked -Directory | Select-Object -First 1
+          "BUNDLE=$($folder.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VERSION=$((Get-Content (Join-Path $folder.FullName 'VERSION') -Raw).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install a collector against a server that is not there
+        env:
+          # Not secrets: nothing is listening at blt.invalid.
+          BLT_COLLECTOR_PREFECT_AUTH: ci:not-a-password
+          BLT_COLLECTOR_API_KEY: not-a-key
+        run: |
+          # A certificate to trust, as -CertificateFile takes one (DER).
+          $cert = New-SelfSignedCertificate -DnsName blt.invalid -CertStoreLocation Cert:\CurrentUser\My
+          Export-Certificate -Cert $cert -FilePath "$env:RUNNER_TEMP\blt.cer" | Out-Null
+          & "$env:BUNDLE\install.ps1" -Name ci -Url https://blt.invalid -CertificateFile "$env:RUNNER_TEMP\blt.cer"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: The service is registered, starts at boot and is running
+        run: |
+          $service = Get-Service blt-collector-ci
+          $service | Format-List Name, DisplayName, Status, StartType
+          if ($service.StartType -ne 'Automatic') { throw "StartType is $($service.StartType)" }
+          $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+          & sc.exe qfailure blt-collector-ci
+          Start-Sleep -Seconds 20
+          $log = 'C:\ProgramData\blt-collector\ci\logs\blt-collector-ci.out.log'
+          Get-Content $log
+          if (-not (Select-String -Path $log -Pattern 'Still waiting for the Prefect server' -Quiet)) { throw 'The collector is not waiting for Prefect.' }
+          if (Select-String -Path $log -Pattern 'not-a-password|not-a-key' -Quiet) { throw 'A secret is in the log.' }
+      - name: Its settings are for SYSTEM and Administrators only, with blt's certificate trusted
+        run: |
+          $data = 'C:\ProgramData\blt-collector\ci'
+          (Get-Acl $data).Access | Format-Table IdentityReference, FileSystemRights, IsInherited
+          $who = @((Get-Acl "$data\collector.json").Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique)
+          if (($who -join ',') -ne 'S-1-5-18,S-1-5-32-544') { throw "collector.json is readable by $($who -join ', ')" }
+          $settings = Get-Content "$data\collector.json" -Raw | ConvertFrom-Json
+          if ($settings.SSL_CERT_FILE -ne "$data\ca-bundle.pem" -or $settings.PREFECT_API_SSL_CERT_FILE -ne "$data\ca-bundle.pem") { throw 'The CA bundle is not set.' }
+          if ($settings.PREFECT_API_URL -ne 'https://blt.invalid/prefect/api' -or $settings.BLT_API_URL -ne 'https://blt.invalid/api') { throw 'Wrong URLs.' }
+          if (-not (Select-String -Path "$data\ca-bundle.pem" -Pattern "blt's server" -Quiet)) { throw "blt's certificate is not in the CA bundle." }
+      - name: The bundled Python has blt, Prefect and every SDK
+        run: |
+          $py = "C:\Program Files\blt-collector\$env:VERSION\python\python.exe"
+          & $py -c "import blt.flows.flows, blt.flows.rubrik, blt.flows.netbackup, blt.flows.collector, blt.flows.steps, prefect.workers.process, commvault_sdk, rubrik_sdk, netbackup_sdk, sdk_primer, win32api; print('imports ok')"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $py -m prefect version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: A collector runs a flow run end to end
+        run: |
+          & "C:\Program Files\blt-collector\$env:VERSION\python\python.exe" -I deploy\windows\smoke.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: The tests that matter on Windows pass with the bundled Python
+        run: |
+          # pytest only for this run, into the installed copy.
+          $py = "C:\Program Files\blt-collector\$env:VERSION\python\python.exe"
+          & $py -m pip install --quiet --disable-pip-version-check pytest==9.1.1 respx==0.23.1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $py -m pytest -q -p no:cacheprovider tests/test_collector.py tests/test_lock.py tests/test_locks.py tests/test_automations.py tests/test_timing.py tests/test_progress.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: The service is started again when the collector dies
+        run: |
+          $before = (Get-CimInstance Win32_Service -Filter "Name='blt-collector-ci'").ProcessId
+          $python = Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.ParentProcessId -eq $before }
+          if (-not $python) { throw 'No collector process under the service.' }
+          Stop-Process -Id $python.ProcessId -Force
+          Start-Sleep -Seconds 30
+          $service = Get-Service blt-collector-ci
+          $after = (Get-CimInstance Win32_Service -Filter "Name='blt-collector-ci'").ProcessId
+          "Service process $before, then $after; now $($service.Status)"
+          if ($service.Status -ne 'Running' -or $after -eq $before) { throw 'Not started again.' }
+      - name: A certificate that is not the one expected is refused, and nothing changes
+        run: |
+          # Any HTTPS server will do to fetch a certificate from; its
+          # fingerprint is not all zeros.
+          powershell -NonInteractive -ExecutionPolicy Bypass -File "$env:BUNDLE\install.ps1" -Name ci -Url https://github.com -TrustCertificate -CertificateFingerprint ('00' * 32)
+          if ($LASTEXITCODE -ne 1) { throw "install.ps1 ended $LASTEXITCODE, not 1." }
+          if ((Get-Service blt-collector-ci).Status -ne 'Running') { throw 'The service was stopped.' }
+          $settings = Get-Content 'C:\ProgramData\blt-collector\ci\collector.json' -Raw | ConvertFrom-Json
+          if ($settings.BLT_COLLECTOR_SERVER -ne 'https://blt.invalid') { throw 'The settings changed.' }
+          $global:LASTEXITCODE = 0
+      - name: Upgrading in place keeps the settings, asking for nothing
+        run: |
+          # No secrets in the environment now, and no -Name: one collector
+          # is installed. -NonInteractive: a prompt would fail, not wait.
+          powershell -NonInteractive -ExecutionPolicy Bypass -File "$env:BUNDLE\install.ps1" -SkipCheck
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          (Get-Service blt-collector-ci).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+          $settings = Get-Content 'C:\ProgramData\blt-collector\ci\collector.json' -Raw | ConvertFrom-Json
+          if ($settings.BLT_API_KEY -ne 'not-a-key') { throw 'The API key was not kept.' }
+      - name: Uninstalling removes the service, its settings and blt
+        run: |
+          & "C:\Program Files\blt-collector\$env:VERSION\install.ps1" -Name ci -Uninstall
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if (Get-Service blt-collector-ci -ErrorAction SilentlyContinue) { throw 'The service is still there.' }
+          foreach ($path in 'C:\ProgramData\blt-collector', 'C:\Program Files\blt-collector') {
+            if (Test-Path $path) { throw "$path is still there." }
+          }
+      - name: The collector's logs, if anything failed
+        if: failure()
+        run: Get-ChildItem C:\ProgramData\blt-collector -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 80 }
+
   # The web UI (ui/): its API types match docs/openapi.json, it type-checks,
   # its unit tests pass and it builds.
   ui:

@@ -5,6 +5,10 @@ server inside a production network, a server in another region - that
 collects from the sources only it can reach. It runs the same worker
 image as blt's own, and sends what it collects to the same blt.
 
+**On Windows**, with no podman and only port 443 to blt: a Windows
+service with its own Python, installed from a bundle blt's server
+serves. See [windows-collector.md](windows-collector.md).
+
 ```
 blt's machine (desktop, or the cluster)          tools server in the production network
   Prefect API  127.0.0.1:4200  <---------+          +-- blt-collector-uk (podman, host network)

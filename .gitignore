@@ -28,3 +28,6 @@ backup/
 backups/
 *.dump
 *.sql.gz
+
+# The Windows collector bundle, from deploy/windows/build-bundle.sh.
+dist/

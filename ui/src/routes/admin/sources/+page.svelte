@@ -55,6 +55,12 @@
 		<p class="text-muted-foreground mt-0.5 text-xs">
 			The workers that collect. A remote one reaches sources this install cannot, from inside their
 			network (docs/remote-collector.md).
+			{#if data.windowsCollector}
+				<!-- A file server.js serves, not a page: a full request, not the router. -->
+				<a class="underline" href={data.windowsCollector} download data-sveltekit-reload
+					>Download the Windows collector</a
+				> (docs/windows-collector.md).
+			{/if}
 		</p>
 		<ul class="mt-2 flex flex-wrap gap-2">
 			{#each data.collectors as collector (collector.name)}

@@ -248,6 +248,25 @@ build_images() {
         podman build -t blt-prefect-server -f deploy/prefect/server/Containerfile .
         podman build -t blt-prefect-worker -f deploy/prefect/worker/Containerfile .
     fi
+    if windows_bundle_wanted; then
+        podman build -t blt-collector-windows -f deploy/windows/Containerfile .
+    fi
+}
+
+# The Windows collector bundle (docs/windows-collector.md), served by the
+# UI at /downloads/: only with HTTPS on, the one way such a collector
+# reaches blt. BLT_WINDOWS_COLLECTOR=off in config/blt.env leaves it out.
+windows_bundle_wanted() {
+    [[ "$UI_ENABLED" == true && "$UI_TLS" == on && "${BLT_WINDOWS_COLLECTOR:-on}" != off ]]
+}
+
+# The UI certificate's SHA-256 fingerprint, for a Windows collector's
+# install.ps1 -TrustCertificate to be checked against.
+ui_certificate_fingerprint() {
+    local cert="$UI_TLS_DIR/ui-cert.pem" print
+    [[ -s "$cert" ]] && command -v openssl >/dev/null || return 0
+    print="$(openssl x509 -in "$cert" -noout -fingerprint -sha256 2>/dev/null)" || return 0
+    echo "The UI's certificate, SHA-256: ${print#*=}"
 }
 
 # Wait for the API (and Prefect, if on) to answer; on failure, show why.
@@ -272,6 +291,10 @@ wait_until_up() {
             [[ -n "$ui" ]] && echo "blt UI on ${UI_SCHEME}://${UI_BIND}:${UI_PORT}"
             if [[ -n "$ui" && "$UI_TLS" == on ]]; then
                 echo "Remote collectors reach blt at ${UI_ORIGIN} (/prefect/api and /api pass through)"
+                ui_certificate_fingerprint
+                if windows_bundle_wanted && podman image exists localhost/blt-collector-windows; then
+                    echo "Windows collector: ${UI_ORIGIN}/downloads/blt-collector-windows.zip"
+                fi
             fi
             return 0
         fi

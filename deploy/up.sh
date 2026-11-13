@@ -94,6 +94,17 @@ if [[ "$UI_ENABLED" == true ]]; then
             -e "BLT_PASS_API=http://${API_IN_POD}:${API_LISTEN_PORT}")
         [[ "$PREFECT_ENABLED" == true ]] \
             && UI_ARGS+=(-e "BLT_PASS_PREFECT=http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}")
+        # The Windows collector bundle at /downloads/: the files of its
+        # image, mounted read-only (deploy/windows/Containerfile).
+        if windows_bundle_wanted; then
+            if podman image exists localhost/blt-collector-windows; then
+                UI_ARGS+=(--mount type=image,source=localhost/blt-collector-windows,destination=/bundle
+                    -e BLT_DOWNLOADS=/bundle/downloads)
+            else
+                echo "No blt-collector-windows image here, so no Windows collector to download:" >&2
+                echo "run ./deploy/up.sh without BLT_SKIP_BUILD to build it." >&2
+            fi
+        fi
     fi
     podman run -d --replace --pod blt --name blt-ui "${UI_ARGS[@]}" \
         -e "HOST=${UI_LISTEN_HOST}" -e "PORT=${UI_LISTEN_PORT}" -e "ORIGIN=${UI_ORIGIN}" \

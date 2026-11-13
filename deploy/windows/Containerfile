@@ -1,0 +1,26 @@
+# Builds the Windows collector bundle (deploy/windows/bundle.py) and keeps
+# only the zip: an image of nothing but /downloads, which the UI container
+# mounts read-only and serves at https://<server>/downloads/
+# (deploy/up.sh, with BLT_UI_TLS=on). An image rather than a folder, so it
+# goes wherever the other images go (deploy/move.sh), and BLT_SKIP_BUILD
+# keeps the one already here.
+#
+#   podman build -t blt-collector-windows -f deploy/windows/Containerfile .
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS build
+
+# git: uv fetches sdk-primer and the SDKs from GitHub tags.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+# The downloads first, so a change to blt does not fetch them again.
+COPY deploy/windows/bundle.py deploy/windows/
+RUN python3 deploy/windows/bundle.py --fetch-only --cache /cache
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+COPY deploy/windows ./deploy/windows
+RUN python3 deploy/windows/bundle.py --out /downloads --cache /cache
+
+FROM scratch
+COPY --from=build /downloads /downloads

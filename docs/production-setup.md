@@ -116,6 +116,10 @@ BLT_UI_ORIGIN=https://<this server's name>     # https://, and no :443
   its own credentials: Prefect's password, blt's API key. Never without
   HTTPS.
 - Collectors' runs, logs and events (WebSockets) all go through 443.
+- up.sh also builds the Windows collector, served at
+  `/downloads/blt-collector-windows.zip`, and prints the certificate's
+  SHA-256 fingerprint for its installer to check
+  ([windows-collector.md](windows-collector.md)).
 
 ### Nightly backups
 

@@ -391,12 +391,12 @@ def test_a_bad_collector_name_is_refused(tmp_path: Path, name: str) -> None:
 
 def test_blt_s_own_worker_leaves_remote_collectors_runs_alone() -> None:
     start = (ROOT / "deploy/prefect/worker/start.sh").read_text()
-    own, remote = (
-        start.rsplit("exec prefect worker start", 1)[1],
-        start.split("exec prefect worker start", 1)[1],
-    )
+    own = start.rsplit("exec prefect worker start", 1)[1]
     assert "--work-queue default" in own
-    assert '--work-queue "$COLLECTOR"' in remote
+    # A collector's start is blt.flows.collector's, before anything of
+    # blt's own worker's runs (tests/test_collector.py).
+    remote = start.split('if [ -n "$COLLECTOR" ]; then', 1)[1].split("\nfi\n", 1)[0]
+    assert "exec python -m blt.flows.collector" in remote
     assert "BLT_COLLECTOR" in start
 
 

@@ -42,6 +42,9 @@ PODMAN="${BLT_MOVE_PODMAN:-podman}"
 
 IMAGES=(localhost/blt-api localhost/blt-prefect-server localhost/blt-prefect-worker
     localhost/blt-ui docker.io/library/postgres:17)
+# Sent only if this machine has it: the Windows collector bundle, built
+# with BLT_UI_TLS=on (deploy/windows/Containerfile).
+OPTIONAL_IMAGES=(localhost/blt-collector-windows)
 COLLECTOR_IMAGE=localhost/blt-prefect-worker:latest
 
 usage() {
@@ -173,8 +176,9 @@ fi
 # is started here; podman's cache makes it quick when nothing changed),
 # then sent, each only if HOST has a different one.
 build_images
-for image in "${IMAGES[@]}"; do
+for image in "${IMAGES[@]}" "${OPTIONAL_IMAGES[@]}"; do
     here="$("$PODMAN" image inspect --format '{{.Id}}' "$image" 2>/dev/null)" || {
+        [[ " ${OPTIONAL_IMAGES[*]} " == *" ${image} "* ]] && continue
         echo "No ${image} here: run ./deploy/up.sh once first (Postgres comes from it)." >&2
         exit 1
     }

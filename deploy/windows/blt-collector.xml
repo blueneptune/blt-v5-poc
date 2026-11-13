@@ -1,0 +1,38 @@
+<!--
+  The Windows service for one blt remote collector, run by WinSW 2.12
+  (https://github.com/winsw/winsw). install.ps1 fills in the @...@
+  values and puts this beside blt-collector-<name>.exe in
+  C:\ProgramData\blt-collector\<name>\. It holds no secrets: those are in
+  collector.json there, which only SYSTEM and Administrators can read.
+-->
+<service>
+  <id>blt-collector-@NAME@</id>
+  <name>blt collector @NAME@</name>
+  <description>blt remote collector @NAME@ (@VERSION@): takes the @NAME@ work queue from blt's Prefect at @SERVER@.</description>
+
+  <executable>@PYTHON@</executable>
+  <arguments>-m blt.flows.collector --settings "@SETTINGS@"</arguments>
+  <workingdirectory>@DATA@</workingdirectory>
+  <!-- Python's output in UTF-8 whatever the console's code page, and at once. -->
+  <env name="PYTHONUTF8" value="1"/>
+  <env name="PYTHONUNBUFFERED" value="1"/>
+
+  <!-- Started at boot, once the network is likely up. -->
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+
+  <!-- Started again whenever it ends with an error, however often: a
+       collector that has given up collects nothing. -->
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <!-- Ctrl+C first, so a flow run in progress is ended cleanly. -->
+  <stoptimeout>30 sec</stoptimeout>
+
+  <logpath>@LOGS@</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+</service>
