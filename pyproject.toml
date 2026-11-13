@@ -69,7 +69,7 @@ sdk-primer = { git = "https://github.com/blueneptune/sdk-primer-core.git", rev =
 #   commvault-sdk = { path = "../yoki-py-commvault-sdk", editable = true }
 commvault-sdk = { git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git", tag = "v0.4.0" }
 # The NetBackup SDK (yoki-py-netbackup-sdk), pinned to a tag like the others.
-netbackup-sdk = { git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git", rev = "cf17d5e707bbdcd8b07190f6b4152b92c20700cf" }
+netbackup-sdk = { git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git", rev = "fe186a40f9389caa02f94c3bd4fabcf183d68a87" }
 # The Rubrik SDK (yoki-py-rubrik-sdk), pinned to a tag like the others.
 rubrik-sdk = { git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git", tag = "v0.3.1" }
 
