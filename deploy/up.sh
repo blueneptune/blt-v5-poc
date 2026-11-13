@@ -82,7 +82,20 @@ fi
 if [[ "$UI_ENABLED" == true ]]; then
     # It calls the API inside the pod, from its own server side: the key
     # never reaches a browser.
-    podman run -d --replace --pod blt --name blt-ui \
+    UI_ARGS=()
+    if [[ "$UI_TLS" == on ]]; then
+        # The key reaches the container as a podman secret, readable by
+        # its node user only, never as an environment variable.
+        ensure_ui_certificate
+        podman secret create --replace blt-ui-tls-cert "$UI_TLS_DIR/ui-cert.pem" >/dev/null
+        podman secret create --replace blt-ui-tls-key "$UI_TLS_DIR/ui-key.pem" >/dev/null
+        UI_ARGS+=(--secret blt-ui-tls-cert,uid=1000,mode=0400 --secret blt-ui-tls-key,uid=1000,mode=0400
+            -e BLT_UI_TLS_CERT=/run/secrets/blt-ui-tls-cert -e BLT_UI_TLS_KEY=/run/secrets/blt-ui-tls-key
+            -e "BLT_PASS_API=http://${API_IN_POD}:${API_LISTEN_PORT}")
+        [[ "$PREFECT_ENABLED" == true ]] \
+            && UI_ARGS+=(-e "BLT_PASS_PREFECT=http://${PREFECT_LOCAL}:${PREFECT_LISTEN_PORT}")
+    fi
+    podman run -d --replace --pod blt --name blt-ui "${UI_ARGS[@]}" \
         -e "HOST=${UI_LISTEN_HOST}" -e "PORT=${UI_LISTEN_PORT}" -e "ORIGIN=${UI_ORIGIN}" \
         -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
         -e BLT_API_KEY \

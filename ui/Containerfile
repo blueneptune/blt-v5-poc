@@ -13,8 +13,9 @@ ENV NODE_ENV=production PORT=3000
 COPY --from=build /ui/package.json ./
 COPY --from=build /ui/node_modules ./node_modules
 COPY --from=build /ui/build ./build
+COPY --from=build /ui/server.js ./server.js
 USER node
 EXPOSE 3000
 # Needs BLT_API_URL and BLT_API_KEY; ORIGIN when behind a proxy, so form
 # posts are allowed (https://svelte.dev/docs/kit/adapter-node).
-CMD ["node", "build"]
+CMD ["node", "server.js"]

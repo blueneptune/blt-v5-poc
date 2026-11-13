@@ -655,3 +655,63 @@ def test_an_upgrade_backs_up_first_and_keeps_the_data_and_settings_there(tmp_pat
 def test_an_upgrade_needs_a_blt_there(tmp_path: Path) -> None:
     result = move(tmp_path, "--upgrade", volume=1)
     assert result.returncode == 1 and "no blt in blt to upgrade" in result.stderr
+
+
+def test_https_for_the_ui_needs_an_https_origin(tmp_path: Path) -> None:
+    with pytest.raises(AssertionError):
+        render(tmp_path, "BLT_UI_TLS=on\nBLT_UI_ORIGIN=http://tools.example.test:443\n")
+    with pytest.raises(AssertionError):
+        render(tmp_path, "BLT_UI_TLS=yes\nBLT_UI_ORIGIN=https://tools.example.test\n")
+    found = containers(
+        render(
+            tmp_path, "BLT_UI_TLS=on\nBLT_UI_PORT=8443\nBLT_UI_ORIGIN=https://tools.example.test\n"
+        )
+    )
+    assert ui_origin(found) == "https://tools.example.test"
+    assert ui_origin(containers(render(tmp_path, "BLT_UI_TLS=on\n"))) == "https://localhost:8090"
+
+
+def ui_certificate(tmp_path: Path, extra: str = "") -> subprocess.CompletedProcess[str]:
+    env_file = tmp_path / "blt.env"
+    env_file.write_text(ENV + "BLT_UI_TLS=on\nBLT_UI_ORIGIN=https://tools.example.test\n" + extra)
+    return subprocess.run(
+        ["bash", "-c", "set -euo pipefail; ROOT=.; source deploy/env.sh; ensure_ui_certificate"],
+        cwd=ROOT,
+        env={
+            **clean_environment(),
+            "BLT_ENV_FILE": str(env_file),
+            "BLT_UI_TLS_DIR": str(tmp_path / "tls"),
+        },
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_a_self_signed_certificate_is_made_for_the_ui_s_names(tmp_path: Path) -> None:
+    result = ui_certificate(tmp_path)
+    assert result.returncode == 0, result.stderr
+    cert, key = tmp_path / "tls/ui-cert.pem", tmp_path / "tls/ui-key.pem"
+    assert (key.stat().st_mode & 0o777) == 0o600
+    assert ((tmp_path / "tls").stat().st_mode & 0o777) == 0o700
+    text = subprocess.run(
+        ["openssl", "x509", "-in", str(cert), "-noout", "-text"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "DNS:tools.example.test" in text
+    assert "DNS:localhost" in text
+    assert "IP Address:127.0.0.1" in text
+    # A pair already there - a CA's, put in by hand - is kept.
+    before = cert.read_bytes()
+    assert ui_certificate(tmp_path).returncode == 0
+    assert cert.read_bytes() == before
+
+
+def test_the_ui_gets_its_key_as_a_podman_secret_never_in_its_environment() -> None:
+    up = (ROOT / "deploy/up.sh").read_text()
+    assert "podman secret create --replace blt-ui-tls-key" in up
+    assert "--secret blt-ui-tls-key,uid=1000,mode=0400" in up
+    assert "BLT_UI_TLS_KEY=/run/secrets/blt-ui-tls-key" in up
+    ui = (ROOT / "ui/Containerfile").read_text()
+    assert 'CMD ["node", "server.js"]' in ui

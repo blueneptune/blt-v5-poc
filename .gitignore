@@ -11,6 +11,8 @@ __pycache__/
 config/*.env
 # Per-server CA certificates (e.g. a NetBackup primary's): not secret, but per install.
 config/*.pem
+# The UI's certificate and key (BLT_UI_TLS=on).
+config/tls/
 config/.*.renewed.json
 config/.*.tmp
 config/.*.token.lock
