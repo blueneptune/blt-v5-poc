@@ -14,12 +14,16 @@ starts checks and run-now runs), so nothing here needs Prefect.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping
 from typing import Any
 
 DEFAULT_QUEUE = "default"
-WORK_POOL = "blt"
+# The work pool every deployment is on: a process pool under podman, a
+# Kubernetes one on a cluster (docs/kubernetes.md). The worker and the
+# API must agree on it.
+WORK_POOL = os.environ.get("BLT_WORK_POOL") or "blt"
 # The global concurrency limit every per-source run takes a slot of, so
 # only so many collect at once (BLT_MAX_PARALLEL; blt.flows.flows).
 SLOT_LIMIT = "blt-commcell-runs"

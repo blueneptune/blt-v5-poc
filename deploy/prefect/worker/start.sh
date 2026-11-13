@@ -17,6 +17,15 @@ set -eu
 
 COLLECTOR="${BLT_COLLECTOR:-}"
 POOL="${BLT_WORK_POOL:-blt}"
+# prefect.yaml and blt.queues read the pool's name from here too.
+export BLT_WORK_POOL="$POOL"
+# process: flow runs are processes of this worker (podman, a tools server).
+# kubernetes: each is a pod of its own (a cluster; docs/kubernetes.md).
+TYPE="${BLT_WORKER_TYPE:-process}"
+case "$TYPE" in
+    process|kubernetes) ;;
+    *) echo "BLT_WORKER_TYPE must be process or kubernetes, not '$TYPE'." >&2; exit 1 ;;
+esac
 if [ -n "$COLLECTOR" ]; then
     case "$COLLECTOR" in
         default|-*|*[!a-z0-9-]*)
@@ -56,12 +65,22 @@ if [ -n "$COLLECTOR" ]; then
     # work is refused: make it. The pool is blt's own worker's to make.
     prefect --no-prompt work-queue inspect "$COLLECTOR" --pool "$POOL" >/dev/null 2>&1 \
         || prefect --no-prompt work-queue create "$COLLECTOR" --pool "$POOL"
-    exec prefect worker start --pool "$POOL" --type process --work-queue "$COLLECTOR" \
+    exec prefect worker start --pool "$POOL" --type "$TYPE" --work-queue "$COLLECTOR" \
         --name "blt-collector-${COLLECTOR}-$(hostname)"
 fi
 
-prefect --no-prompt work-pool inspect "$POOL" >/dev/null 2>&1 \
-    || prefect --no-prompt work-pool create "$POOL" --type process
+if [ "$TYPE" = kubernetes ]; then
+    # The pool's job template, with this worker's image, written each
+    # start so the run pods use the image this worker runs.
+    TEMPLATE="$(mktemp)"
+    python -m blt.flows.kubernetes > "$TEMPLATE"
+    prefect --no-prompt work-pool create "$POOL" --type kubernetes \
+        --base-job-template "$TEMPLATE" --overwrite
+    rm -f "$TEMPLATE"
+else
+    prefect --no-prompt work-pool inspect "$POOL" >/dev/null 2>&1 \
+        || prefect --no-prompt work-pool create "$POOL" --type process
+fi
 prefect --no-prompt block register -m blt.flows.blocks
 prefect --no-prompt block register -m blt.flows.rubrik
 prefect --no-prompt block register -m blt.flows.netbackup
@@ -76,4 +95,4 @@ python -m blt.flows.automations \
     || echo "Could not set up the blt-crash-silent-runs automation; carrying on." >&2
 # Only the default work queue: any other is a remote collector's
 # (blt.queues), and its runs are for sources only it can reach.
-exec prefect worker start --pool "$POOL" --type process --work-queue default
+exec prefect worker start --pool "$POOL" --type "$TYPE" --work-queue default
