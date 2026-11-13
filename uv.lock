@@ -7,6 +7,9 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
+[manifest]
+overrides = [{ name = "sdk-primer", git = "https://github.com/blueneptune/sdk-primer-core.git?rev=6cc3a4c1b048954ce80f6325c0c56165180b4191" }]
+
 [[package]]
 name = "aiosqlite"
 version = "0.22.1"
@@ -293,14 +296,14 @@ requires-dist = [
     { name = "commvault-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-commvault-sdk.git?tag=v0.4.0" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'api'", specifier = ">=0.27" },
-    { name = "netbackup-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?tag=v0.2.1" },
+    { name = "netbackup-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?rev=cf17d5e707bbdcd8b07190f6b4152b92c20700cf" },
     { name = "prefect", marker = "extra == 'prefect'", specifier = ">=3.4" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'api'", specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "rubrik-sdk", marker = "extra == 'collector'", git = "https://github.com/blueneptune/yoki-py-rubrik-sdk.git?tag=v0.3.1" },
-    { name = "sdk-primer", marker = "extra == 'collector'", git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.2.0" },
+    { name = "sdk-primer", marker = "extra == 'collector'", git = "https://github.com/blueneptune/sdk-primer-core.git?rev=6cc3a4c1b048954ce80f6325c0c56165180b4191" },
     { name = "sqlmodel", marker = "extra == 'api'", specifier = ">=0.0.22" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'api'", specifier = ">=0.34" },
 ]
@@ -1450,8 +1453,8 @@ wheels = [
 
 [[package]]
 name = "netbackup-sdk"
-version = "0.2.1"
-source = { git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?tag=v0.2.1#8e8d5854f6e434416f3dca40405efa673dd9cfd6" }
+version = "0.2.2"
+source = { git = "https://github.com/blueneptune/yoki-py-netbackup-sdk.git?rev=cf17d5e707bbdcd8b07190f6b4152b92c20700cf#cf17d5e707bbdcd8b07190f6b4152b92c20700cf" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
@@ -2494,8 +2497,8 @@ wheels = [
 
 [[package]]
 name = "sdk-primer"
-version = "0.2.0"
-source = { git = "https://github.com/blueneptune/sdk-primer-core.git?tag=v0.2.0#8a98dfa8aad7a3a1539d52321e637f2c6a353ed6" }
+version = "0.2.1"
+source = { git = "https://github.com/blueneptune/sdk-primer-core.git?rev=6cc3a4c1b048954ce80f6325c0c56165180b4191#6cc3a4c1b048954ce80f6325c0c56165180b4191" }
 dependencies = [
     { name = "httpx" },
     { name = "loguru" },
