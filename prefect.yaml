@@ -5,6 +5,10 @@
 name: blt
 prefect-version: 3.8.8
 
+# Every deployment is on the work pool BLT_WORK_POOL names (blt, unless
+# set; deploy/prefect/worker/start.sh sets it before deploying): a process
+# pool under podman, a Kubernetes one on a cluster (docs/kubernetes.md).
+#
 # The code is already in the worker image; a flow run only has to start
 # in the right directory.
 pull:
@@ -16,7 +20,7 @@ deployments:
     description: Jobs from every CommCell block - what `collect.sh <commcell>` does.
     entrypoint: blt.flows.flows:collect_jobs
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
     schedules:
       - cron: "7 * * * *"
         timezone: UTC
@@ -25,7 +29,7 @@ deployments:
     description: Inventory from every CommCell block - what `collect.sh <commcell> --inventory` does.
     entrypoint: blt.flows.flows:collect_inventory
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
     schedules:
       - cron: "37 5,17 * * *"
         timezone: UTC
@@ -36,13 +40,13 @@ deployments:
     description: Jobs from one CommCell. Started by blt-collect-jobs/hourly.
     entrypoint: blt.flows.flows:collect_commcell
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   - name: per-commcell
     description: Inventory from one CommCell. Started by blt-collect-inventory/twice-daily.
     entrypoint: blt.flows.flows:inventory_commcell
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   # Rubrik: every account block hourly, ten minutes after Commvault so
   # the two do not start at the same moment; one account each below.
@@ -50,7 +54,7 @@ deployments:
     description: Jobs from every Rubrik account block - what `blt-rubrik collect <name>` does.
     entrypoint: blt.flows.rubrik:rubrik_collect_jobs
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
     schedules:
       - cron: "17 * * * *"
         timezone: UTC
@@ -59,14 +63,14 @@ deployments:
     description: Jobs from one Rubrik account. Started by blt-rubrik-collect-jobs/hourly.
     entrypoint: blt.flows.rubrik:rubrik_collect_account
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   # Rubrik inventory: twice a day, ten minutes after Commvault's.
   - name: twice-daily
     description: Inventory from every Rubrik account block - what `blt-rubrik inventory <name>` does.
     entrypoint: blt.flows.rubrik:rubrik_collect_inventory
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
     schedules:
       - cron: "47 5,17 * * *"
         timezone: UTC
@@ -75,7 +79,7 @@ deployments:
     description: Inventory from one Rubrik account. Started by blt-rubrik-collect-inventory/twice-daily.
     entrypoint: blt.flows.rubrik:rubrik_inventory_account
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   # Storage: every CommCell's pools hourly, at :27 - between Commvault's
   # jobs (:07) and Rubrik's (:17) runs finishing and the next hour's.
@@ -83,7 +87,7 @@ deployments:
     description: Storage pools, capacity and use, from every CommCell block (docs/storage.md).
     entrypoint: blt.flows.flows:collect_storage
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
     schedules:
       - cron: "27 * * * *"
         timezone: UTC
@@ -92,7 +96,7 @@ deployments:
     description: Storage from one CommCell. Started by blt-collect-storage/hourly.
     entrypoint: blt.flows.flows:storage_commcell
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   # NetBackup: every primary block's jobs every 15 minutes - NetBackup
   # forgets finished jobs after a few days, so blt keeps close behind.
@@ -100,7 +104,7 @@ deployments:
     description: Jobs (the activity monitor) from every NetBackup primary block.
     entrypoint: blt.flows.netbackup:netbackup_collect_jobs
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
     schedules:
       - cron: "2,17,32,47 * * * *"
         timezone: UTC
@@ -109,14 +113,14 @@ deployments:
     description: Jobs from one NetBackup primary. Started by blt-netbackup-collect-jobs/every-15-minutes; full=true reads back 30 days.
     entrypoint: blt.flows.netbackup:netbackup_jobs_primary
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   # NetBackup: every primary block's storage hourly, with Commvault's.
   - name: hourly
     description: Storage (disk pools, capacity and use) from every NetBackup primary block.
     entrypoint: blt.flows.netbackup:netbackup_collect_storage
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
     schedules:
       - cron: "27 * * * *"
         timezone: UTC
@@ -125,35 +129,35 @@ deployments:
     description: Storage from one NetBackup primary. Started by blt-netbackup-collect-storage/hourly.
     entrypoint: blt.flows.netbackup:netbackup_storage_primary
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   # Started from blt's Administration pages, never on a schedule.
   - name: by-hand
     description: Checks one NetBackup primary's API key and each read blt makes. Started from Administration -> Sources.
     entrypoint: blt.flows.netbackup:netbackup_check
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   - name: by-hand
     description: Checks one CommCell's (or Commvault Cloud tenant's) credentials and each read blt makes. Started from Administration -> Sources.
     entrypoint: blt.flows.checks:commvault_check
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   - name: by-hand
     description: Checks one Rubrik account's service account and each read blt makes. Started from Administration -> Sources.
     entrypoint: blt.flows.checks:rubrik_check
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   - name: by-hand
     description: Fetches a NetBackup primary's CA certificate, by address, with its fingerprint. Started from Administration -> Sources.
     entrypoint: blt.flows.netbackup:netbackup_fetch_ca
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"
 
   - name: by-hand
     description: One CommCell's older history, until complete. Run it from Administration -> Schedules with the CommCell's name.
     entrypoint: blt.flows.flows:backfill
     work_pool:
-      name: blt
+      name: "{{ $BLT_WORK_POOL }}"

@@ -1,6 +1,8 @@
 # The Prefect worker: blt's collector and flows, and a process worker
-# that runs flow runs as subprocesses of itself. Built from uv.lock, like
-# the API image, with the "prefect" extra (which includes the collector).
+# that runs flow runs as subprocesses of itself - or, on a cluster, as pods
+# of their own (BLT_WORKER_TYPE=kubernetes, docs/kubernetes.md). Built from
+# uv.lock, like the API image, with the "prefect" extra (which includes
+# the collector) and "kubernetes".
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # git: uv fetches sdk-primer and the Commvault SDK from GitHub tags.
@@ -12,12 +14,12 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra prefect --no-install-project
+RUN uv sync --frozen --no-dev --extra prefect --extra kubernetes --no-install-project
 
 COPY src ./src
 COPY prefect.yaml ./
 COPY deploy/prefect/worker/start.sh /usr/local/bin/blt-worker-start
-RUN uv sync --frozen --no-dev --extra prefect && chmod +x /usr/local/bin/blt-worker-start
+RUN uv sync --frozen --no-dev --extra prefect --extra kubernetes && chmod +x /usr/local/bin/blt-worker-start
 
 ENV PATH="/app/.venv/bin:$PATH"
 # A heartbeat from each flow run every 30 s (Prefect's default is 180): a

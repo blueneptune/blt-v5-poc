@@ -35,6 +35,12 @@ prefect = [
     "blt[collector]",
     "prefect>=3.4",
 ]
+# A Kubernetes work pool: each flow run its own pod (docs/kubernetes.md).
+# Installed in the worker image beside "prefect"; unused under podman.
+kubernetes = [
+    "blt[prefect]",
+    "prefect-kubernetes>=0.6",
+]
 
 [project.scripts]
 blt-collect = "blt.collector.cli:main"
