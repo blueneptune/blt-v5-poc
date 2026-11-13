@@ -395,8 +395,16 @@ foreach ($placeholder in $values.Keys) {
 }
 Write-Text ([System.IO.Path]::ChangeExtension($Wrapper, '.xml')) $xml
 
-if ($service) { Invoke-Wrapper $Wrapper 'refresh' }
-else { Invoke-Wrapper $Wrapper 'install' }
+if ($service) {
+    # WinSW 2.12 has no refresh: registered again, so a new version's
+    # start mode and restart settings take effect too.
+    Invoke-Wrapper $Wrapper 'uninstall'
+    for ($i = 0; $i -lt 30 -and (Get-Service -Name $Id -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Seconds 1 }
+    if (Get-Service -Name $Id -ErrorAction SilentlyContinue) {
+        Fail "$Id is still marked for deletion: close the Services window (or anything else holding it open) and run this again."
+    }
+}
+Invoke-Wrapper $Wrapper 'install'
 Invoke-Wrapper $Wrapper 'start'
 Remove-UnusedVersions $Target
 

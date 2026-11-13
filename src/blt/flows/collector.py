@@ -285,4 +285,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        # Ctrl+C is how the Windows service is stopped: not a failure,
+        # and no traceback in the log.
+        sys.exit(0)
