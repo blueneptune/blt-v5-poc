@@ -132,6 +132,14 @@ To restore one (the API and Prefect reconnect by themselves):
 podman exec -i blt-postgres pg_restore --clean --if-exists -U blt -d blt < ~/blt-backups/blt-nightly-<stamp>.dump
 ```
 
+After restoring the `prefect` database - or moving it to another
+machine - run `./deploy/up.sh`. The Prefect server's start gives back
+any collection slot or lock the restored database counts as taken
+that no run holds (its lease files did not come with the dump). Its
+log says which: `Concurrency slots no run holds, given back: ...`.
+Without that, scheduled collection waits for those slots for ever,
+while a collection run by hand (`blt-rubrik collect`) still works.
+
 ## 3. A Commvault user and token, per CommCell
 
 For each CommServe, in Command Center:
