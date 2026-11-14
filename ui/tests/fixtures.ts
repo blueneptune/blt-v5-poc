@@ -145,17 +145,24 @@ export const FLOWS: Flows = {
 		{ source: 'backups:nbu-a', target: `pool:${MSDP_A.id}`, kind: 'backup', bytes: 12 * TIB, jobs: 40 },
 		{ source: `copies:${MSDP_B.id}`, target: `pool:${MSDP_A.id}`, kind: 'replicate', bytes: 5 * TIB, jobs: 9 }
 	],
+	paths: [
+		{ nodes: ['backups:nbu-a', `pool:${MSDP_A.id}`], kind: 'backup', bytes: 12 * TIB, jobs: 40 },
+		{ nodes: [`copies:${MSDP_B.id}`, `pool:${MSDP_A.id}`], kind: 'replicate', bytes: 5 * TIB, jobs: 9 }
+	],
+	unknown_sources: 0,
 	targets: [MSDP_A, MSDP_B, nbuPool(13, 'idle-pool', 'nbu-b', 5)],
 	unmatched_replications: 2
 };
 
 // One primary (?primary=nbu-a): its copies, pool -> SLP -> pool.
 const TAPE_A = nbuPool(14, 'tape-a', 'nbu-a', 20);
+const MSDP_A2 = nbuPool(15, 'msdp-a2', 'nbu-a', 60);
 export const FLOWS_NBU_A: Flows = {
 	...FLOWS,
 	primary: 'nbu-a',
 	nodes: [
 		{ id: `from:${MSDP_A.id}`, column: 0, label: 'msdp-a', source_name: 'nbu-a', storage_id: MSDP_A.id },
+		{ id: `from:${MSDP_A2.id}`, column: 0, label: 'msdp-a2', source_name: 'nbu-a', storage_id: MSDP_A2.id },
 		{ id: 'slp:SLP_Gold_DR', column: 1, label: 'SLP_Gold_DR', source_name: 'nbu-a', storage_id: null },
 		{ id: 'slp:SLP_Tape_Monthly', column: 1, label: 'SLP_Tape_Monthly', source_name: 'nbu-a', storage_id: null },
 		{ id: `pool:${MSDP_B.id}`, column: 2, label: 'msdp-b', source_name: 'nbu-b', storage_id: MSDP_B.id },
@@ -163,10 +170,17 @@ export const FLOWS_NBU_A: Flows = {
 	],
 	links: [
 		{ source: `from:${MSDP_A.id}`, target: 'slp:SLP_Gold_DR', kind: 'replicate', bytes: 8 * TIB, jobs: 30 },
-		{ source: 'slp:SLP_Gold_DR', target: `pool:${MSDP_B.id}`, kind: 'replicate', bytes: 8 * TIB, jobs: 30 },
+		{ source: `from:${MSDP_A2.id}`, target: 'slp:SLP_Gold_DR', kind: 'replicate', bytes: 2 * TIB, jobs: 5 },
+		{ source: 'slp:SLP_Gold_DR', target: `pool:${MSDP_B.id}`, kind: 'replicate', bytes: 10 * TIB, jobs: 35 },
 		{ source: `from:${MSDP_A.id}`, target: 'slp:SLP_Tape_Monthly', kind: 'duplicate', bytes: 3 * TIB, jobs: 6 },
 		{ source: 'slp:SLP_Tape_Monthly', target: `pool:${TAPE_A.id}`, kind: 'duplicate', bytes: 3 * TIB, jobs: 6 }
 	],
-	targets: [...FLOWS.targets, TAPE_A],
-	unmatched_replications: 0
+	paths: [
+		{ nodes: [`from:${MSDP_A.id}`, 'slp:SLP_Gold_DR', `pool:${MSDP_B.id}`], kind: 'replicate', bytes: 8 * TIB, jobs: 30 },
+		{ nodes: [`from:${MSDP_A.id}`, 'slp:SLP_Tape_Monthly', `pool:${TAPE_A.id}`], kind: 'duplicate', bytes: 3 * TIB, jobs: 6 },
+		{ nodes: [`from:${MSDP_A2.id}`, 'slp:SLP_Gold_DR', `pool:${MSDP_B.id}`], kind: 'replicate', bytes: 2 * TIB, jobs: 5 }
+	],
+	targets: [...FLOWS.targets, TAPE_A, MSDP_A2],
+	unmatched_replications: 0,
+	unknown_sources: 0
 };

@@ -29,6 +29,8 @@ from blt.netbackup.schemas import (
     NetBackupRunFinish,
     NetBackupRunOut,
     NetBackupRunStart,
+    NetBackupSlpBatch,
+    NetBackupSlpOut,
 )
 from blt.schemas import UpsertResult
 
@@ -130,6 +132,25 @@ class NetBackupJob(SQLModel, table=True):
     first_seen_at: datetime = _ts(nullable=False)
     last_collected_at: datetime = _ts(nullable=False)
     last_seen_run_id: int | None = Field(default=None, foreign_key=f"{SCHEMA}.collection_run.id")
+
+
+class NetBackupSlp(SQLModel, table=True):
+    """A storage lifecycle policy (SLP) on a primary, as last collected:
+    which storage each step writes to and which step it copies from - so
+    a copy job, which names its SLP as its policy, can be traced back to
+    the storage it read (blt.api.storage_flows)."""
+
+    __tablename__ = "slp"
+    __table_args__ = {"schema": SCHEMA}
+
+    primary_id: int = Field(foreign_key=f"{SCHEMA}.primary_server.id", primary_key=True)
+    name: str = Field(primary_key=True)
+    version: int | None = None
+    active: bool | None = None
+    operations: list[dict[str, Any]] = Field(
+        default_factory=list, sa_column=Column(JSONB, nullable=False)
+    )
+    collected_at: datetime = _ts(nullable=False)
 
 
 def netbackup_router(
@@ -277,6 +298,49 @@ def netbackup_router(
         common_jobs.project(session, primary.source_id, [rows[k] for k in written], netbackup_job)
         session.commit()
         return UpsertResult(received=len(body.jobs), written=len(written))
+
+    @router.post("/slps", summary="Store every SLP of the primary")
+    def replace_slps(
+        source_name: NetBackupPrimaryName, body: NetBackupSlpBatch, session: SessionDep
+    ) -> UpsertResult:
+        """The primary's storage lifecycle policies, all of them: each is
+        stored as sent, and SLPs not in the batch are removed. A batch
+        older than what is stored is left alone."""
+        primary = get_or_create_primary(session, source_name)
+        newest = session.exec(
+            select(func.max(NetBackupSlp.collected_at)).where(NetBackupSlp.primary_id == primary.id)
+        ).one()
+        if newest is not None and newest > body.collected_at:
+            session.commit()
+            return UpsertResult(received=len(body.slps), written=0)
+        for old in session.exec(select(NetBackupSlp).where(NetBackupSlp.primary_id == primary.id)):
+            session.delete(old)
+        session.flush()
+        latest = {slp.name: slp for slp in body.slps}
+        for slp in latest.values():
+            session.add(
+                NetBackupSlp(
+                    primary_id=primary.id,  # type: ignore[arg-type]
+                    name=slp.name,
+                    version=slp.version,
+                    active=slp.active,
+                    operations=[o.model_dump() for o in slp.operations],
+                    collected_at=body.collected_at,
+                )
+            )
+        session.commit()
+        return UpsertResult(received=len(body.slps), written=len(latest))
+
+    @router.get("/slps", summary="List the primary's SLPs", responses=not_found("primary"))
+    def list_slps(source_name: NetBackupPrimaryName, session: SessionDep) -> list[NetBackupSlpOut]:
+        """Its storage lifecycle policies as last collected, by name."""
+        primary = find_primary(session, source_name)
+        rows = session.exec(
+            select(NetBackupSlp)
+            .where(NetBackupSlp.primary_id == primary.id)
+            .order_by(col(NetBackupSlp.name))
+        )
+        return [NetBackupSlpOut.model_validate(r, from_attributes=True) for r in rows]
 
     @router.get("/jobs", summary="List jobs", responses=not_found("primary"))
     def list_jobs(

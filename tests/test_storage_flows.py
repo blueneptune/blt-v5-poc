@@ -241,6 +241,10 @@ def test_one_primary_goes_pool_to_slp_to_pool(http: TestClient) -> None:
     # Backups, and the other primary's copies, are not in it.
     assert all(n["source_name"] == "nbu-a" or n["column"] == 2 for n in nodes.values())
     assert flows["unmatched_replications"] == 1
+    # Each way end to end, for clicking one: pool -> SLP -> pool.
+    ends = {tuple(at(n)[1] for n in path["nodes"]) for path in flows["paths"]}
+    assert ("msdp-a", "slp-gold", "msdp-b") in ends
+    assert all(len(path["nodes"]) == 3 for path in flows["paths"])
 
 
 def test_a_pool_both_read_and_written_on_one_primary_is_on_both_sides(http: TestClient) -> None:
@@ -262,3 +266,102 @@ def test_the_window_decides_what_counts(http: TestClient) -> None:
 def test_no_netbackup_means_an_empty_picture(http: TestClient) -> None:
     flows = http.get("/v1/storage/flows").json()
     assert flows["nodes"] == [] and flows["links"] == [] and flows["targets"] == []
+
+
+def test_a_copy_naming_no_source_is_traced_by_its_slp_then_its_backup(http: TestClient) -> None:
+    at = (NOW - timedelta(minutes=5)).isoformat()
+    kb = GIB // 1024
+    post(
+        http,
+        "nbu-a",
+        "storage",
+        {
+            "collected_at": at,
+            "targets": [
+                pool("msdp-a", ["stu-a"], used=50 * GIB),
+                pool("msdp-a2", ["stu-a2"], used=10 * GIB),
+                pool("tape-a", ["stu-tape"], used=0),
+            ],
+        },
+    )
+    post(
+        http,
+        "nbu-a",
+        "slps",
+        {
+            "collected_at": at,
+            "slps": [
+                {
+                    "name": "slp-gold",
+                    "operations": [
+                        {"index": 1, "type": "BACKUP", "storage": "stu-a"},
+                        {"index": 2, "type": "DUPLICATION", "storage": "stu-a2", "source_index": 1},
+                        # Tape is made from the second copy, not the backup.
+                        {
+                            "index": 3,
+                            "type": "DUPLICATION",
+                            "storage": "stu-tape",
+                            "source_index": 2,
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+    post(
+        http,
+        "nbu-a",
+        "jobs",
+        {
+            "collected_at": at,
+            "jobs": [
+                job(1, "BACKUP", storage_unit="stu-a", backup_id="img1", kilobytes_transferred=kb),
+                # Its SLP says: tape reads the copy on stu-a2.
+                job(
+                    2,
+                    "DUPLICATE",
+                    policy_name="slp-gold",
+                    storage_unit="stu-tape",
+                    backup_id="img1",
+                    kilobytes_transferred=3 * kb,
+                ),
+                # No SLP known: where its image was backed up to.
+                job(
+                    3,
+                    "DUPLICATE",
+                    policy_name="slp-not-collected",
+                    storage_unit="stu-a2",
+                    backup_id="img1",
+                    kilobytes_transferred=2 * kb,
+                ),
+                # Nothing tells.
+                job(4, "DUPLICATE", storage_unit="stu-tape", kilobytes_transferred=kb),
+            ],
+        },
+    )
+    flows = http.get("/v1/storage/flows", params={"primary": "nbu-a"}).json()
+    label = {n["id"]: n["label"] for n in flows["nodes"]}
+    got = {tuple(label[n] for n in path["nodes"]): path["bytes"] // GIB for path in flows["paths"]}
+    assert got == {
+        ("msdp-a2", "slp-gold", "tape-a"): 3,
+        ("msdp-a", "slp-not-collected", "msdp-a2"): 2,
+        ("unknown", "Not from an SLP", "tape-a"): 1,
+    }
+    assert flows["unknown_sources"] == 1
+    # The links are the paths' steps, summed.
+    assert sum(link["bytes"] for link in flows["links"]) // GIB == 2 * (3 + 2 + 1)
+
+
+def test_slps_are_replaced_as_a_whole(http: TestClient) -> None:
+    at = NOW - timedelta(minutes=5)
+
+    def send(when: datetime, names: list[str]) -> None:
+        body = {"collected_at": when.isoformat(), "slps": [{"name": n} for n in names]}
+        post(http, "nbu-a", "slps", body)
+
+    send(at, ["one", "two"])
+    send(at + timedelta(minutes=1), ["two", "three"])
+    send(at - timedelta(hours=1), ["stale"])  # older than what is held: left alone
+    held = http.get("/v1/sources/netbackup/nbu-a/slps").json()
+    assert [s["name"] for s in held] == ["three", "two"]
+    assert http.get("/v1/sources/netbackup/nobody/slps").status_code == 404

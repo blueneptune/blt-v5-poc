@@ -45,6 +45,7 @@ from prefect.client.schemas.objects import FlowRun
 from prefect.concurrency.sync import concurrency
 from prefect.deployments import run_deployment
 from pydantic import Field, SecretStr
+from sdk_primer import APIClient
 
 from blt.netbackup.check import (
     answers,
@@ -56,6 +57,7 @@ from blt.netbackup.check import (
     weak_key,
 )
 from blt.netbackup.collect import run_netbackup_collection
+from blt.netbackup.slps import netbackup_slps, post_slps
 from blt.netbackup.source import NetBackupJobs
 from blt.netbackup.store import NetBackupStore
 from blt.storage.netbackup import netbackup_storage
@@ -177,6 +179,7 @@ def storage_primary(name: str, block: NetBackupPrimaryBlock) -> str:
         with block.client() as nbu, api.client() as blt:
             targets = netbackup_storage(nbu)
             result = StorageStore(blt, "netbackup", name).post(collected_at, targets)
+            slps = slps_primary(nbu, blt, name)
     logger.info(
         "Storage: {} targets, {} new, {} samples, {} gone",
         len(targets),
@@ -184,7 +187,25 @@ def storage_primary(name: str, block: NetBackupPrimaryBlock) -> str:
         result.get("samples"),
         result.get("gone"),
     )
-    return f"{len(targets)} storage targets, {result.get('samples')} samples"
+    return f"{len(targets)} storage targets, {result.get('samples')} samples, {slps}"
+
+
+def slps_primary(nbu: NetBackupClient, blt: APIClient, name: str) -> str:
+    """The primary's SLPs, for tracing copies to where they read from.
+    Not being able to read them (an API key without the right, say)
+    costs only that: the storage is in either way."""
+    try:
+        slps = netbackup_slps(nbu)
+        post_slps(blt, name, datetime.now(UTC), slps)
+    except Exception as error:  # noqa: BLE001 - logged, and storage still counts
+        logger.warning(
+            "SLPs: could not read or store them ({}): the Storage page's Sankey falls back "
+            "to each copy's backup job for where it read from.",
+            error,
+        )
+        return "SLPs not read"
+    logger.info("SLPs: {}", len(slps))
+    return f"{len(slps)} SLPs"
 
 
 @flow(

@@ -101,6 +101,13 @@ def check_primary(nbu: NetBackupClient) -> list[Check]:
         found = len(answer.get("data") or [])
         return "readable" + ("" if found else " (none waiting or kept just now)")
 
+    def slps() -> str:
+        from blt.netbackup.slps import netbackup_slps
+
+        found = netbackup_slps(nbu)
+        steps = sum(len(s.operations) for s in found)
+        return f"{len(found)} SLPs, {steps} steps"
+
     def jobs() -> str:
         total, recent = nbu.jobs.sample(1)
         line = f"readable ({total if total is not None else len(recent)} jobs)"
@@ -123,6 +130,7 @@ def check_primary(nbu: NetBackupClient) -> list[Check]:
     return [
         first,
         _attempt("storage (disk pools, storage units)", storage),
+        _attempt("SLPs (to trace copies on the Storage page)", slps),
         _attempt("SLP images (for the SLP backlog)", slp_images),
         _attempt("jobs", jobs),
     ]

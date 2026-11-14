@@ -1371,6 +1371,47 @@
       "body": {}
     },
     {
+      "_id": "req_dab7ccf75955578095cc",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "Store every SLP of the primary",
+      "description": "The primary's storage lifecycle policies, all of them: each is\nstored as sent, and SLPs not in the batch are removed. A batch\nolder than what is stored is left alone.",
+      "method": "POST",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/slps",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"collected_at\": \"2026-11-14T10:00:00Z\",\n  \"slps\": [\n    {\n      \"active\": true,\n      \"name\": \"slp-gold\",\n      \"operations\": [\n        {\n          \"index\": 1,\n          \"storage\": \"msdp-stu-01\",\n          \"type\": \"BACKUP\"\n        },\n        {\n          \"index\": 2,\n          \"source_index\": 1,\n          \"storage\": \"tape-stu\",\n          \"type\": \"DUPLICATION\"\n        },\n        {\n          \"index\": 3,\n          \"source_index\": 1,\n          \"target_import_slp\": \"slp-import\",\n          \"target_primary\": \"nbu-dr.example.com\",\n          \"type\": \"REPLICATE_TO_REMOTE_MASTER\"\n        }\n      ],\n      \"version\": 3\n    }\n  ]\n}"
+      }
+    },
+    {
+      "_id": "req_04f4ba0af7ae54db9a1e",
+      "_type": "request",
+      "parentId": "fld_5dea2e7090295767a817",
+      "name": "List the primary's SLPs",
+      "description": "Its storage lifecycle policies as last collected, by name.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/sources/netbackup/{{ _.source_name }}/slps",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
       "_id": "req_bbfadbcd6a60579eb4d5",
       "_type": "request",
       "parentId": "fld_5dea2e7090295767a817",

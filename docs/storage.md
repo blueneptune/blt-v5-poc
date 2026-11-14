@@ -133,6 +133,20 @@ by hand (bpduplicate) has none and goes through **Not from an SLP**.
 Backups are not in this view: pick **All** for them.
 `scripts/nbu-flows-check.sh` table 5 lists the SLPs it will draw.
 
+Where a copy read from: the storage unit the job names; else its SLP's
+definition (the step writing where the copy went, and the step that one
+copies from: docs/netbackup.md); else where the image's backup job
+wrote. Copies none of these place are drawn from **unknown** and
+counted under the chart.
+
+**Following a path**: click a band, a pool or an SLP (or Tab to it and
+press Enter) and the paths through it light up end to end - only their
+share of each band - with each path, its size and jobs listed under the
+chart. Click it again, the background, **Clear**, or press Escape to go
+back. **Show as a table** lists every path, each with a **Highlight**
+button. The API gives the paths as `paths` (end to end; one link each
+in the all-primaries view).
+
 ## Next
 
 - NetBackup MSDP dedupe ratio (not in the disk pool answer), tape.

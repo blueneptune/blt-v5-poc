@@ -53,6 +53,26 @@ def _nbu(**overrides: Any) -> NetBackupClient:
         ),
         raw=SimpleNamespace(
             catalog=SimpleNamespace(list_slp_images=lambda page_limit=None: {"data": []}),
+            config=SimpleNamespace(
+                list_slps=lambda page_limit, page_offset: {
+                    "data": [
+                        {
+                            "id": "slp-gold",
+                            "attributes": {
+                                "slpName": "slp-gold",
+                                "operationList": [
+                                    {"operationIndex": 1, "operationType": "BACKUP"},
+                                    {
+                                        "operationIndex": 2,
+                                        "operationType": "DUPLICATION",
+                                        "sourceOperationIndex": 1,
+                                    },
+                                ],
+                            },
+                        }
+                    ]
+                }
+            ),
             storage=SimpleNamespace(
                 list_storage_units=lambda page_limit, page_offset: {"data": []},
                 list_disk_pools=lambda page_limit, page_offset: {
@@ -80,6 +100,7 @@ def test_every_read_is_tried_and_said() -> None:
     assert lines == [
         "OK   sign in and server: nbu01, NetBackup 10.5.0.1, API version 12.0",
         "OK   storage (disk pools, storage units): 1 storage targets (MSDP)",
+        "OK   SLPs (to trace copies on the Storage page): 1 SLPs, 2 steps",
         "OK   SLP images (for the SLP backlog): readable (none waiting or kept just now)",
         "OK   jobs: readable (42 jobs); 7 changed in the last 24 h",
     ]
@@ -101,10 +122,10 @@ def test_a_missing_permission_or_endpoint_is_one_failed_line() -> None:
             }
         )
     )
-    assert [c.ok for c in checks] == [True, False, True, True]
+    assert [c.ok for c in checks] == [True, False, True, True, True]
     assert "read access" in checks[1].detail
     # NetBackup 10.0 has no SLP images listing: said, not failed - nothing collects it yet.
-    assert "not on this NetBackup version" in checks[2].detail
+    assert "not on this NetBackup version" in checks[3].detail
 
 
 def test_a_netbackup_without_a_last_update_filter_is_said_in_the_jobs_line() -> None:

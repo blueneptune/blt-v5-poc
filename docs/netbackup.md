@@ -56,9 +56,18 @@ the full list). A copy job keeps both ends - `source_media_server` /
 `source_storage_unit` and `media_server` / `storage_unit` - and its
 `backup_id`: what the replication Sankey will be drawn from.
 
+Many NetBackup versions leave a copy job's source storage unit out. The
+Storage page's Sankey then reads it from the copy's **SLP** (the job's
+policy): blt collects every SLP (GET /config/slps) with the primary's
+storage, each hour, into `netbackup.slp` - each step's storage unit and
+the step it copies from (GET /v1/sources/netbackup/{name}/slps shows
+them). Failing that, the storage unit the image was backed up to.
+
 ### What the API key needs
 
-Read access to **jobs** as well as storage. The primary's **Check**
+Read access to **jobs** and **storage lifecycle policies** as well as
+storage. Without SLPs, storage is still collected (the run logs a
+warning) and the Sankey falls back to each copy's backup job. The primary's **Check**
 (Administration -> Sources -> the primary) has a `jobs` line; if it says
 FAIL, add jobs (view) to the key's user's role in NetBackup (Security ->
 RBAC). docs/admin.md has the `blt_r` service account steps.

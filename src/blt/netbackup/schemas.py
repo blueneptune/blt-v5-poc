@@ -205,3 +205,84 @@ class NetBackupLastRun(BaseModel):
         description="When the last succeeded run started; none means do an initial run.",
     )
     last_run: NetBackupRunOut | None = Field(default=None, description="The most recent run.")
+
+
+class NetBackupSlpOperation(BaseModel):
+    """One step of a storage lifecycle policy (SLP)."""
+
+    index: int = Field(description="Its operationIndex: the order the steps run in, from 1.")
+    type: str = Field(
+        description="BACKUP, DUPLICATION, REPLICATION, REPLICATE_TO_REMOTE_MASTER, IMPORT, ..."
+    )
+    storage: str | None = Field(
+        default=None,
+        description="The storage unit (or storage unit group) it writes to; none for a "
+        "replication to another primary.",
+    )
+    source_index: int | None = Field(
+        default=None, description="The step whose copy it reads (sourceOperationIndex)."
+    )
+    target_primary: str | None = Field(
+        default=None, description="For a replication: the primary it replicates to."
+    )
+    target_import_slp: str | None = Field(
+        default=None, description="For a replication: the SLP that imports it there."
+    )
+
+
+class NetBackupSlpIn(BaseModel):
+    """One SLP as collected from GET /config/slps."""
+
+    name: str = Field(description="The SLP's name.")
+    version: int | None = Field(default=None, description="Its versionNumber.")
+    active: bool | None = Field(default=None, description="Whether it is active.")
+    operations: list[NetBackupSlpOperation] = Field(
+        default_factory=list, description="Its steps, in order."
+    )
+
+
+class NetBackupSlpBatch(BaseModel):
+    """Every SLP of one primary, collected in one go: SLPs not in it are
+    removed."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "collected_at": "2026-11-14T10:00:00Z",
+                    "slps": [
+                        {
+                            "name": "slp-gold",
+                            "version": 3,
+                            "active": True,
+                            "operations": [
+                                {"index": 1, "type": "BACKUP", "storage": "msdp-stu-01"},
+                                {
+                                    "index": 2,
+                                    "type": "DUPLICATION",
+                                    "storage": "tape-stu",
+                                    "source_index": 1,
+                                },
+                                {
+                                    "index": 3,
+                                    "type": "REPLICATE_TO_REMOTE_MASTER",
+                                    "source_index": 1,
+                                    "target_primary": "nbu-dr.example.com",
+                                    "target_import_slp": "slp-import",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    collected_at: AwareDatetime = Field(description="When the SLPs were read.")
+    slps: list[NetBackupSlpIn] = Field(description="Every SLP on the primary.")
+
+
+class NetBackupSlpOut(NetBackupSlpIn):
+    """One SLP as blt holds it."""
+
+    collected_at: AwareDatetime = Field(description="When it was last read.")

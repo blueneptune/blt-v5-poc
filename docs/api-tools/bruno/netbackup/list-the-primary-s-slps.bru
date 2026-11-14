@@ -1,0 +1,15 @@
+meta {
+  name: List the primary's SLPs
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/slps
+  body: none
+  auth: inherit
+}
+
+docs {
+  Its storage lifecycle policies as last collected, by name.
+}

@@ -1,0 +1,50 @@
+meta {
+  name: Store every SLP of the primary
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/slps
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-11-14T10:00:00Z",
+    "slps": [
+      {
+        "active": true,
+        "name": "slp-gold",
+        "operations": [
+          {
+            "index": 1,
+            "storage": "msdp-stu-01",
+            "type": "BACKUP"
+          },
+          {
+            "index": 2,
+            "source_index": 1,
+            "storage": "tape-stu",
+            "type": "DUPLICATION"
+          },
+          {
+            "index": 3,
+            "source_index": 1,
+            "target_import_slp": "slp-import",
+            "target_primary": "nbu-dr.example.com",
+            "type": "REPLICATE_TO_REMOTE_MASTER"
+          }
+        ],
+        "version": 3
+      }
+    ]
+  }
+}
+
+docs {
+  The primary's storage lifecycle policies, all of them: each is
+  stored as sent, and SLPs not in the batch are removed. A batch
+  older than what is stored is left alone.
+}

@@ -13,6 +13,7 @@ export type Flows = components['schemas']['StorageFlows'];
 export type FlowNode = components['schemas']['FlowNode'];
 export type FlowLink = components['schemas']['FlowLink'];
 export type FlowKind = FlowLink['kind'];
+export type FlowPath = components['schemas']['FlowPath'];
 
 export interface Box {
 	node: FlowNode;
@@ -29,6 +30,11 @@ export interface Band {
 	width: number;
 	source: Box;
 	target: Box;
+	/** Where it starts and ends: x, and the y of its top edge. */
+	x0: number;
+	x1: number;
+	sy: number;
+	ty: number;
 }
 
 export interface Layout {
@@ -157,13 +163,48 @@ export function layout(flows: Pick<Flows, 'nodes' | 'links'>, size: Size = SIZE)
 		const sy = sourceY.get(link)!;
 		const x0 = source.x + size.nodeWidth;
 		const x1 = target.x;
-		const xm = (x0 + x1) / 2;
-		const path =
-			`M${x0},${sy} C${xm},${sy} ${xm},${ty} ${x1},${ty} ` +
-			`L${x1},${ty + width} C${xm},${ty + width} ${xm},${sy + width} ${x0},${sy + width} Z`;
-		return { link, path, width, source, target };
+		const path = bandPath(x0, sy, x1, ty, width);
+		return { link, path, width, source, target, x0, x1, sy, ty };
 	});
 	return { boxes: [...boxes.values()], bands, height };
+}
+
+/** A band from (x0, sy) to (x1, ty), `width` thick. */
+export function bandPath(x0: number, sy: number, x1: number, ty: number, width: number): string {
+	const xm = (x0 + x1) / 2;
+	return (
+		`M${x0},${sy} C${xm},${sy} ${xm},${ty} ${x1},${ty} ` +
+		`L${x1},${ty + width} C${xm},${ty + width} ${xm},${sy + width} ${x0},${sy + width} Z`
+	);
+}
+
+/** One link, as a key. */
+export const edgeKey = (link: Pick<FlowLink, 'source' | 'target' | 'kind'>) =>
+	`${link.source}\u0000${link.target}\u0000${link.kind}`;
+
+/** What was clicked: a band, a node, or one path (a row of the table). */
+export type Choice = { edge: string } | { node: string } | { path: number };
+
+/** The paths a click picks: those through the band or the node. */
+export function chosen(paths: FlowPath[], choice: Choice | null): FlowPath[] {
+	if (choice === null) return [];
+	if ('path' in choice) return paths[choice.path] ? [paths[choice.path]] : [];
+	if ('node' in choice) return paths.filter((p) => p.nodes.includes(choice.node));
+	return paths.filter((p) =>
+		p.nodes.slice(1).some((to, i) => edgeKey({ source: p.nodes[i], target: to, kind: p.kind }) === choice.edge)
+	);
+}
+
+/** How much of each link the chosen paths carry. */
+export function carried(paths: FlowPath[]): Map<string, number> {
+	const out = new Map<string, number>();
+	for (const p of paths) {
+		p.nodes.slice(1).forEach((to, i) => {
+			const key = edgeKey({ source: p.nodes[i], target: to, kind: p.kind });
+			out.set(key, (out.get(key) ?? 0) + p.bytes);
+		});
+	}
+	return out;
 }
 
 /** How many columns a picture has: three when it goes through SLPs. */
