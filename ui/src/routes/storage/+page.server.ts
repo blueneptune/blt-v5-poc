@@ -8,9 +8,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const by: Group = GROUPS.includes(asked as Group) ? (asked as Group) : 'source';
 	const window = Number(url.searchParams.get('flow'));
 	const days = (WINDOWS as readonly number[]).includes(window) ? window : 7;
+	// One primary: its copies, pool -> SLP -> pool. None: everything.
+	const primary = url.searchParams.get('primary') || undefined;
 	const [targets, flows] = await Promise.all([
 		locals.api.GET('/v1/storage'),
-		locals.api.GET('/v1/storage/flows', { params: { query: { days } } })
+		locals.api.GET('/v1/storage/flows', { params: { query: { days, primary } } })
 	]);
-	return { by, days, windows: WINDOWS, targets: must(targets), flows: must(flows) };
+	return { by, days, primary, windows: WINDOWS, targets: must(targets), flows: must(flows) };
 };

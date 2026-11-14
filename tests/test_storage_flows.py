@@ -113,6 +113,7 @@ def seed(http: TestClient) -> None:
                     "DUPLICATE",
                     source_storage_unit="stu-a",
                     storage_unit="stu-tape",
+                    policy_name="slp-gold",
                     kilobytes_transferred=4 * kb,
                     backup_id="c1_1",
                 ),
@@ -121,6 +122,7 @@ def seed(http: TestClient) -> None:
                     "REPLICATE",
                     source_storage_unit="stu-a",
                     storage_unit="nbu-b-target",
+                    policy_name="slp-gold",
                     kilobytes_transferred=6 * kb,
                     backup_id="c1_2",
                 ),
@@ -157,6 +159,7 @@ def seed(http: TestClient) -> None:
                     "REPLICATE",
                     source_storage_unit="stu-b",
                     storage_unit="nbu-a-target",
+                    policy_name="slp-back",
                     kilobytes_transferred=kb,
                     backup_id="c2_1",
                 ),
@@ -210,6 +213,42 @@ def test_backups_and_copies_land_in_their_pools(http: TestClient) -> None:
     assert sorted(names.values()) == ["idle-b", "msdp-a", "msdp-b", "tape-a"]
     full = next(t for t in flows["targets"] if t["name"] == "msdp-a")
     assert full["latest"]["used_bytes"] == 96 * GIB
+
+
+def test_one_primary_goes_pool_to_slp_to_pool(http: TestClient) -> None:
+    seed(http)
+    flows = http.get("/v1/storage/flows", params={"primary": "nbu-a"}).json()
+    assert flows["primary"] == "nbu-a"
+    assert flows["primaries"] == ["nbu-a", "nbu-b"]
+    nodes = {n["id"]: n for n in flows["nodes"]}
+
+    def at(node_id: str) -> tuple[int, str]:
+        return nodes[node_id]["column"], nodes[node_id]["label"]
+
+    got = {
+        (at(link["source"]), at(link["target"]), link["kind"]): link["bytes"] // GIB
+        for link in flows["links"]
+    }
+    assert got == {
+        ((0, "msdp-a"), (1, "slp-gold"), "duplicate"): 4,
+        ((0, "msdp-a"), (1, "slp-gold"), "replicate"): 6,
+        ((1, "slp-gold"), (2, "tape-a"), "duplicate"): 4,
+        ((1, "slp-gold"), (2, "msdp-b"), "replicate"): 6,
+        # A copy with no policy name was not made by an SLP.
+        ((0, "msdp-a"), (1, "Not from an SLP"), "replicate"): 2,
+        ((1, "Not from an SLP"), (2, "nbu-b-target (replica, import not seen)"), "replicate"): 2,
+    }
+    # Backups, and the other primary's copies, are not in it.
+    assert all(n["source_name"] == "nbu-a" or n["column"] == 2 for n in nodes.values())
+    assert flows["unmatched_replications"] == 1
+
+
+def test_a_pool_both_read_and_written_on_one_primary_is_on_both_sides(http: TestClient) -> None:
+    seed(http)
+    flows = http.get("/v1/storage/flows", params={"primary": "nbu-b"}).json()
+    pools = sorted((n["column"], n["label"]) for n in flows["nodes"] if n["storage_id"])
+    assert pools == [(0, "msdp-b"), (2, "msdp-a")]
+    assert http.get("/v1/storage/flows", params={"primary": "nobody"}).json()["links"] == []
 
 
 def test_the_window_decides_what_counts(http: TestClient) -> None:

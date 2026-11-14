@@ -47,7 +47,7 @@ scripts/nbu-flows-check.sh        # the last 7 days
 scripts/nbu-flows-check.sh 30
 ```
 
-Read-only, on the machine blt's pod runs on. Four tables:
+Read-only, on the machine blt's pod runs on. Five tables:
 
 1. **Jobs per primary and type**: backups, duplications, replications
    and imports that ended in the window. Replications on one primary
@@ -60,3 +60,6 @@ Read-only, on the machine blt's pod runs on. Four tables:
    storage is not collected).
 4. **A few replication jobs as NetBackup gave them**, to see what it
    names as their destination.
+5. **Copies per primary and SLP**: what the one-primary view (pool ->
+   SLP -> pool) draws in its middle column. A copy job's policy is the
+   SLP that made it; `(none)` is a copy made by hand.

@@ -131,6 +131,8 @@ const nbuPool = (n: number, name: string, primary: string, used: number): Storag
 const MSDP_A = nbuPool(11, 'msdp-a', 'nbu-a', 97);
 const MSDP_B = nbuPool(12, 'msdp-b', 'nbu-b', 40);
 export const FLOWS: Flows = {
+	primary: null,
+	primaries: ['nbu-a', 'nbu-b'],
 	since: new Date(now - 7 * 24 * HOUR).toISOString(),
 	until: new Date(now).toISOString(),
 	nodes: [
@@ -145,4 +147,26 @@ export const FLOWS: Flows = {
 	],
 	targets: [MSDP_A, MSDP_B, nbuPool(13, 'idle-pool', 'nbu-b', 5)],
 	unmatched_replications: 2
+};
+
+// One primary (?primary=nbu-a): its copies, pool -> SLP -> pool.
+const TAPE_A = nbuPool(14, 'tape-a', 'nbu-a', 20);
+export const FLOWS_NBU_A: Flows = {
+	...FLOWS,
+	primary: 'nbu-a',
+	nodes: [
+		{ id: `from:${MSDP_A.id}`, column: 0, label: 'msdp-a', source_name: 'nbu-a', storage_id: MSDP_A.id },
+		{ id: 'slp:SLP_Gold_DR', column: 1, label: 'SLP_Gold_DR', source_name: 'nbu-a', storage_id: null },
+		{ id: 'slp:SLP_Tape_Monthly', column: 1, label: 'SLP_Tape_Monthly', source_name: 'nbu-a', storage_id: null },
+		{ id: `pool:${MSDP_B.id}`, column: 2, label: 'msdp-b', source_name: 'nbu-b', storage_id: MSDP_B.id },
+		{ id: `pool:${TAPE_A.id}`, column: 2, label: 'tape-a', source_name: 'nbu-a', storage_id: TAPE_A.id }
+	],
+	links: [
+		{ source: `from:${MSDP_A.id}`, target: 'slp:SLP_Gold_DR', kind: 'replicate', bytes: 8 * TIB, jobs: 30 },
+		{ source: 'slp:SLP_Gold_DR', target: `pool:${MSDP_B.id}`, kind: 'replicate', bytes: 8 * TIB, jobs: 30 },
+		{ source: `from:${MSDP_A.id}`, target: 'slp:SLP_Tape_Monthly', kind: 'duplicate', bytes: 3 * TIB, jobs: 6 },
+		{ source: 'slp:SLP_Tape_Monthly', target: `pool:${TAPE_A.id}`, kind: 'duplicate', bytes: 3 * TIB, jobs: 6 }
+	],
+	targets: [...FLOWS.targets, TAPE_A],
+	unmatched_replications: 0
 };

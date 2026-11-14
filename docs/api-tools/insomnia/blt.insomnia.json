@@ -358,7 +358,7 @@
       "_type": "request",
       "parentId": "fld_aeeb07d4af0450a0ba33",
       "name": "Where NetBackup's data goes: backups and copies per pool",
-      "description": "For the Storage page's Sankey: what each NetBackup primary's\nbackups wrote into each disk pool, and what was copied from one\npool to another - duplicated on one primary, or replicated to\nanother (matched to that primary's import of the same image) -\nwith every pool's use and trend. Bytes as the jobs report them,\nbefore deduplication.",
+      "description": "For the Storage page's Sankey: what each NetBackup primary's\nbackups wrote into each disk pool, and what was copied from one\npool to another - duplicated on one primary, or replicated to\nanother (matched to that primary's import of the same image) -\nwith every pool's use and trend. Bytes as the jobs report them,\nbefore deduplication.\n\nWith `primary`, that primary's copies only, in three columns: the\npool each is read from, the SLP that made it, and the pool it\nlands in (on that primary or the one it replicates to).",
       "method": "GET",
       "url": "{{ _.baseUrl }}/v1/storage/flows",
       "parameters": [],

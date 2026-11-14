@@ -397,14 +397,25 @@ def storage_router(
         days: Annotated[
             float, Query(gt=0, le=90, description="Jobs that ended in the last so many days.")
         ] = 7,
+        primary: Annotated[
+            str | None,
+            Query(
+                min_length=1,
+                description="One NetBackup primary, drawn pool -> SLP -> pool; leave out for all.",
+            ),
+        ] = None,
     ) -> StorageFlows:
         """For the Storage page's Sankey: what each NetBackup primary's
         backups wrote into each disk pool, and what was copied from one
         pool to another - duplicated on one primary, or replicated to
         another (matched to that primary's import of the same image) -
         with every pool's use and trend. Bytes as the jobs report them,
-        before deduplication."""
-        return storage_flows(session, days)
+        before deduplication.
+
+        With `primary`, that primary's copies only, in three columns: the
+        pool each is read from, the SLP that made it, and the pool it
+        lands in (on that primary or the one it replicates to)."""
+        return storage_flows(session, days, primary=primary)
 
     @router.get(
         "/{storage_id}", summary="One storage target", responses=not_found("storage target")
