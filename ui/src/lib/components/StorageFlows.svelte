@@ -4,9 +4,13 @@
 	// is drawn as a meter - its fill is how full it is, in its health's
 	// colour, with an icon and a word once it needs attention - so a pool
 	// filling up shows with what is filling it.
+	//
+	// For one primary (flows.primary): three columns - the pools its copies
+	// are read from, the SLP that made each, the pools they land in - with
+	// pools as meters on both sides.
 	import { CircleAlert, TriangleAlert } from '@lucide/svelte';
 	import { bytes } from '$lib/format';
-	import { KIND_COLOUR, KIND_LABEL, SIZE, layout, type Band, type Box, type FlowKind, type Flows } from '$lib/sankey';
+	import { KIND_COLOUR, KIND_LABEL, SIZE, columnsOf, layout, type Band, type Box, type FlowKind, type Flows } from '$lib/sankey';
 	import { HEALTH_LABEL, fullIn, health, healthColour, usedFraction, type Target } from '$lib/storage';
 
 	let { flows }: { flows: Flows } = $props();
@@ -20,6 +24,12 @@
 		flows.targets.filter((t) => !drawn.boxes.some((b) => b.node.storage_id === t.id))
 	);
 	const names = $derived(new Map(drawn.boxes.map((b) => [b.node.id, b.node.label])));
+	const three = $derived(columnsOf(flows.nodes) === 3);
+	const last = $derived(three ? 2 : 1);
+	// A pool (or a storage unit in none) is a meter; where data comes from,
+	// and an SLP, a plain bar.
+	const isMeter = (box: Box) => box.node.column === last || (three && box.node.column === 0);
+	const inColumn = (c: number) => drawn.boxes.filter((b) => b.node.column === c).length;
 	const TOP = 8;
 	const H = $derived(drawn.height + TOP * 2);
 
@@ -39,7 +49,11 @@
 	}
 	function boxLines(box: Box): string[] {
 		const t = target(box);
-		const lines = [`${box.node.label} (${box.node.source_name})`, `${box.node.column === 0 ? 'Sent' : 'Received'}: ${bytes(box.value)}`];
+		const what = box.node.column === 0 ? 'Sent' : box.node.column === last ? 'Received' : 'Copied';
+		const lines = [
+			three && box.node.column === 1 ? `SLP ${box.node.label}` : `${box.node.label} (${box.node.source_name})`,
+			`${what}: ${bytes(box.value)}`
+		];
 		if (t) {
 			const used = usedFraction(t);
 			if (used !== null) lines.push(`${Math.round(used * 100)}% used: ${bytes(t.latest?.used_bytes)} of ${bytes(t.latest?.capacity_bytes)}`);
@@ -51,7 +65,11 @@
 </script>
 
 {#if drawn.boxes.length === 0}
-	<p class="text-muted-foreground text-sm">No NetBackup backups or copies ended in this window.</p>
+	<p class="text-muted-foreground text-sm">
+		{flows.primary
+			? `No copies (duplications or replications) ended on ${flows.primary} in this window.`
+			: 'No NetBackup backups or copies ended in this window.'}
+	</p>
 {:else}
 	<ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Legend">
 		{#each kinds as kind (kind)}
@@ -68,7 +86,9 @@
 			viewBox="0 0 {SIZE.width} {H}"
 			class="block w-full min-w-[720px]"
 			role="img"
-			aria-label="Where NetBackup's data went: {flows.links.length} flows into {drawn.boxes.filter((b) => b.node.column === 1).length} pools. The table below has the same figures."
+			aria-label="{three
+				? `${flows.primary}'s copies: from ${inColumn(0)} pools through ${inColumn(1)} SLPs into ${inColumn(2)} pools`
+				: `Where NetBackup's data went: ${flows.links.length} flows into ${inColumn(1)} pools`}. The table below has the same figures."
 			onmouseleave={() => {
 				hover = null;
 				active = null;
@@ -101,9 +121,21 @@
 							at(e, boxLines(box));
 						}}
 					>
-						{#if box.node.column === 0}
+						{#if !isMeter(box)}
+							{@const left = box.node.column === 0}
 							<rect x={box.x} y={box.y} width={SIZE.nodeWidth} height={box.height} rx="3" fill="var(--chart-reference)" />
-							<text x={box.x - 8} y={box.y + box.height / 2} text-anchor="end" dominant-baseline="middle" class="fill-foreground text-[12px]">
+							<!-- An SLP's name sits over the bands it sends on: haloed in the card's colour. -->
+							<text
+								x={left ? box.x - 8 : box.x + SIZE.nodeWidth + 6}
+								y={box.y + box.height / 2}
+								text-anchor={left ? 'end' : 'start'}
+								dominant-baseline="middle"
+								class="fill-foreground text-[12px]"
+								stroke={left ? undefined : 'var(--card)'}
+								stroke-width={left ? undefined : 4}
+								stroke-linejoin="round"
+								paint-order="stroke"
+							>
 								{box.node.label}
 								<tspan class="fill-muted-foreground"> {bytes(box.value)}</tspan>
 							</text>
@@ -122,9 +154,18 @@
 							{/if}
 							{@const alert = state === 'critical' || state === 'warning'}
 							{@const full = t ? fullIn(t) : ''}
-							{@const tx = box.x + SIZE.nodeWidth + (alert ? 26 : 8)}
+							{@const left = box.node.column === 0}
+							{@const gap = alert ? 26 : 8}
+							{@const tx = left ? box.x - gap : box.x + SIZE.nodeWidth + gap}
+							{@const ix = left ? box.x - 20 : box.x + SIZE.nodeWidth + 6}
 							{@const twoLines = box.height >= 26}
-							<text x={tx} y={box.y + box.height / 2} dy={twoLines ? '-0.15em' : '0.35em'} class="fill-foreground text-[12px]">
+							<text
+								x={tx}
+								y={box.y + box.height / 2}
+								dy={twoLines ? '-0.15em' : '0.35em'}
+								text-anchor={left ? 'end' : 'start'}
+								class="fill-foreground text-[12px]"
+							>
 								<tspan font-weight="500">{box.node.label}</tspan>
 								{#if used !== null}
 									<tspan class="fill-muted-foreground"> · {Math.round(used * 100)}% used</tspan>
@@ -134,14 +175,14 @@
 								{/if}
 								{#if twoLines}
 									<tspan x={tx} dy="1.3em" class="fill-muted-foreground text-[11px]">
-										{box.node.source_name} · {bytes(box.value)} in{full && full !== 'not filling' ? ` · full in ${full}` : ''}
+										{box.node.source_name} · {bytes(box.value)} {left ? 'out' : 'in'}{full && full !== 'not filling' ? ` · full in ${full}` : ''}
 									</tspan>
 								{/if}
 							</text>
 							{#if state === 'critical'}
-								<CircleAlert x={box.x + SIZE.nodeWidth + 6} y={box.y + box.height / 2 - 7} width="14" height="14" color={healthColour(state)} />
+								<CircleAlert x={ix} y={box.y + box.height / 2 - 7} width="14" height="14" color={healthColour(state)} />
 							{:else if state === 'warning'}
-								<TriangleAlert x={box.x + SIZE.nodeWidth + 6} y={box.y + box.height / 2 - 7} width="14" height="14" color={healthColour(state)} />
+								<TriangleAlert x={ix} y={box.y + box.height / 2 - 7} width="14" height="14" color={healthColour(state)} />
 							{/if}
 						{/if}
 					</g>
@@ -167,7 +208,7 @@
 			primary collected?
 		</p>
 	{/if}
-	{#if idle.length > 0}
+	{#if idle.length > 0 && !flows.primary}
 		<p class="text-muted-foreground mt-2 text-xs">
 			Nothing written in this window: {idle.map((t) => `${t.name} (${t.source_name})`).join(', ')}
 		</p>

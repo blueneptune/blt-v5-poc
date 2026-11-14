@@ -827,7 +827,7 @@
           "storage"
         ],
         "summary": "Where NetBackup's data goes: backups and copies per pool",
-        "description": "For the Storage page's Sankey: what each NetBackup primary's\nbackups wrote into each disk pool, and what was copied from one\npool to another - duplicated on one primary, or replicated to\nanother (matched to that primary's import of the same image) -\nwith every pool's use and trend. Bytes as the jobs report them,\nbefore deduplication.",
+        "description": "For the Storage page's Sankey: what each NetBackup primary's\nbackups wrote into each disk pool, and what was copied from one\npool to another - duplicated on one primary, or replicated to\nanother (matched to that primary's import of the same image) -\nwith every pool's use and trend. Bytes as the jobs report them,\nbefore deduplication.\n\nWith `primary`, that primary's copies only, in three columns: the\npool each is read from, the SLP that made it, and the pool it\nlands in (on that primary or the one it replicates to).",
         "operationId": "get_flows_v1_storage_flows_get",
         "security": [
           {
@@ -848,6 +848,25 @@
               "title": "Days"
             },
             "description": "Jobs that ended in the last so many days."
+          },
+          {
+            "name": "primary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One NetBackup primary, drawn pool -> SLP -> pool; leave out for all.",
+              "title": "Primary"
+            },
+            "description": "One NetBackup primary, drawn pool -> SLP -> pool; leave out for all."
           }
         ],
         "responses": {
@@ -6200,10 +6219,11 @@
             "type": "integer",
             "enum": [
               0,
-              1
+              1,
+              2
             ],
             "title": "Column",
-            "description": "0: where data comes from; 1: where it lands."
+            "description": "0: where data comes from; the last column: where it lands; for one primary, 1 is the SLP between."
           },
           "label": {
             "type": "string",
@@ -6237,7 +6257,7 @@
           "source_name"
         ],
         "title": "FlowNode",
-        "description": "One end of a flow: where data comes from (column 0), or the pool or\nstorage unit it goes to (column 1)."
+        "description": "One end of a flow: where data comes from (column 0), or the pool or\nstorage unit it goes to (column 1). For one primary: the pool copies\nare read from (0), the SLP that made them (1), where they land (2)."
       },
       "FlowRunDetail": {
         "properties": {
@@ -11864,6 +11884,26 @@
       },
       "StorageFlows": {
         "properties": {
+          "primary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary",
+            "description": "The one primary shown, through its SLPs; none: all."
+          },
+          "primaries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Primaries",
+            "description": "The NetBackup primaries there are to pick from."
+          },
           "since": {
             "type": "string",
             "format": "date-time",
@@ -11908,6 +11948,7 @@
         },
         "type": "object",
         "required": [
+          "primaries",
           "since",
           "until",
           "nodes",

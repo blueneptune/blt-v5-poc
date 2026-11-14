@@ -8,6 +8,13 @@
 
 	const sum = $derived(totals(data.targets));
 	const groups = $derived(grouped(data.targets, data.by));
+	// The page's address with one thing changed, the others kept.
+	const at = (change: { by?: string; flow?: number; primary?: string | null }) => {
+		const q = new URLSearchParams({ by: change.by ?? data.by, flow: String(change.flow ?? data.days) });
+		const primary = change.primary === undefined ? data.primary : change.primary;
+		if (primary) q.set('primary', primary);
+		return `?${q}`;
+	};
 	const perDay = (n: number | undefined) =>
 		n === undefined ? '' : `${n < 0 ? '−' : '+'}${bytes(Math.abs(n))}/day`;
 </script>
@@ -43,14 +50,20 @@
 			<div>
 				<h2 id="flows-title" class="text-sm font-medium">Where NetBackup's data goes</h2>
 				<p class="text-muted-foreground text-xs">
-					Backups and copies that ended in the last {data.days === 1 ? 'day' : `${data.days} days`}, into each
-					disk pool. Sizes as the jobs report them, before deduplication.
+					{#if data.primary}
+						{data.primary}'s copies that ended in the last {data.days === 1 ? 'day' : `${data.days} days`}: the
+						pool each was read from, the SLP that made it, the pool it landed in. Sizes as the jobs report them,
+						before deduplication.
+					{:else}
+						Backups and copies that ended in the last {data.days === 1 ? 'day' : `${data.days} days`}, into each
+						disk pool. Sizes as the jobs report them, before deduplication.
+					{/if}
 				</p>
 			</div>
 			<div class="flex items-center gap-1 text-xs" role="group" aria-label="Window">
 				{#each data.windows as days (days)}
 					<a
-						href="?by={data.by}&flow={days}"
+						href={at({ flow: days })}
 						aria-current={data.days === days ? 'true' : undefined}
 						class="rounded-full border px-2.5 py-0.5 {data.days === days
 							? 'bg-accent text-accent-foreground font-medium'
@@ -59,6 +72,24 @@
 				{/each}
 			</div>
 		</div>
+		{#if data.flows.primaries.length > 0}
+			<div class="mt-3 flex flex-wrap items-center gap-1 text-xs" role="group" aria-label="Primary">
+				<span class="text-muted-foreground mr-1">Primary</span>
+				{#each [null, ...data.flows.primaries] as primary (primary ?? '')}
+					{@const on = (data.primary ?? null) === primary}
+					<a
+						href={at({ primary })}
+						aria-current={on ? 'true' : undefined}
+						class="rounded-full border px-2.5 py-0.5 {on
+							? 'bg-accent text-accent-foreground font-medium'
+							: 'text-muted-foreground hover:bg-accent'}">{primary ?? 'All'}</a
+					>
+				{/each}
+				{#if !data.primary}
+					<span class="text-muted-foreground ml-1">Pick one to follow its copies through each SLP.</span>
+				{/if}
+			</div>
+		{/if}
 		<div class="mt-3"><StorageFlows flows={data.flows} /></div>
 	</section>
 {/if}
@@ -67,7 +98,7 @@
 	<span class="text-muted-foreground">Group by</span>
 	{#each GROUPS as group (group)}
 		<a
-			href="?by={group}&flow={data.days}"
+			href={at({ by: group })}
 			aria-current={data.by === group ? 'true' : undefined}
 			class="rounded-full border px-3 py-1 {data.by === group
 				? 'bg-accent text-accent-foreground font-medium'

@@ -1,11 +1,12 @@
-/** A two-column Sankey, laid out by hand (no library): where NetBackup's
- * data comes from on the left, the pools it lands in on the right
+/** A Sankey of two or three columns, laid out by hand (no library): where
+ * NetBackup's data comes from on the left, the pools it lands in on the
+ * right - and for one primary, the SLP that made each copy between
  * (GET /v1/storage/flows, blt.api.storage_flows).
  *
  * A node is as tall as the larger of what flows in and out of it, every
  * node on one scale; each link is a band from its source to its target,
  * stacked within each node in the order of the nodes at its other end,
- * so bands cross as little as two columns allow. */
+ * so bands cross as little as the columns allow. */
 import type { components } from '$lib/api/schema';
 
 export type Flows = components['schemas']['StorageFlows'];
@@ -42,8 +43,8 @@ export interface Size {
 	nodeWidth: number;
 	/** Gap between nodes in a column. */
 	gap: number;
-	/** Where each column's nodes start, from the left. */
-	columns: [number, number];
+	/** Where each column's nodes start, from the left, by how many columns there are. */
+	columns: Record<2 | 3, number[]>;
 	/** The thinnest a node or band is drawn, so a small one stays visible. */
 	minimum: number;
 }
@@ -53,7 +54,7 @@ export const SIZE: Size = {
 	height: 420,
 	nodeWidth: 14,
 	gap: 14,
-	columns: [240, 560],
+	columns: { 2: [240, 560], 3: [230, 470, 710] },
 	minimum: 2
 };
 
@@ -72,13 +73,15 @@ export function layout(flows: Pick<Flows, 'nodes' | 'links'>, size: Size = SIZE)
 		inflow.set(link.target, (inflow.get(link.target) ?? 0) + link.bytes);
 	}
 	const used = flows.nodes.filter((n) => inflow.has(n.id) || outflow.has(n.id));
-	const columns: Box[][] = [0, 1].map((c) =>
+	const count = columnsOf(flows.nodes);
+	const xs = size.columns[count];
+	const columns: Box[][] = xs.map((x, c) =>
 		ordered(
 			used
 				.filter((n) => n.column === c)
 				.map((node) => ({
 					node,
-					x: size.columns[c as 0 | 1],
+					x,
 					y: 0,
 					height: 0,
 					value: Math.max(inflow.get(node.id) ?? 0, outflow.get(node.id) ?? 0)
@@ -86,7 +89,7 @@ export function layout(flows: Pick<Flows, 'nodes' | 'links'>, size: Size = SIZE)
 		)
 	);
 
-	// One scale for both columns: the fuller one fills the height.
+	// One scale for every column: the fullest fills the height.
 	const scale = Math.min(
 		...columns
 			.filter((c) => c.length > 0)
@@ -98,12 +101,31 @@ export function layout(flows: Pick<Flows, 'nodes' | 'links'>, size: Size = SIZE)
 	);
 	const k = Number.isFinite(scale) ? scale : 0;
 	let height = 0;
-	for (const column of columns) {
+	const placed = new Map<string, Box>();
+	for (const [c, column] of columns.entries()) {
+		// Through SLPs, a later column follows the one before it: each node
+		// at the mean height of what flows into it, so bands cross less.
+		if (count === 3 && c > 0) {
+			const mean = new Map<string, number>();
+			for (const box of column) {
+				let sum = 0;
+				let weight = 0;
+				for (const link of flows.links) {
+					const from = placed.get(link.source);
+					if (link.target !== box.node.id || !from) continue;
+					sum += (from.y + from.height / 2) * link.bytes;
+					weight += link.bytes;
+				}
+				mean.set(box.node.id, weight > 0 ? sum / weight : Infinity);
+			}
+			column.sort((a, b) => mean.get(a.node.id)! - mean.get(b.node.id)! || b.value - a.value);
+		}
 		let y = 0;
 		for (const box of column) {
 			box.y = y;
 			box.height = Math.max(box.value * k, size.minimum);
 			y += box.height + size.gap;
+			placed.set(box.node.id, box);
 		}
 		height = Math.max(height, y - size.gap);
 	}
@@ -142,6 +164,11 @@ export function layout(flows: Pick<Flows, 'nodes' | 'links'>, size: Size = SIZE)
 		return { link, path, width, source, target };
 	});
 	return { boxes: [...boxes.values()], bands, height };
+}
+
+/** How many columns a picture has: three when it goes through SLPs. */
+export function columnsOf(nodes: Pick<FlowNode, 'column'>[]): 2 | 3 {
+	return nodes.some((n) => n.column === 2) ? 3 : 2;
 }
 
 export const KIND_LABEL: Record<FlowKind, string> = {

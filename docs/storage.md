@@ -123,6 +123,16 @@ from where they came to the disk pool they landed in
   under the chart.
 - Pools nothing was written to in the window are listed under it.
 
+**One primary** (the **Primary** chips, `?primary=<name>`; the API's
+`primary`): that primary's copies only, in three columns - the pool each
+copy was read from, the **SLP** that made it, and the pool it landed in,
+on the same primary (duplication) or the one it replicates to. Pools are
+meters on both sides, so a nearly full source pool shows with the SLPs
+reading from it. A copy job's policy name is its SLP's name; a copy made
+by hand (bpduplicate) has none and goes through **Not from an SLP**.
+Backups are not in this view: pick **All** for them.
+`scripts/nbu-flows-check.sh` table 5 lists the SLPs it will draw.
+
 ## Next
 
 - NetBackup MSDP dedupe ratio (not in the disk pool answer), tape.

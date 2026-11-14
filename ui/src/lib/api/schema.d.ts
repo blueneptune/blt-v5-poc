@@ -148,6 +148,10 @@ export interface paths {
          *     another (matched to that primary's import of the same image) -
          *     with every pool's use and trend. Bytes as the jobs report them,
          *     before deduplication.
+         *
+         *     With `primary`, that primary's copies only, in three columns: the
+         *     pool each is read from, the SLP that made it, and the pool it
+         *     lands in (on that primary or the one it replicates to).
          */
         get: operations["get_flows_v1_storage_flows_get"];
         put?: never;
@@ -1708,7 +1712,8 @@ export interface components {
         /**
          * FlowNode
          * @description One end of a flow: where data comes from (column 0), or the pool or
-         *     storage unit it goes to (column 1).
+         *     storage unit it goes to (column 1). For one primary: the pool copies
+         *     are read from (0), the SLP that made them (1), where they land (2).
          */
         FlowNode: {
             /**
@@ -1718,10 +1723,10 @@ export interface components {
             id: string;
             /**
              * Column
-             * @description 0: where data comes from; 1: where it lands.
+             * @description 0: where data comes from; the last column: where it lands; for one primary, 1 is the SLP between.
              * @enum {integer}
              */
-            column: 0 | 1;
+            column: 0 | 1 | 2;
             /**
              * Label
              * @description What to call it.
@@ -4728,6 +4733,16 @@ export interface components {
          */
         StorageFlows: {
             /**
+             * Primary
+             * @description The one primary shown, through its SLPs; none: all.
+             */
+            primary?: string | null;
+            /**
+             * Primaries
+             * @description The NetBackup primaries there are to pick from.
+             */
+            primaries: string[];
+            /**
              * Since
              * Format: date-time
              * @description Jobs that ended from here...
@@ -5547,6 +5562,8 @@ export interface operations {
             query?: {
                 /** @description Jobs that ended in the last so many days. */
                 days?: number;
+                /** @description One NetBackup primary, drawn pool -> SLP -> pool; leave out for all. */
+                primary?: string | null;
             };
             header?: never;
             path?: never;

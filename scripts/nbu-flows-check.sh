@@ -5,9 +5,9 @@
 #   scripts/nbu-flows-check.sh [days]     (default 7)
 #
 # Run on the machine blt's pod runs on, as the user that runs it. Prints
-# four tables; scripts/README.md says how to read them. Paste the output
+# five tables; scripts/README.md says how to read them. Paste the output
 # back if something looks off - it holds job counts and storage unit
-# names, no credentials.
+# and SLP names, no credentials.
 set -euo pipefail
 DAYS="${1:-7}"
 if [[ ! "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
@@ -63,4 +63,12 @@ SELECT p.name AS primary_server, j.job_id, j.backup_id, j.source_storage_unit, j
 FROM netbackup.job j JOIN netbackup.primary_server p ON p.id = j.primary_id
 WHERE j.job_type = 'REPLICATE' AND j.end_time > now() - make_interval(days => :days)
 ORDER BY j.end_time DESC LIMIT 5;
+
+\echo '5. Copies per primary and SLP (a copy job names its SLP as its policy; none: made by hand)'
+SELECT p.name AS primary_server, coalesce(j.policy_name, '(none)') AS slp, j.job_type,
+       count(*) AS jobs, pg_size_pretty(sum(coalesce(j.kilobytes_transferred, 0)) * 1024) AS copied,
+       count(DISTINCT j.source_storage_unit) AS from_units
+FROM netbackup.job j JOIN netbackup.primary_server p ON p.id = j.primary_id
+WHERE j.job_type IN ('DUPLICATE', 'REPLICATE') AND j.end_time > now() - make_interval(days => :days)
+GROUP BY 1, 2, 3 ORDER BY 1, sum(coalesce(j.kilobytes_transferred, 0)) DESC LIMIT 40;
 SQL
