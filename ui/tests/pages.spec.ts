@@ -238,7 +238,7 @@ test('storage: totals, each target with how full it is', async ({ page }) => {
 test("storage: where NetBackup's data goes, and how full each pool is", async ({ page }) => {
 	await page.goto('/storage');
 	const flows = page.getByRole('region', { name: "Where NetBackup's data goes" });
-	await expect(flows.getByRole('img', { name: /2 flows into 1 pools/ })).toBeVisible();
+	await expect(flows.getByRole('group', { name: /2 flows into 1 pools/ })).toBeVisible();
 	await expect(flows.getByRole('list', { name: 'Legend' })).toContainText('Replicated to another primary');
 	await expect(flows.getByText(/msdp-a/).first()).toBeVisible();
 	await expect(flows.getByText('Nearly full').first()).toBeVisible();
@@ -246,6 +246,8 @@ test("storage: where NetBackup's data goes, and how full each pool is", async ({
 	await expect(flows.getByText(/Nothing written in this window: .*idle-pool/)).toBeVisible();
 	await flows.getByText('Show as a table').click();
 	await expect(flows.getByRole('row', { name: /Backups on nbu-a msdp-a Backups 12 TiB 40/ })).toBeVisible();
+	await flows.getByRole('button', { name: /^Copies from msdp-b → msdp-a/ }).click();
+	await expect(flows.getByText('1 path, 5.0 TiB')).toBeVisible();
 	await flows.getByRole('link', { name: '30 days' }).click();
 	await expect(page).toHaveURL(/flow=30/);
 });
@@ -256,11 +258,21 @@ test('storage: one primary, from pool through each SLP to pool', async ({ page }
 	await flows.getByRole('link', { name: 'nbu-a' }).click();
 	await expect(page).toHaveURL(/primary=nbu-a/);
 	await expect(page).toHaveURL(/flow=30/);
-	await expect(flows.getByRole('img', { name: /nbu-a's copies: from 1 pools through 2 SLPs into 2 pools/ })).toBeVisible();
+	await expect(flows.getByRole('group', { name: /nbu-a's copies: from 2 pools through 2 SLPs into 2 pools/ })).toBeVisible();
 	await expect(flows.getByText('SLP_Gold_DR').first()).toBeVisible();
+	// Click the band from msdp-a2: its one path lights, end to end.
+	await flows.getByRole('button', { name: /^msdp-a2 → SLP_Gold_DR/ }).click();
+	await expect(flows.getByText('1 path, 2.0 TiB')).toBeVisible();
+	await expect(flows.getByText('msdp-a2 → SLP_Gold_DR → msdp-b')).toBeVisible();
+	// The SLP: both pools feeding it.
+	await flows.getByRole('button', { name: /^SLP SLP_Gold_DR/ }).click();
+	await expect(flows.getByText('2 paths, 10 TiB')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(flows.getByText(/paths?, .* TiB/)).toHaveCount(0);
 	await flows.getByText('Show as a table').click();
-	await expect(flows.getByRole('row', { name: /msdp-a SLP_Gold_DR Replicated to another primary 8.0 TiB 30/ })).toBeVisible();
-	await expect(flows.getByRole('row', { name: /SLP_Gold_DR msdp-b Replicated to another primary 8.0 TiB 30/ })).toBeVisible();
+	await expect(flows.getByRole('row', { name: /msdp-a SLP_Gold_DR msdp-b Replicated to another primary 8.0 TiB 30/ })).toBeVisible();
+	await flows.getByRole('row', { name: /msdp-a SLP_Tape_Monthly/ }).getByRole('button', { name: 'Highlight' }).click();
+	await expect(flows.getByText('1 path, 3.0 TiB')).toBeVisible();
 	// The window keeps the primary; "All" goes back.
 	await flows.getByRole('link', { name: '7 days' }).click();
 	await expect(page).toHaveURL(/primary=nbu-a/);

@@ -4976,6 +4976,154 @@
         }
       }
     },
+    "/v1/sources/netbackup/{source_name}/slps": {
+      "post": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "Store every SLP of the primary",
+        "description": "The primary's storage lifecycle policies, all of them: each is\nstored as sent, and SLPs not in the batch are removed. A batch\nolder than what is stored is left alone.",
+        "operationId": "replace_slps_v1_sources_netbackup__source_name__slps_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetBackupSlpBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "List the primary's SLPs",
+        "description": "Its storage lifecycle policies as last collected, by name.",
+        "operationId": "list_slps_v1_sources_netbackup__source_name__slps_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NetBackupSlpOut"
+                  },
+                  "title": "Response List Slps V1 Sources Netbackup  Source Name  Slps Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown primary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/netbackup/{source_name}/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -6258,6 +6406,47 @@
         ],
         "title": "FlowNode",
         "description": "One end of a flow: where data comes from (column 0), or the pool or\nstorage unit it goes to (column 1). For one primary: the pool copies\nare read from (0), the SLP that made them (1), where they land (2)."
+      },
+      "FlowPath": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Nodes",
+            "description": "The nodes it goes through, left to right."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "backup",
+              "duplicate",
+              "replicate"
+            ],
+            "title": "Kind",
+            "description": "backup, duplicate (same primary) or replicate (AIR)."
+          },
+          "bytes": {
+            "type": "integer",
+            "title": "Bytes",
+            "description": "What the jobs wrote, before deduplication."
+          },
+          "jobs": {
+            "type": "integer",
+            "title": "Jobs",
+            "description": "How many jobs."
+          }
+        },
+        "type": "object",
+        "required": [
+          "nodes",
+          "kind",
+          "bytes",
+          "jobs"
+        ],
+        "title": "FlowPath",
+        "description": "One way data went, end to end: for one primary pool -> SLP -> pool,\notherwise one link. What clicking a band or a pool highlights."
       },
       "FlowRunDetail": {
         "properties": {
@@ -8510,6 +8699,233 @@
             "started_at": "2026-11-08T14:02:00Z"
           }
         ]
+      },
+      "NetBackupSlpBatch": {
+        "properties": {
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When the SLPs were read."
+          },
+          "slps": {
+            "items": {
+              "$ref": "#/components/schemas/NetBackupSlpIn"
+            },
+            "type": "array",
+            "title": "Slps",
+            "description": "Every SLP on the primary."
+          }
+        },
+        "type": "object",
+        "required": [
+          "collected_at",
+          "slps"
+        ],
+        "title": "NetBackupSlpBatch",
+        "description": "Every SLP of one primary, collected in one go: SLPs not in it are\nremoved.",
+        "examples": [
+          {
+            "collected_at": "2026-11-14T10:00:00Z",
+            "slps": [
+              {
+                "active": true,
+                "name": "slp-gold",
+                "operations": [
+                  {
+                    "index": 1,
+                    "storage": "msdp-stu-01",
+                    "type": "BACKUP"
+                  },
+                  {
+                    "index": 2,
+                    "source_index": 1,
+                    "storage": "tape-stu",
+                    "type": "DUPLICATION"
+                  },
+                  {
+                    "index": 3,
+                    "source_index": 1,
+                    "target_import_slp": "slp-import",
+                    "target_primary": "nbu-dr.example.com",
+                    "type": "REPLICATE_TO_REMOTE_MASTER"
+                  }
+                ],
+                "version": 3
+              }
+            ]
+          }
+        ]
+      },
+      "NetBackupSlpIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The SLP's name."
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Its versionNumber."
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active",
+            "description": "Whether it is active."
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/NetBackupSlpOperation"
+            },
+            "type": "array",
+            "title": "Operations",
+            "description": "Its steps, in order."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "NetBackupSlpIn",
+        "description": "One SLP as collected from GET /config/slps."
+      },
+      "NetBackupSlpOperation": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index",
+            "description": "Its operationIndex: the order the steps run in, from 1."
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "BACKUP, DUPLICATION, REPLICATION, REPLICATE_TO_REMOTE_MASTER, IMPORT, ..."
+          },
+          "storage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage",
+            "description": "The storage unit (or storage unit group) it writes to; none for a replication to another primary."
+          },
+          "source_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Index",
+            "description": "The step whose copy it reads (sourceOperationIndex)."
+          },
+          "target_primary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Primary",
+            "description": "For a replication: the primary it replicates to."
+          },
+          "target_import_slp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Import Slp",
+            "description": "For a replication: the SLP that imports it there."
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "type"
+        ],
+        "title": "NetBackupSlpOperation",
+        "description": "One step of a storage lifecycle policy (SLP)."
+      },
+      "NetBackupSlpOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The SLP's name."
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "Its versionNumber."
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active",
+            "description": "Whether it is active."
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/NetBackupSlpOperation"
+            },
+            "type": "array",
+            "title": "Operations",
+            "description": "Its steps, in order."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When it was last read."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "collected_at"
+        ],
+        "title": "NetBackupSlpOut",
+        "description": "One SLP as blt holds it."
       },
       "ObjectBatch": {
         "properties": {
@@ -11932,6 +12348,14 @@
             "title": "Links",
             "description": "How much went from each to each."
           },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/FlowPath"
+            },
+            "type": "array",
+            "title": "Paths",
+            "description": "Each way data went, end to end."
+          },
           "targets": {
             "items": {
               "$ref": "#/components/schemas/StorageOut"
@@ -11944,6 +12368,11 @@
             "type": "integer",
             "title": "Unmatched Replications",
             "description": "Replication jobs whose import on the other primary is not collected (yet): drawn to the storage unit the job names."
+          },
+          "unknown_sources": {
+            "type": "integer",
+            "title": "Unknown Sources",
+            "description": "Copy jobs whose source neither the job, its SLP nor its backup job tells."
           }
         },
         "type": "object",
@@ -11953,8 +12382,10 @@
           "until",
           "nodes",
           "links",
+          "paths",
           "targets",
-          "unmatched_replications"
+          "unmatched_replications",
+          "unknown_sources"
         ],
         "title": "StorageFlows",
         "description": "Where NetBackup's data went in the window, and every pool's use."

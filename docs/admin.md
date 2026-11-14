@@ -159,8 +159,8 @@ account for blt rather than using a person's:
    on the primary, or an AD account - named for what it does (e.g.
    `blt_r`).
 2. A role for it in the web UI (Security -> RBAC) that may only read:
-   storage (disk pools, storage units, storage servers), the catalog
-   (images, SLP images) and jobs.
+   storage (disk pools, storage units, storage servers, storage lifecycle
+   policies), the catalog (images, SLP images) and jobs.
 3. An API key for that user (Security -> API keys -> Add, choosing the
    user), with an expiry you will remember to renew.
 

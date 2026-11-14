@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIZE, layout, type FlowLink, type FlowNode } from './sankey';
+import { SIZE, carried, chosen, edgeKey, layout, type FlowLink, type FlowNode, type FlowPath } from './sankey';
 
 const node = (id: string, column: 0 | 1 | 2, source_name = 'a'): FlowNode => ({
 	id,
@@ -80,5 +80,27 @@ describe('the Sankey layout', () => {
 
 	it('draws nothing for no flows', () => {
 		expect(layout({ nodes: [node('x', 0)], links: [] })).toEqual({ boxes: [], bands: [], height: 0 });
+	});
+});
+
+describe('clicking a path', () => {
+	// Two pools feed one SLP; it sends to two pools.
+	const path = (nodes: string[], bytes: number): FlowPath => ({ nodes, kind: 'duplicate', bytes, jobs: 1 });
+	const paths = [path(['a', 'slp', 'x'], 30), path(['b', 'slp', 'x'], 10), path(['b', 'slp', 'y'], 5)];
+	const edge = (source: string, target: string) => edgeKey({ source, target, kind: 'duplicate' });
+
+	it('a band picks the paths through it, and only their share of the next band lights', () => {
+		const picked = chosen(paths, { edge: edge('a', 'slp') });
+		expect(picked).toEqual([paths[0]]);
+		const lit = carried(picked);
+		expect(lit.get(edge('slp', 'x'))).toBe(30); // of the 40 that band carries
+		expect(lit.has(edge('slp', 'y'))).toBe(false);
+	});
+
+	it('a node picks every path through it; a row, its one path', () => {
+		expect(chosen(paths, { node: 'b' })).toHaveLength(2);
+		expect(chosen(paths, { node: 'slp' })).toHaveLength(3);
+		expect(chosen(paths, { path: 2 })).toEqual([paths[2]]);
+		expect(chosen(paths, null)).toEqual([]);
 	});
 });

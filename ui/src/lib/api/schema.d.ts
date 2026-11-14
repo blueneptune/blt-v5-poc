@@ -1051,6 +1051,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sources/netbackup/{source_name}/slps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the primary's SLPs
+         * @description Its storage lifecycle policies as last collected, by name.
+         */
+        get: operations["list_slps_v1_sources_netbackup__source_name__slps_get"];
+        put?: never;
+        /**
+         * Store every SLP of the primary
+         * @description The primary's storage lifecycle policies, all of them: each is
+         *     stored as sent, and SLPs not in the batch are removed. A batch
+         *     older than what is stored is left alone.
+         */
+        post: operations["replace_slps_v1_sources_netbackup__source_name__slps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sources/netbackup/{source_name}/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -1742,6 +1768,34 @@ export interface components {
              * @description The storage target (`targets`), when it is a known pool.
              */
             storage_id?: string | null;
+        };
+        /**
+         * FlowPath
+         * @description One way data went, end to end: for one primary pool -> SLP -> pool,
+         *     otherwise one link. What clicking a band or a pool highlights.
+         */
+        FlowPath: {
+            /**
+             * Nodes
+             * @description The nodes it goes through, left to right.
+             */
+            nodes: string[];
+            /**
+             * Kind
+             * @description backup, duplicate (same primary) or replicate (AIR).
+             * @enum {string}
+             */
+            kind: "backup" | "duplicate" | "replicate";
+            /**
+             * Bytes
+             * @description What the jobs wrote, before deduplication.
+             */
+            bytes: number;
+            /**
+             * Jobs
+             * @description How many jobs.
+             */
+            jobs: number;
         };
         /**
          * FlowRunDetail
@@ -2928,6 +2982,148 @@ export interface components {
              * @description How far before `started_at` it looked for changes.
              */
             lookup_seconds: number;
+        };
+        /**
+         * NetBackupSlpBatch
+         * @description Every SLP of one primary, collected in one go: SLPs not in it are
+         *     removed.
+         * @example {
+         *       "collected_at": "2026-11-14T10:00:00Z",
+         *       "slps": [
+         *         {
+         *           "active": true,
+         *           "name": "slp-gold",
+         *           "operations": [
+         *             {
+         *               "index": 1,
+         *               "storage": "msdp-stu-01",
+         *               "type": "BACKUP"
+         *             },
+         *             {
+         *               "index": 2,
+         *               "source_index": 1,
+         *               "storage": "tape-stu",
+         *               "type": "DUPLICATION"
+         *             },
+         *             {
+         *               "index": 3,
+         *               "source_index": 1,
+         *               "target_import_slp": "slp-import",
+         *               "target_primary": "nbu-dr.example.com",
+         *               "type": "REPLICATE_TO_REMOTE_MASTER"
+         *             }
+         *           ],
+         *           "version": 3
+         *         }
+         *       ]
+         *     }
+         */
+        NetBackupSlpBatch: {
+            /**
+             * Collected At
+             * Format: date-time
+             * @description When the SLPs were read.
+             */
+            collected_at: string;
+            /**
+             * Slps
+             * @description Every SLP on the primary.
+             */
+            slps: components["schemas"]["NetBackupSlpIn"][];
+        };
+        /**
+         * NetBackupSlpIn
+         * @description One SLP as collected from GET /config/slps.
+         */
+        NetBackupSlpIn: {
+            /**
+             * Name
+             * @description The SLP's name.
+             */
+            name: string;
+            /**
+             * Version
+             * @description Its versionNumber.
+             */
+            version?: number | null;
+            /**
+             * Active
+             * @description Whether it is active.
+             */
+            active?: boolean | null;
+            /**
+             * Operations
+             * @description Its steps, in order.
+             */
+            operations?: components["schemas"]["NetBackupSlpOperation"][];
+        };
+        /**
+         * NetBackupSlpOperation
+         * @description One step of a storage lifecycle policy (SLP).
+         */
+        NetBackupSlpOperation: {
+            /**
+             * Index
+             * @description Its operationIndex: the order the steps run in, from 1.
+             */
+            index: number;
+            /**
+             * Type
+             * @description BACKUP, DUPLICATION, REPLICATION, REPLICATE_TO_REMOTE_MASTER, IMPORT, ...
+             */
+            type: string;
+            /**
+             * Storage
+             * @description The storage unit (or storage unit group) it writes to; none for a replication to another primary.
+             */
+            storage?: string | null;
+            /**
+             * Source Index
+             * @description The step whose copy it reads (sourceOperationIndex).
+             */
+            source_index?: number | null;
+            /**
+             * Target Primary
+             * @description For a replication: the primary it replicates to.
+             */
+            target_primary?: string | null;
+            /**
+             * Target Import Slp
+             * @description For a replication: the SLP that imports it there.
+             */
+            target_import_slp?: string | null;
+        };
+        /**
+         * NetBackupSlpOut
+         * @description One SLP as blt holds it.
+         */
+        NetBackupSlpOut: {
+            /**
+             * Name
+             * @description The SLP's name.
+             */
+            name: string;
+            /**
+             * Version
+             * @description Its versionNumber.
+             */
+            version?: number | null;
+            /**
+             * Active
+             * @description Whether it is active.
+             */
+            active?: boolean | null;
+            /**
+             * Operations
+             * @description Its steps, in order.
+             */
+            operations?: components["schemas"]["NetBackupSlpOperation"][];
+            /**
+             * Collected At
+             * Format: date-time
+             * @description When it was last read.
+             */
+            collected_at: string;
         };
         /**
          * ObjectBatch
@@ -4765,6 +4961,11 @@ export interface components {
              */
             links: components["schemas"]["FlowLink"][];
             /**
+             * Paths
+             * @description Each way data went, end to end.
+             */
+            paths: components["schemas"]["FlowPath"][];
+            /**
              * Targets
              * @description Every NetBackup pool, with its use and trend - also those nothing wrote to in the window.
              */
@@ -4774,6 +4975,11 @@ export interface components {
              * @description Replication jobs whose import on the other primary is not collected (yet): drawn to the storage unit the job names.
              */
             unmatched_replications: number;
+            /**
+             * Unknown Sources
+             * @description Copy jobs whose source neither the job, its SLP nor its backup job tells.
+             */
+            unknown_sources: number;
         };
         /**
          * StorageIn
@@ -7946,6 +8152,101 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["NetBackupJobBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsertResult"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_slps_v1_sources_netbackup__source_name__slps_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetBackupSlpOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown primary */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_slps_v1_sources_netbackup__source_name__slps_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetBackupSlpBatch"];
             };
         };
         responses: {

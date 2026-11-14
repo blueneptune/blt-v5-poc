@@ -8,9 +8,29 @@
 	// For one primary (flows.primary): three columns - the pools its copies
 	// are read from, the SLP that made each, the pools they land in - with
 	// pools as meters on both sides.
+	//
+	// Click a band, a pool or an SLP (or press Enter on it) to light the
+	// paths through it, end to end, and only their share of each band;
+	// click it again, the background, or press Escape to clear.
 	import { CircleAlert, TriangleAlert } from '@lucide/svelte';
 	import { bytes } from '$lib/format';
-	import { KIND_COLOUR, KIND_LABEL, SIZE, columnsOf, layout, type Band, type Box, type FlowKind, type Flows } from '$lib/sankey';
+	import {
+		KIND_COLOUR,
+		KIND_LABEL,
+		SIZE,
+		bandPath,
+		carried,
+		chosen,
+		columnsOf,
+		edgeKey,
+		layout,
+		type Band,
+		type Box,
+		type Choice,
+		type FlowKind,
+		type FlowPath,
+		type Flows
+	} from '$lib/sankey';
 	import { HEALTH_LABEL, fullIn, health, healthColour, usedFraction, type Target } from '$lib/storage';
 
 	let { flows }: { flows: Flows } = $props();
@@ -35,6 +55,28 @@
 
 	let hover: { x: number; y: number; lines: string[] } | null = $state(null);
 	let active: Band | null = $state(null);
+
+	let choice: Choice | null = $state(null);
+	// Another window or primary: nothing chosen.
+	$effect(() => {
+		void flows;
+		choice = null;
+	});
+	const picked = $derived(chosen(flows.paths, choice));
+	const lit = $derived(carried(picked));
+	const litNodes = $derived(new Set(picked.flatMap((p) => p.nodes)));
+	const same = (a: Choice | null, b: Choice) => JSON.stringify(a) === JSON.stringify(b);
+	function choose(next: Choice) {
+		choice = same(choice, next) ? null : next;
+	}
+	function onKey(event: KeyboardEvent, next: Choice) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			choose(next);
+		}
+	}
+	const pathLabel = (p: FlowPath) => p.nodes.map((n) => names.get(n) ?? n).join(' → ');
+	const pickedBytes = $derived(picked.reduce((sum, p) => sum + p.bytes, 0));
 
 	function at(event: MouseEvent, lines: string[]) {
 		const svg = (event.currentTarget as SVGElement).ownerSVGElement ?? (event.currentTarget as SVGSVGElement);
@@ -64,6 +106,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (choice = null)} />
+
 {#if drawn.boxes.length === 0}
 	<p class="text-muted-foreground text-sm">
 		{flows.primary
@@ -78,14 +122,16 @@
 				{KIND_LABEL[kind]}
 			</li>
 		{/each}
-		<li class="text-muted-foreground">Pools: the bar fills as the pool does.</li>
+		<li class="text-muted-foreground">Pools: the bar fills as the pool does. Click a band or a pool to follow it.</li>
 	</ul>
 
 	<div class="relative mt-3 overflow-x-auto">
+		<!-- A click on the background clears; for the keyboard, Escape and Clear do. -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_click_events_have_key_events -->
 		<svg
 			viewBox="0 0 {SIZE.width} {H}"
 			class="block w-full min-w-[720px]"
-			role="img"
+			role="group"
 			aria-label="{three
 				? `${flows.primary}'s copies: from ${inColumn(0)} pools through ${inColumn(1)} SLPs into ${inColumn(2)} pools`
 				: `Where NetBackup's data went: ${flows.links.length} flows into ${inColumn(1)} pools`}. The table below has the same figures."
@@ -93,29 +139,60 @@
 				hover = null;
 				active = null;
 			}}
+			onclick={(e) => {
+				if (e.target === e.currentTarget) choice = null;
+			}}
 		>
 			<g transform="translate(0 {TOP})">
 				{#each drawn.bands as band (band.link.source + band.link.target + band.link.kind)}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					{@const key = edgeKey(band.link)}
 					<path
 						d={band.path}
 						fill={KIND_COLOUR[band.link.kind]}
-						fill-opacity={active === null ? 0.4 : active === band ? 0.75 : 0.15}
+						fill-opacity={choice ? 0.12 : active === null ? 0.4 : active === band ? 0.75 : 0.15}
 						stroke="var(--card)"
 						stroke-width="1"
+						class="cursor-pointer outline-none"
+						role="button"
+						tabindex="0"
+						aria-label="{bandLines(band).join(': ')}"
+						aria-pressed={same(choice, { edge: key })}
+						onclick={() => choose({ edge: key })}
+						onkeydown={(e) => onKey(e, { edge: key })}
 						onmousemove={(e) => {
 							active = band;
 							at(e, bandLines(band));
 						}}
 					/>
 				{/each}
+				{#if choice}
+					<!-- The chosen paths' share of each band, from its top edge. -->
+					{#each drawn.bands as band (band.link.source + band.link.target + band.link.kind)}
+						{@const share = lit.get(edgeKey(band.link)) ?? 0}
+						{#if share > 0}
+							<path
+								d={bandPath(band.x0, band.sy, band.x1, band.ty, Math.max((band.width * share) / band.link.bytes, SIZE.minimum))}
+								fill={KIND_COLOUR[band.link.kind]}
+								fill-opacity="0.85"
+								pointer-events="none"
+							/>
+						{/if}
+					{/each}
+				{/if}
 
 				{#each drawn.boxes as box (box.node.id)}
 					{@const t = target(box)}
 					{@const used = t ? usedFraction(t) : null}
 					{@const state = t ? health(t) : 'unknown'}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<g
+						class="cursor-pointer outline-none"
+						role="button"
+						tabindex="0"
+						aria-label={boxLines(box).join('; ')}
+						aria-pressed={same(choice, { node: box.node.id })}
+						opacity={choice && !litNodes.has(box.node.id) ? 0.35 : 1}
+						onclick={() => choose({ node: box.node.id })}
+						onkeydown={(e) => onKey(e, { node: box.node.id })}
 						onmousemove={(e) => {
 							active = null;
 							at(e, boxLines(box));
@@ -208,6 +285,37 @@
 			primary collected?
 		</p>
 	{/if}
+	{#if choice}
+		<div class="bg-muted/40 mt-2 rounded-md border px-3 py-2 text-xs" aria-live="polite">
+			<div class="flex items-baseline justify-between gap-2">
+				<p class="font-medium">
+					{picked.length} path{picked.length === 1 ? '' : 's'}, {bytes(pickedBytes)}
+				</p>
+				<button type="button" class="text-muted-foreground hover:text-foreground underline" onclick={() => (choice = null)}>
+					Clear
+				</button>
+			</div>
+			<ul class="mt-1 space-y-0.5">
+				{#each picked.slice(0, 8) as p (p.nodes.join() + p.kind)}
+					<li class="flex flex-wrap items-baseline gap-x-2">
+						<span class="inline-block h-2 w-3 rounded-sm" style="background: {KIND_COLOUR[p.kind]}"></span>
+						<span>{pathLabel(p)}</span>
+						<span class="text-muted-foreground tabular-nums">{bytes(p.bytes)} in {p.jobs} job{p.jobs === 1 ? '' : 's'}</span>
+					</li>
+				{/each}
+			</ul>
+			{#if picked.length > 8}
+				<p class="text-muted-foreground mt-1">and {picked.length - 8} more - in the table below.</p>
+			{/if}
+		</div>
+	{/if}
+	{#if flows.unknown_sources > 0}
+		<p class="text-muted-foreground mt-2 text-xs">
+			{flows.unknown_sources} copy job{flows.unknown_sources === 1 ? '' : 's'} named no source storage, and
+			neither its SLP nor its backup job told where it read from: drawn from "unknown". Are the primary's SLPs
+			collected (blt-netbackup check)?
+		</p>
+	{/if}
 	{#if idle.length > 0 && !flows.primary}
 		<p class="text-muted-foreground mt-2 text-xs">
 			Nothing written in this window: {idle.map((t) => `${t.name} (${t.source_name})`).join(', ')}
@@ -221,20 +329,32 @@
 				<thead class="bg-muted/60 text-muted-foreground text-left text-xs">
 					<tr>
 						<th class="px-3 py-2 font-medium">From</th>
+						{#if three}<th class="px-3 py-2 font-medium">SLP</th>{/if}
 						<th class="px-3 py-2 font-medium">To</th>
 						<th class="px-3 py-2 font-medium">How</th>
 						<th class="px-3 py-2 text-right font-medium">Data</th>
 						<th class="px-3 py-2 text-right font-medium">Jobs</th>
+						<th class="px-3 py-2"><span class="sr-only">Highlight</span></th>
 					</tr>
 				</thead>
 				<tbody class="striped">
-					{#each [...flows.links].sort((a, b) => b.bytes - a.bytes) as link (link.source + link.target + link.kind)}
-						<tr class="border-t">
-							<td class="px-3 py-2">{names.get(link.source) ?? link.source}</td>
-							<td class="px-3 py-2">{names.get(link.target) ?? link.target}</td>
-							<td class="px-3 py-2">{KIND_LABEL[link.kind]}</td>
-							<td class="px-3 py-2 text-right tabular-nums">{bytes(link.bytes)}</td>
-							<td class="px-3 py-2 text-right tabular-nums">{link.jobs}</td>
+					<!-- Each way end to end (flows.paths: biggest first). -->
+					{#each flows.paths as p, i (p.nodes.join() + p.kind)}
+						<tr class="border-t {same(choice, { path: i }) ? 'bg-accent' : ''}">
+							{#each p.nodes as n (n)}
+								<td class="px-3 py-2">{names.get(n) ?? n}</td>
+							{/each}
+							<td class="px-3 py-2">{KIND_LABEL[p.kind]}</td>
+							<td class="px-3 py-2 text-right tabular-nums">{bytes(p.bytes)}</td>
+							<td class="px-3 py-2 text-right tabular-nums">{p.jobs}</td>
+							<td class="px-3 py-2 text-right">
+								<button
+									type="button"
+									class="text-muted-foreground hover:text-foreground text-xs underline"
+									aria-pressed={same(choice, { path: i })}
+									onclick={() => choose({ path: i })}>Highlight</button
+								>
+							</td>
 						</tr>
 					{/each}
 				</tbody>

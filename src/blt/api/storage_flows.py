@@ -20,6 +20,13 @@ found from that primary's import of the same image (same backup id). A
 replication with no import collected yet is counted as unmatched and
 drawn to the storage unit it names.
 
+Where a copy read from: the storage unit the job names, if it names one
+(many NetBackup versions leave it out); else its SLP's definition - the
+step writing to where the copy went, and the step that one copies from
+(collected with storage, netbackup.slp); else where the original backup
+of the same image (same backup id) was written. Copies still not placed
+are counted (`unknown_sources`) and drawn from "unknown".
+
 For one primary (`primary`), three columns instead: the pools copies
 are read from on that primary, the storage lifecycle policy (SLP) that
 made each copy, and the pools the copies land in - on the same primary
@@ -31,7 +38,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from sqlalchemy import RowMapping, text
@@ -75,6 +82,16 @@ class FlowLink(BaseModel):
     jobs: int = Field(description="How many jobs.")
 
 
+class FlowPath(BaseModel):
+    """One way data went, end to end: for one primary pool -> SLP -> pool,
+    otherwise one link. What clicking a band or a pool highlights."""
+
+    nodes: list[str] = Field(description="The nodes it goes through, left to right.")
+    kind: FlowKind = Field(description="backup, duplicate (same primary) or replicate (AIR).")
+    bytes: int = Field(description="What the jobs wrote, before deduplication.")
+    jobs: int = Field(description="How many jobs.")
+
+
 class StorageFlows(BaseModel):
     """Where NetBackup's data went in the window, and every pool's use."""
 
@@ -86,6 +103,7 @@ class StorageFlows(BaseModel):
     until: datetime = Field(description="...to here.")
     nodes: list[FlowNode] = Field(description="Where data came from and where it landed.")
     links: list[FlowLink] = Field(description="How much went from each to each.")
+    paths: list[FlowPath] = Field(description="Each way data went, end to end.")
     targets: list[StorageOut] = Field(
         description="Every NetBackup pool, with its use and trend - also those nothing "
         "wrote to in the window."
@@ -93,6 +111,9 @@ class StorageFlows(BaseModel):
     unmatched_replications: int = Field(
         description="Replication jobs whose import on the other primary is not collected "
         "(yet): drawn to the storage unit the job names."
+    )
+    unknown_sources: int = Field(
+        description="Copy jobs whose source neither the job, its SLP nor its backup job tells."
     )
 
 
@@ -125,6 +146,7 @@ _COPIES = text(
     SELECT p.name AS primary_name, j.job_type, j.policy_name,
            j.source_storage_unit, j.storage_unit,
            imp.primary_name AS to_primary, imp.storage_unit AS to_storage_unit,
+           bk.storage_unit AS backup_storage_unit,
            sum(j.kilobytes_transferred)::bigint AS kb, count(*) AS jobs
     FROM netbackup.job j
     JOIN netbackup.primary_server p ON p.id = j.primary_id
@@ -137,18 +159,56 @@ _COPIES = text(
         ORDER BY i.end_time DESC NULLS LAST
         LIMIT 1
     ) imp ON true
+    LEFT JOIN LATERAL (
+        -- Where the image was first written: the backup with its backup id.
+        SELECT b.storage_unit
+        FROM netbackup.job b
+        WHERE j.source_storage_unit IS NULL AND b.primary_id = j.primary_id
+          AND b.backup_id = j.backup_id AND b.job_type = ANY(:backups)
+          AND b.storage_unit IS NOT NULL
+        ORDER BY b.end_time DESC NULLS LAST
+        LIMIT 1
+    ) bk ON true
     WHERE j.job_type IN ('DUPLICATE', 'REPLICATE') AND j.state = 'DONE'
       AND j.status = ANY(:good)
       AND j.start_time >= :since - interval '7 days'
       AND j.end_time >= :since AND j.end_time < :until
       AND coalesce(j.kilobytes_transferred, 0) > 0
       AND (CAST(:primary AS text) IS NULL OR p.name = :primary)
-    GROUP BY 1, 2, 3, 4, 5, 6, 7
+    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
     """
 )
 
 
+_SLPS = text(
+    """
+    SELECT p.name AS primary_name, s.name, s.operations
+    FROM netbackup.slp s JOIN netbackup.primary_server p ON p.id = s.primary_id
+    """
+)
+
 NO_SLP = "Not from an SLP"
+DUPLICATIONS = {"DUPLICATION"}
+REPLICATIONS = {"REPLICATION", "REPLICATE_TO_REMOTE_MASTER"}
+
+
+def slp_source(operations: list[dict[str, Any]], job_type: str, wrote_to: str | None) -> str | None:
+    """Where an SLP's copy read from: the storage of the step that the
+    copying step copies from. For a duplication, the copying step is the
+    one writing to where the job wrote; a replication writes to another
+    primary, so any replication step. None when the steps disagree."""
+    by_index = {o.get("index"): o for o in operations}
+    steps = [
+        o
+        for o in operations
+        if o.get("type") in (DUPLICATIONS if job_type == "DUPLICATE" else REPLICATIONS)
+    ]
+    if job_type == "DUPLICATE" and wrote_to:
+        steps = [o for o in steps if o.get("storage") == wrote_to] or steps
+    sources = {(by_index.get(o.get("source_index") or 1) or {}).get("storage") for o in steps} - {
+        None
+    }
+    return str(sources.pop()) if len(sources) == 1 else None
 
 
 def storage_flows(
@@ -173,6 +233,11 @@ def storage_flows(
 
     nodes: dict[str, FlowNode] = {}
     links: dict[tuple[str, str, str], list[int]] = {}
+    paths: dict[tuple[tuple[str, ...], str], list[int]] = {}
+    slps = {
+        (row["primary_name"], row["name"]): row["operations"] or []
+        for row in session.execute(_SLPS).mappings()
+    }
 
     primaries = sorted({source.name for _, source in rows})
     one = primary is not None
@@ -217,6 +282,13 @@ def storage_flows(
         total[0] += kb * 1024
         total[1] += jobs
 
+    def went(through: tuple[str, ...], kind: str, kb: int, jobs: int) -> None:
+        for source, target in zip(through, through[1:], strict=False):
+            add(source, target, kind, kb, jobs)
+        total = paths.setdefault((through, kind), [0, 0])
+        total[0] += kb * 1024
+        total[1] += jobs
+
     params = {"since": since, "until": until, "good": list(GOOD)}
     # One primary's picture is its copies only: pool -> SLP -> pool.
     backups: list[RowMapping] = []
@@ -224,26 +296,35 @@ def storage_flows(
         backups = list(session.execute(_BACKUPS, {**params, "types": BACKUP_TYPES}).mappings())
     for row in backups:
         on = row["primary_name"]
-        add(
-            origin(f"backups:{on}", f"Backups on {on}", on),
-            landing(on, row["storage_unit"]),
+        went(
+            (origin(f"backups:{on}", f"Backups on {on}", on), landing(on, row["storage_unit"])),
             "backup",
             row["kb"],
             row["jobs"],
         )
 
     unmatched = 0
-    copies = {**params, "imports": IMPORT_TYPES, "primary": primary}
+    unknown = 0
+    copies = {**params, "imports": IMPORT_TYPES, "backups": BACKUP_TYPES, "primary": primary}
     for row in session.execute(_COPIES, copies).mappings():
         on = row["primary_name"]
+        read_from = (
+            row["source_storage_unit"]
+            or slp_source(
+                slps.get((on, row["policy_name"] or ""), []), row["job_type"], row["storage_unit"]
+            )
+            or row["backup_storage_unit"]
+        )
+        if read_from is None:
+            unknown += row["jobs"]
         if one:
-            source = landing(on, row["source_storage_unit"], column=0)
+            source = landing(on, read_from, column=0)
         else:
-            from_pool = pool_of.get((on, row["source_storage_unit"] or ""))
+            from_pool = pool_of.get((on, read_from or ""))
             if from_pool is not None:
                 source = origin(f"copies:{from_pool.id}", f"Copies from {from_pool.name}", on)
             else:
-                unit = row["source_storage_unit"] or "unknown"
+                unit = read_from or "unknown"
                 source = origin(f"copies:{on}:{unit}", f"Copies from {unit}", on)
         if row["job_type"] == "DUPLICATE":
             to, kind = landing(on, row["storage_unit"]), "duplicate"
@@ -257,10 +338,9 @@ def storage_flows(
             slp = row["policy_name"] or NO_SLP
             through = f"slp:{slp}"
             nodes.setdefault(through, FlowNode(id=through, column=1, label=slp, source_name=on))
-            add(source, through, kind, row["kb"], row["jobs"])
-            add(through, to, kind, row["kb"], row["jobs"])
+            went((source, through, to), kind, row["kb"], row["jobs"])
         else:
-            add(source, to, kind, row["kb"], row["jobs"])
+            went((source, to), kind, row["kb"], row["jobs"])
 
     return StorageFlows(
         primary=primary,
@@ -272,6 +352,11 @@ def storage_flows(
             FlowLink(source=s, target=t, kind=k, bytes=b, jobs=n)  # type: ignore[arg-type]
             for (s, t, k), (b, n) in sorted(links.items())
         ],
+        paths=[
+            FlowPath(nodes=list(n), kind=k, bytes=b, jobs=j)  # type: ignore[arg-type]
+            for (n, k), (b, j) in sorted(paths.items(), key=lambda item: -item[1][0])
+        ],
         targets=targets,
         unmatched_replications=unmatched,
+        unknown_sources=unknown,
     )
