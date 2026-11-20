@@ -310,7 +310,10 @@ class RunOut(BaseModel):
     error: str | None = Field(default=None, description="Why a failed run failed.")
 
 
-ObjectKind = Literal["client", "instance", "database"]
+ObjectKind = Literal["client", "instance", "database", "vm"]
+# The source's own view of whether something is protected; how recent
+# its backups are is judged separately.
+Protection = Literal["protected", "unprotected", "excluded"]
 
 
 class ObjectIn(BaseModel):
@@ -323,7 +326,7 @@ class ObjectIn(BaseModel):
     sent - clients before instances before databases.
     """
 
-    kind: ObjectKind = Field(description="client, instance or database.")
+    kind: ObjectKind = Field(description="client, instance, database or vm.")
     source_key: str = Field(description="The source's own stable id for it, unique per kind.")
     name: str = Field(description="Its name, as the source shows it.")
     parent_kind: ObjectKind | None = Field(
@@ -343,6 +346,14 @@ class ObjectIn(BaseModel):
     last_full_job_id: int | None = Field(
         default=None,
         description="The last full backup job that included it, where the source says.",
+    )
+    plan: str | None = Field(
+        default=None, description="The plan (or policy, SLA) the source protects it under."
+    )
+    protection: Protection | None = Field(
+        default=None,
+        description="protected, unprotected or excluded, as the source sees it. "
+        "Null where the source does not say (an instance).",
     )
     attributes: dict[str, Any] = Field(
         default_factory=dict, description="Anything else the source says about it."
@@ -395,7 +406,7 @@ class ObjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str = Field(description="blt's id for the object (a UUID).")
-    kind: ObjectKind = Field(description="client, instance or database.")
+    kind: ObjectKind = Field(description="client, instance, database or vm.")
     source_key: str = Field(description="The source's own stable id for it, unique per kind.")
     name: str = Field(description="Its name, as the source shows it.")
     parent_id: str | None = Field(
@@ -411,6 +422,12 @@ class ObjectOut(BaseModel):
     )
     last_backup_job_id: int | None = Field(
         default=None, description="The job that took that backup."
+    )
+    plan: str | None = Field(
+        default=None, description="The plan (or policy, SLA) the source protects it under."
+    )
+    protection: Protection | None = Field(
+        default=None, description="protected, unprotected or excluded, as the source sees it."
     )
     present: bool = Field(
         description="Listed by the latest inventory. False: it was known, and is gone."
@@ -487,7 +504,7 @@ class ValidationRow(BaseModel):
     instance: str | None = Field(
         default=None, description="The instance, for instances and databases."
     )
-    kind: ObjectKind = Field(description="client, instance or database.")
+    kind: ObjectKind = Field(description="client, instance, database or vm.")
     name: str = Field(description="Its name, as the source shows it.")
     app_type: str | None = Field(
         default=None,

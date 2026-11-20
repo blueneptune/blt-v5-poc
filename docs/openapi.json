@@ -1080,6 +1080,291 @@
         }
       }
     },
+    "/v1/assets": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Every asset every source knows of, with its verdict",
+        "description": "By source, kind, then name. Worst first is the reader's choice:\nfilter on `verdict`.",
+        "operationId": "list_assets_v1_assets_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stale_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 365,
+              "exclusiveMinimum": 0,
+              "description": "A protected asset with no backup this recent is stale.",
+              "default": 7,
+              "title": "Stale Days"
+            },
+            "description": "A protected asset with no backup this recent is stale."
+          },
+          {
+            "name": "source_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "commvault",
+                    "rubrik"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One product.",
+              "title": "Source Type"
+            },
+            "description": "One product."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One CommCell or account.",
+              "title": "Source"
+            },
+            "description": "One CommCell or account."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "host",
+                      "vm",
+                      "database",
+                      "instance",
+                      "file_system",
+                      "m365",
+                      "other"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several.",
+              "title": "Kind"
+            },
+            "description": "Repeat for several."
+          },
+          {
+            "name": "verdict",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "protected",
+                      "stale",
+                      "unprotected",
+                      "excluded",
+                      "unknown"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Repeat for several: `?verdict=unprotected`.",
+              "title": "Verdict"
+            },
+            "description": "Repeat for several: `?verdict=unprotected`."
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of its name, any case.",
+              "title": "Name"
+            },
+            "description": "Part of its name, any case."
+          },
+          {
+            "name": "present",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "false: things the latest inventory no longer lists.",
+              "default": true,
+              "title": "Present"
+            },
+            "description": "false: things the latest inventory no longer lists."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Asset"
+                  },
+                  "title": "Response List Assets V1 Assets Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/assets/summary": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "How many assets of each kind, by source and verdict",
+        "description": "Counts of what the latest inventories list (present rows only).",
+        "operationId": "summary_v1_assets_summary_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "stale_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 365,
+              "exclusiveMinimum": 0,
+              "description": "A protected asset with no backup this recent is stale.",
+              "default": 7,
+              "title": "Stale Days"
+            },
+            "description": "A protected asset with no backup this recent is stale."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/sources": {
       "get": {
         "tags": [
@@ -3215,10 +3500,10 @@
                   "type": "null"
                 }
               ],
-              "description": "client, instance or database.",
+              "description": "client, instance, database or vm.",
               "title": "Kind"
             },
-            "description": "client, instance or database."
+            "description": "client, instance, database or vm."
           },
           {
             "name": "present",
@@ -5287,6 +5572,270 @@
   },
   "components": {
     "schemas": {
+      "Asset": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "blt's id for the row, in its product's inventory."
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "commvault",
+              "rubrik"
+            ],
+            "title": "Source Type",
+            "description": "The product: commvault or rubrik."
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name",
+            "description": "The CommCell or RSC account."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "host",
+              "vm",
+              "database",
+              "instance",
+              "file_system",
+              "m365",
+              "other"
+            ],
+            "title": "Kind",
+            "description": "What it is: host, vm, database, instance, file_system, m365 or other."
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Kind",
+            "description": "What the product calls it: client, VmwareVirtualMachine, Mssql, ..."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name, as the source shows it."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it is: a database's instance and host, a VM's hypervisor, ..."
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type",
+            "description": "Its engine or platform: \"SQL Server\", \"Oracle\", \"VMW\", ..."
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan",
+            "description": "The plan or SLA domain protecting it."
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "protected, unprotected or excluded, as the source sees it."
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "protected",
+              "stale",
+              "unprotected",
+              "excluded",
+              "unknown"
+            ],
+            "title": "Verdict",
+            "description": "See the tag's description."
+          },
+          "last_backup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup At",
+            "description": "Its latest backup."
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "description": "Listed by the source's latest inventory."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When an inventory first listed it."
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At",
+            "description": "When an inventory last listed it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_type",
+          "source_name",
+          "kind",
+          "source_kind",
+          "name",
+          "location",
+          "app_type",
+          "plan",
+          "protection",
+          "verdict",
+          "last_backup_at",
+          "present",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "Asset",
+        "description": "One thing one source says exists."
+      },
+      "AssetCount": {
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "commvault",
+              "rubrik"
+            ],
+            "title": "Source Type",
+            "description": "The product."
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name",
+            "description": "The CommCell or RSC account."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "host",
+              "vm",
+              "database",
+              "instance",
+              "file_system",
+              "m365",
+              "other"
+            ],
+            "title": "Kind",
+            "description": "What they are."
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "protected",
+              "stale",
+              "unprotected",
+              "excluded",
+              "unknown"
+            ],
+            "title": "Verdict",
+            "description": "Their verdict."
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "How many."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_type",
+          "source_name",
+          "kind",
+          "verdict",
+          "count"
+        ],
+        "title": "AssetCount",
+        "description": "How many of one source's assets of one kind have one verdict."
+      },
+      "AssetSummary": {
+        "properties": {
+          "stale_days": {
+            "type": "number",
+            "title": "Stale Days",
+            "description": "The window the verdicts used."
+          },
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/AssetCount"
+            },
+            "type": "array",
+            "title": "Counts",
+            "description": "One row per source, kind and verdict."
+          },
+          "last_inventory": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Last Inventory",
+            "description": "Each source (type/name) and when its inventory last listed anything."
+          }
+        },
+        "type": "object",
+        "required": [
+          "stale_days",
+          "counts",
+          "last_inventory"
+        ],
+        "title": "AssetSummary",
+        "description": "How many assets each source has of each kind, by verdict."
+      },
       "BackfillState": {
         "properties": {
           "commcell": {
@@ -8994,10 +9543,11 @@
             "enum": [
               "client",
               "instance",
-              "database"
+              "database",
+              "vm"
             ],
             "title": "Kind",
-            "description": "client, instance or database."
+            "description": "client, instance, database or vm."
           },
           "source_key": {
             "type": "string",
@@ -9016,7 +9566,8 @@
                 "enum": [
                   "client",
                   "instance",
-                  "database"
+                  "database",
+                  "vm"
                 ]
               },
               {
@@ -9087,6 +9638,35 @@
             "title": "Last Full Job Id",
             "description": "The last full backup job that included it, where the source says."
           },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan",
+            "description": "The plan (or policy, SLA) the source protects it under."
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "protected",
+                  "unprotected",
+                  "excluded"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "protected, unprotected or excluded, as the source sees it. Null where the source does not say (an instance)."
+          },
           "attributes": {
             "additionalProperties": true,
             "type": "object",
@@ -9115,10 +9695,11 @@
             "enum": [
               "client",
               "instance",
-              "database"
+              "database",
+              "vm"
             ],
             "title": "Kind",
-            "description": "client, instance or database."
+            "description": "client, instance, database or vm."
           },
           "source_key": {
             "type": "string",
@@ -9178,6 +9759,35 @@
             ],
             "title": "Last Backup Job Id",
             "description": "The job that took that backup."
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan",
+            "description": "The plan (or policy, SLA) the source protects it under."
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "protected",
+                  "unprotected",
+                  "excluded"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "protected, unprotected or excluded, as the source sees it."
           },
           "present": {
             "type": "boolean",
@@ -13195,10 +13805,11 @@
             "enum": [
               "client",
               "instance",
-              "database"
+              "database",
+              "vm"
             ],
             "title": "Kind",
-            "description": "client, instance or database."
+            "description": "client, instance, database or vm."
           },
           "name": {
             "type": "string",
@@ -13305,6 +13916,10 @@
     {
       "name": "jobs",
       "description": "Jobs from every product in one shape: what the jobs page reads. See docs/common-jobs.md."
+    },
+    {
+      "name": "assets",
+      "description": "What every backup source says exists, in one shape, each with a verdict: protected, stale, unprotected or excluded. See docs/assets.md."
     },
     {
       "name": "sources",

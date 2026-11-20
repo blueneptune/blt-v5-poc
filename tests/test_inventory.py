@@ -80,6 +80,19 @@ def _inventory(*levels: list[ObjectIn]):  # noqa: ANN202
     return batches
 
 
+def _v4(
+    servers: list | None = None,
+    file_servers: list | None = None,
+    databases: list | None = None,
+    vms: list | None = None,
+) -> None:
+    """The V4 listings the inventory reads beside the classic API."""
+    respx.get(f"{BASE}/V4/Servers").respond(json={"servers": servers or []})
+    respx.get(f"{BASE}/V4/FileServers").respond(json={"fileServers": file_servers or []})
+    respx.get(f"{BASE}/V4/Databases").respond(json={"databases": databases or []})
+    respx.get(f"{BASE}/V4/VirtualMachines").respond(json={"virtualMachines": vms or []})
+
+
 def _verdicts(http: TestClient, **params: float) -> dict[str, str]:
     report = http.get("/v1/sources/commvault/prod/validation", params=params).json()
     return {row["name"]: row["verdict"] for row in report["rows"]}
@@ -338,9 +351,10 @@ def test_commvault_inventory_separates_existing_from_backed_up() -> None:
     details = respx.post(f"{BASE}/JobDetails").respond(
         json={"job": {"jobDetail": {"detailInfo": {"numOfObjects": 2, "skippedItems": 1}}}}
     )
+    _v4()
 
     with CommvaultClient(BASE, "svc", "pw") as commvault:
-        clients, instances, databases = list(iter_inventory(commvault))
+        clients, instances, databases, vms = list(iter_inventory(commvault))
 
     assert [(c.source_key, c.name) for c in clients] == [("15", "sql01"), ("2", "cs")]
     assert clients[0].attributes["agents"] == ["SQL Server"]
@@ -370,6 +384,11 @@ def test_commvault_inventory_separates_existing_from_backed_up() -> None:
         "skipped": 1,
     }
     assert instances[1].attributes["last_full_job"] is None
+    # In a subclient's content, so in a plan - protected, as Commvault
+    # sees it, though only the reader can say its backup is too old.
+    assert by_name["offline_db"].protection == "protected"
+    assert by_name["offline_db"].plan == "Standard Plan"
+    assert vms == []
 
 
 # --- The per-instance report: discovered vs backed up by the latest full.
@@ -525,6 +544,7 @@ def test_one_unreadable_client_is_skipped_not_fatal(http: TestClient, store: Blt
     respx.get(f"{BASE}/Agent", params={"clientId": 15}).respond(json={})
     respx.get(f"{BASE}/Instance", params={"clientId": 15}).respond(json={})
     respx.get(f"{BASE}/Agent", params={"clientId": 16}).respond(500)
+    _v4()
 
     # Something stored earlier that this inventory will not see.
     run_inventory(_inventory([_client("99", "old")]), store)
@@ -541,3 +561,116 @@ def test_one_unreadable_client_is_skipped_not_fatal(http: TestClient, store: Blt
     # is recorded as failed and nothing is declared gone.
     assert run.status == "failed" and "1 could not be read" in (run.error or "")
     assert objects["old"]["present"] is True
+
+
+@respx.mock
+def test_commvault_inventory_reads_every_engine_and_every_vm() -> None:
+    respx.post(f"{BASE}/Login").respond(json={"token": "QSDK abc"})
+    respx.get(f"{BASE}/Client").respond(
+        json={
+            "clientProperties": [
+                {"client": {"clientEntity": {"clientId": 15, "clientName": "ora01"}}},
+                {"client": {"clientEntity": {"clientId": 20, "clientName": "vcenter"}}},
+                {"client": {"clientEntity": {"clientId": 21, "clientName": "bare"}}},
+            ]
+        }
+    )
+    for client in (15, 20, 21):
+        respx.get(f"{BASE}/Agent", params={"clientId": client}).respond(json={})
+    respx.get(f"{BASE}/Instance", params={"clientId": 15}).respond(
+        json={
+            "instanceProperties": [
+                {
+                    "instance": {
+                        "instanceId": 9,
+                        "instanceName": "ORCL",
+                        "clientId": 15,
+                        "appName": "Oracle",
+                        "applicationId": 22,
+                    }
+                }
+            ]
+        }
+    )
+    for client in (20, 21):
+        respx.get(f"{BASE}/Instance", params={"clientId": client}).respond(json={})
+    _v4(
+        servers=[
+            {
+                "id": 15,
+                "OS": "Oracle Linux 9",
+                "agents": [{"name": "Oracle", "lastSuccessfulBackup": 1_793_800_000}],
+            },
+            {"id": 21, "OS": "Windows Server 2022", "agents": [{"name": "File System"}]},
+        ],
+        file_servers=[
+            {
+                "id": 21,
+                "plan": {"id": 0, "name": ""},
+                "SLA": {"status": "YET_TO_BE_PROTECTED"},
+                "lastBackup": {"status": "NEVER_BACKED_UP"},
+            }
+        ],
+        databases=[
+            {
+                "name": "SALES",
+                "applicationId": 22,
+                "instance": {"id": 9, "name": "ORCL"},
+                "server": {"id": 15, "name": "ora01"},
+                "databaseEngine": "ORACLE",
+                "SLAStatus": "MET",
+                "lastBackupTime": 1_793_800_000,
+                "plan": {"id": 3, "name": "Gold"},
+            },
+            {
+                "name": "SCRATCH",
+                "applicationId": 22,
+                "instance": {"id": 9, "name": "ORCL"},
+                "server": {"id": 15, "name": "ora01"},
+                "databaseEngine": "ORACLE",
+                "SLAStatus": "EXCLUDED",
+                "plan": {"id": 0, "name": ""},
+            },
+        ],
+        vms=[
+            {
+                "UUID": "4211-aa",
+                "name": "web01",
+                "hypervisor": {"id": 20, "name": "vcenter"},
+                "status": "PROTECTED",
+                "plan": {"id": 3, "name": "Gold"},
+                "lastBackup": {"jobId": 77, "lastSuccessfulBackupTime": 1_793_800_000},
+                "vendor": "VMW",
+            },
+            {
+                "UUID": "4211-bb",
+                "name": "test-vm",
+                "hypervisor": {"id": 20, "name": "vcenter"},
+                "status": "DISCOVERED",
+                "plan": {"id": 0, "name": ""},
+                "lastBackup": {"status": "NEVER_BACKED_UP"},
+                "vendor": "VMW",
+            },
+        ],
+    )
+
+    with CommvaultClient(BASE, "svc", "pw") as commvault:
+        clients, _instances, databases, vms = list(iter_inventory(commvault))
+
+    by_client = {c.name: c for c in clients}
+    assert by_client["ora01"].attributes["os"] == "Oracle Linux 9"
+    assert by_client["ora01"].protection == "protected"
+    assert by_client["ora01"].last_backup_at is not None
+    # An agent installed, never backed up, and Commvault says so.
+    assert by_client["bare"].protection == "unprotected"
+    dbs = {d.name: d for d in databases}
+    assert dbs["SALES"].app_type == "Oracle"
+    assert dbs["SALES"].parent_key == "15/22/9"
+    assert (dbs["SALES"].plan, dbs["SALES"].protection) == ("Gold", "protected")
+    assert dbs["SCRATCH"].protection == "excluded"
+    by_vm = {v.name: v for v in vms}
+    assert by_vm["web01"].source_key == "4211-aa"
+    assert by_vm["web01"].parent_key == "20"
+    assert (by_vm["web01"].protection, by_vm["web01"].last_backup_job_id) == ("protected", 77)
+    # Discovered on the hypervisor, in no plan: the gap this is for.
+    assert by_vm["test-vm"].protection == "unprotected"

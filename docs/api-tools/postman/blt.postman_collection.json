@@ -496,6 +496,50 @@
       ]
     },
     {
+      "name": "assets",
+      "item": [
+        {
+          "name": "Every asset every source knows of, with its verdict",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assets"
+              ],
+              "query": []
+            },
+            "description": "By source, kind, then name. Worst first is the reader's choice:\nfilter on `verdict`."
+          }
+        },
+        {
+          "name": "How many assets of each kind, by source and verdict",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/assets/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "assets",
+                "summary"
+              ],
+              "query": []
+            },
+            "description": "Counts of what the latest inventories list (present rows only)."
+          }
+        }
+      ]
+    },
+    {
       "name": "admin",
       "item": [
         {

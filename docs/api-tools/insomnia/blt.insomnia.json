@@ -453,6 +453,46 @@
       }
     },
     {
+      "_id": "fld_0af63ae8e2da5edc9186",
+      "_type": "request_group",
+      "parentId": "wrk_d3fe89c14ab8586fa586",
+      "name": "assets"
+    },
+    {
+      "_id": "req_42141c5c95335c0e8d79",
+      "_type": "request",
+      "parentId": "fld_0af63ae8e2da5edc9186",
+      "name": "Every asset every source knows of, with its verdict",
+      "description": "By source, kind, then name. Worst first is the reader's choice:\nfilter on `verdict`.",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/assets",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
+      "_id": "req_c353fa8890055dbcafde",
+      "_type": "request",
+      "parentId": "fld_0af63ae8e2da5edc9186",
+      "name": "How many assets of each kind, by source and verdict",
+      "description": "Counts of what the latest inventories list (present rows only).",
+      "method": "GET",
+      "url": "{{ _.baseUrl }}/v1/assets/summary",
+      "parameters": [],
+      "headers": [
+        {
+          "name": "X-API-Key",
+          "value": "{{ _.apiKey }}"
+        }
+      ],
+      "body": {}
+    },
+    {
       "_id": "fld_666d521f53055df38c19",
       "_type": "request_group",
       "parentId": "wrk_d3fe89c14ab8586fa586",

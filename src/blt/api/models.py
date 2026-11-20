@@ -146,6 +146,10 @@ class SourceObject(SQLModel, table=True):
     last_backup_at: datetime | None = _ts()
     last_backup_job_id: int | None = _big()
     last_full_job_id: int | None = _big()
+    # The plan it is protected under, and protected / unprotected /
+    # excluded as the source sees it (blt.schemas.Protection).
+    plan: str | None = None
+    protection: str | None = None
     attributes: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSONB, nullable=False)
     )

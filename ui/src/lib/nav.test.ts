@@ -10,7 +10,7 @@ describe('navFor', () => {
 
 	it('leaves the group out for someone without the role', () => {
 		const nav = navFor(NAV, (role) => role !== 'admin');
-		expect(nav.map((item) => item.href)).toEqual(['/', '/jobs', '/storage', '/sources']);
+		expect(nav.map((item) => item.href)).toEqual(['/', '/jobs', '/assets', '/storage', '/sources']);
 	});
 
 	it('drops a group whose pages are all out of reach', () => {

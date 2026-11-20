@@ -1,8 +1,16 @@
 """Commvault's account of what exists, as blt ObjectIn rows.
 
-Three levels, yielded parents first so each batch's parents are already
-stored: every client, then every instance on those clients, then - for
-SQL Server instances - every database.
+Yielded parents first so each batch's parents are already stored: every
+client (with what /V4/Servers and /V4/FileServers say of it), then every
+instance on those clients, then every database - SQL Server's in depth,
+every other engine's from /V4/Databases - then every virtual machine
+Commvault knows of, protected or only discovered (/V4/VirtualMachines).
+
+Each row carries `protection` - protected, unprotected or excluded, as
+Commvault sees it - and `plan`, so "discovered but not backed up" can be
+asked of every kind the same way. Commvault knows of a VM only through a
+hypervisor it has been given; a VM on a vCenter it was never pointed at
+is in nobody's list here.
 
 A database's existence and its protection come from two different
 places in Commvault, and are kept apart on purpose:
@@ -29,10 +37,34 @@ from commvault_sdk import CommvaultClient
 from loguru import logger
 from sdk_primer import SDKError
 
-from blt.schemas import ObjectIn
+from blt.schemas import ObjectIn, Protection
 
 SQL_SERVER = "SQL Server"
 _PROGRESS_EVERY = 100
+_VM_PAGE = 500
+
+# /V4/Databases' databaseEngine, as the rest of Commvault names it.
+_ENGINES = {
+    "SQL_SERVER": SQL_SERVER,
+    "ORACLE": "Oracle",
+    "ORACLE_RAC": "Oracle RAC",
+    "POSTGRESQL": "PostgreSQL",
+    "MYSQL": "MySQL",
+    "MARIA_DB": "MariaDB",
+    "AURORA_MYSQL": "Aurora MySQL",
+    "SAP_HANA": "SAP HANA",
+    "SAP_FOR_ORACLE": "SAP for Oracle",
+    "DB2": "DB2",
+    "DB2_MULTINODE": "DB2 multinode",
+    "SYBASE": "Sybase",
+    "INFORMIX": "Informix",
+    "DOCUMENT_DB": "DocumentDB",
+    "DYNAMO_DB": "DynamoDB",
+    "RDS": "RDS",
+    "REDSHIFT": "Redshift",
+}
+# /V4/VirtualMachines' status.
+_VM_UNPROTECTED = {"NOT_PROTECTED", "DISCOVERED"}
 
 
 def _epoch(value: Any) -> datetime | None:
@@ -40,6 +72,33 @@ def _epoch(value: Any) -> datetime | None:
         return datetime.fromtimestamp(int(value), tz=UTC) if value else None
     except (TypeError, ValueError):
         return None
+
+
+def _name(entity: Any) -> str | None:
+    """A {id, name} reference's name; Commvault sends id 0 and "" for none."""
+    if isinstance(entity, dict) and entity.get("id") and entity.get("name"):
+        return str(entity["name"])
+    return None
+
+
+def protection(sla: str | None, plan: str | None, backed_up: bool) -> Protection:
+    """Commvault's view: excluded if its SLA says so, unprotected if it
+    says it is yet to be protected or nothing covers it, else protected.
+    Whether the backups are recent enough is the reader's question."""
+    if sla in ("EXCLUDED_SLA", "EXCLUDED"):
+        return "excluded"
+    if sla == "YET_TO_BE_PROTECTED":
+        return "unprotected"
+    return "protected" if plan or backed_up else "unprotected"
+
+
+def _listed(problems: list[str], what: str, call: Any, key: str) -> list[dict[str, Any]]:
+    """One V4 listing; a CommServe that refuses it is a problem, not a stop."""
+    try:
+        return list((call() or {}).get(key) or [])
+    except SDKError as exc:
+        problems.append(f"{what}: {exc}")
+        return []
 
 
 def _instance_key(instance: dict[str, Any]) -> str:
@@ -79,20 +138,22 @@ def iter_inventory(
         if count % _PROGRESS_EVERY == 0 or count == total:
             logger.info("Inventory: read {} of {} clients", count, total)
 
-    yield [
-        ObjectIn(
-            kind="client",
-            source_key=str(entity["clientId"]),
-            name=entity.get("clientName", ""),
-            attributes={
-                "hostName": entity.get("hostName"),
-                "displayName": entity.get("displayName"),
-                "clientGUID": entity.get("clientGUID"),
-                "agents": agents.get(entity["clientId"]),
-            },
+    raw = commvault.raw
+    # Every server, not only infrastructure (the API's default).
+    servers = {
+        s.get("id"): s
+        for s in _listed(
+            problems,
+            "servers",
+            lambda: raw.servers.get_servers(show_only_infrastructure_machines=0),
+            "servers",
         )
-        for entity in clients
-    ]
+    }
+    file_servers = {
+        f.get("id"): f
+        for f in _listed(problems, "file servers", raw.file_servers.get_file_servers, "fileServers")
+    }
+    yield [_client(entity, agents, servers, file_servers) for entity in clients]
 
     # Databases are worked out before instances are sent, because an
     # instance's row carries a fact that comes from them: which job was
@@ -113,6 +174,13 @@ def iter_inventory(
         if count % _PROGRESS_EVERY == 0 or count == len(sql_instances):
             logger.info("Inventory: read {} of {} SQL Server instances", count, len(sql_instances))
 
+    instance_keys = {_instance_key(i) for i in instances}
+    databases = _merge_databases(
+        databases,
+        _listed(problems, "databases", raw.databases.get_databases, "databases"),
+        instance_keys,
+    )
+
     yield [
         ObjectIn(
             kind="instance",
@@ -130,6 +198,166 @@ def iter_inventory(
         for instance in instances
     ]
     yield databases
+    client_ids = {str(entity["clientId"]) for entity in clients}
+    yield [_vm(vm, client_ids) for vm in _vms(commvault, problems)]
+
+
+def _client(
+    entity: dict[str, Any],
+    agents: dict[int, list[str]],
+    servers: dict[Any, dict[str, Any]],
+    file_servers: dict[Any, dict[str, Any]],
+) -> ObjectIn:
+    client_id = entity["clientId"]
+    server = servers.get(client_id) or {}
+    files = file_servers.get(client_id)
+    # The newest successful backup any agent on it has had.
+    last = max((a.get("lastSuccessfulBackup") or 0 for a in server.get("agents") or []), default=0)
+    plan = sla = None
+    if files:
+        plan = _name(files.get("plan"))
+        sla = (files.get("SLA") or {}).get("status")
+        last = max(last, (files.get("lastBackup") or {}).get("lastSuccessfulBackup") or 0)
+    return ObjectIn(
+        kind="client",
+        source_key=str(client_id),
+        name=entity.get("clientName", ""),
+        last_backup_at=_epoch(last),
+        plan=plan,
+        protection=protection(sla, plan, bool(last)),
+        attributes={
+            "hostName": entity.get("hostName"),
+            "displayName": entity.get("displayName"),
+            "clientGUID": entity.get("clientGUID"),
+            "agents": agents.get(client_id),
+            "os": server.get("OS"),
+            "configured": server.get("configured"),
+            "is_infrastructure": server.get("isInfrastructure"),
+            "agent_backups": [
+                {"name": a.get("name"), "last_successful": a.get("lastSuccessfulBackup")}
+                for a in server.get("agents") or []
+            ],
+            "file_system": (
+                {
+                    "plan": plan,
+                    "sla": files.get("SLA"),
+                    "last_backup": files.get("lastBackup"),
+                    "configured": files.get("configured"),
+                }
+                if files
+                else None
+            ),
+        },
+    )
+
+
+def _merge_databases(
+    sql: list[ObjectIn], listed: list[dict[str, Any]], instance_keys: set[str]
+) -> list[ObjectIn]:
+    """SQL Server's databases as read in depth, with /V4/Databases'
+    plan and SLA added; every other engine's databases from it alone."""
+    by_key = {d.source_key: d for d in sql}
+    extra: list[ObjectIn] = []
+    for item in listed:
+        name = item.get("name")
+        server = (item.get("server") or {}).get("id")
+        instance = (item.get("instance") or {}).get("id")
+        if not name or server is None or instance is None:
+            continue
+        parent = f"{server}/{item.get('applicationId', 0)}/{instance}"
+        key = f"{parent}/{name}"
+        plan = _name(item.get("plan"))
+        sla = item.get("SLAStatus")
+        found = by_key.get(key)
+        if found is not None:
+            found.plan = plan or found.attributes.get("plan")
+            found.protection = protection(sla, found.plan, found.last_backup_at is not None)
+            found.attributes["sla"] = sla
+            found.attributes["recovery_model"] = item.get("recoveryModel")
+            continue
+        backed_up = _epoch(item.get("lastBackupTime"))
+        extra.append(
+            ObjectIn(
+                kind="database",
+                source_key=key,
+                name=name,
+                parent_kind="instance" if parent in instance_keys else None,
+                parent_key=parent if parent in instance_keys else None,
+                app_type=_ENGINES.get(item.get("databaseEngine") or "", item.get("databaseEngine")),
+                last_backup_at=backed_up,
+                plan=plan,
+                protection=protection(sla, plan, backed_up is not None),
+                attributes={
+                    "server": _name(item.get("server")),
+                    "instance": _name(item.get("instance")),
+                    "sla": sla,
+                    "recovery_model": item.get("recoveryModel"),
+                    "last_backup_size": item.get("lastBackupSize"),
+                    "vendor": item.get("vendor"),
+                },
+            )
+        )
+    for d in sql:
+        if d.protection is None:
+            d.plan = d.plan or d.attributes.get("plan")
+            d.protection = protection(None, d.plan, d.last_backup_at is not None)
+    return sql + extra
+
+
+def _vms(commvault: CommvaultClient, problems: list[str]) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    while True:
+        page = _listed(
+            problems,
+            "virtual machines",
+            lambda: commvault.raw.virtual_machines.list_virtual_machines(
+                start=len(found), limit=_VM_PAGE
+            ),
+            "virtualMachines",
+        )
+        found.extend(page)
+        if len(page) < _VM_PAGE:
+            break
+    if found:
+        logger.info("Inventory: {} virtual machines", len(found))
+    return found
+
+
+def _vm(vm: dict[str, Any], client_ids: set[str]) -> ObjectIn:
+    hypervisor = str((vm.get("hypervisor") or {}).get("id") or "")
+    last = vm.get("lastBackup") or {}
+    plan = _name(vm.get("plan"))
+    sla = (vm.get("SLA") or {}).get("status")
+    backed_up = _epoch(last.get("lastSuccessfulBackupTime"))
+    state = (
+        "unprotected"
+        if vm.get("status") in _VM_UNPROTECTED and sla not in ("EXCLUDED_SLA",)
+        else protection(sla, plan, backed_up is not None)
+    )
+    return ObjectIn(
+        kind="vm",
+        source_key=str(vm.get("UUID") or vm.get("name")),
+        name=vm.get("name", ""),
+        parent_kind="client" if hypervisor in client_ids else None,
+        parent_key=hypervisor if hypervisor in client_ids else None,
+        app_type=vm.get("vendor"),
+        last_backup_at=backed_up,
+        last_backup_job_id=last.get("jobId") or None,
+        plan=plan,
+        protection=state,
+        attributes={
+            "uuid": vm.get("UUID"),
+            "host": vm.get("host"),
+            "os": vm.get("os"),
+            "hypervisor": _name(vm.get("hypervisor")),
+            "vm_group": _name(vm.get("vmGroup")),
+            "status": vm.get("status"),
+            "sla": vm.get("SLA"),
+            "last_backup": last,
+            "size": vm.get("vmSize"),
+            "tags": vm.get("tags"),
+        },
+    )
 
 
 def _sql_databases(commvault: CommvaultClient, instance: dict[str, Any]) -> list[ObjectIn]:
