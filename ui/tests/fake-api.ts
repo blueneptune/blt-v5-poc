@@ -12,7 +12,7 @@
 import { createServer, type ServerResponse } from 'node:http';
 import type { components } from '../src/lib/api/schema';
 import { admin } from './fake-admin.ts';
-import { API_KEY, FLOWS, FLOWS_NBU_A, JOBS, SAMPLES, SOURCES, STORAGE, type Job } from './fixtures.ts';
+import { API_KEY, ASSETS, FLOWS, FLOWS_NBU_A, JOBS, SAMPLES, SOURCES, STORAGE, type Job } from './fixtures.ts';
 
 type JobDetail = components['schemas']['CommonJobDetail'];
 type SummaryRow = components['schemas']['SummaryRow'];
@@ -94,6 +94,43 @@ createServer(async (req, res) => {
 		});
 	}
 	if (path === '/v1/storage') return send(res, 200, STORAGE);
+	if (path === '/v1/assets') {
+		const verdicts = q.getAll('verdict').filter(Boolean);
+		const kinds = q.getAll('kind');
+		const name = q.get('name')?.toLowerCase();
+		const source = q.get('source');
+		return send(
+			res,
+			200,
+			ASSETS.filter(
+				(a) =>
+					(!verdicts.length || verdicts.includes(a.verdict)) &&
+					(!kinds.length || kinds.includes(a.kind)) &&
+					(!source || a.source_name === source) &&
+					(!name || a.name.toLowerCase().includes(name))
+			)
+		);
+	}
+	if (path === '/v1/assets/summary') {
+		const counts = new Map<string, components['schemas']['AssetCount']>();
+		for (const a of ASSETS) {
+			const key = [a.source_type, a.source_name, a.kind, a.verdict].join('/');
+			const c = counts.get(key) ?? { ...a, count: 0 };
+			c.count += 1;
+			counts.set(key, c);
+		}
+		return send(res, 200, {
+			stale_days: Number(q.get('stale_days') ?? 7),
+			counts: [...counts.values()].map(({ source_type, source_name, kind, verdict, count }) => ({
+				source_type,
+				source_name,
+				kind,
+				verdict,
+				count
+			})),
+			last_inventory: { 'commvault/cv-prod': '2026-11-20T06:00:00Z', 'rubrik/rsc-work': '2026-11-20T06:00:00Z' }
+		});
+	}
 	if (path === '/v1/storage/flows') return send(res, 200, q.get('primary') === 'nbu-a' ? FLOWS_NBU_A : FLOWS);
 	const target = path.match(/^\/v1\/storage\/([0-9a-f-]{36})(\/samples)?$/);
 	if (target) {

@@ -184,3 +184,36 @@ export const FLOWS_NBU_A: Flows = {
 	unmatched_replications: 0,
 	unknown_sources: 0
 };
+
+type Asset = components['schemas']['Asset'];
+const seen = { present: true, first_seen_at: '2026-11-01T00:00:00Z', last_seen_at: '2026-11-20T06:00:00Z' };
+const asset = (a: Omit<Asset, 'present' | 'first_seen_at' | 'last_seen_at'>): Asset => ({ ...a, ...seen });
+
+/** Two sources' inventories: a gap of each kind, and some covered. */
+export const ASSETS: Asset[] = [
+	asset({
+		id: 'a1', source_type: 'commvault', source_name: 'cv-prod', kind: 'vm', source_kind: 'vm',
+		name: 'test-vm', location: 'vcenter01', app_type: 'VMW', plan: null,
+		protection: 'unprotected', verdict: 'unprotected', last_backup_at: null
+	}),
+	asset({
+		id: 'a2', source_type: 'commvault', source_name: 'cv-prod', kind: 'database',
+		source_kind: 'database', name: 'hr', location: 'sql01 / MSSQLSERVER', app_type: 'SQL Server',
+		plan: null, protection: 'unprotected', verdict: 'unprotected', last_backup_at: null
+	}),
+	asset({
+		id: 'a3', source_type: 'commvault', source_name: 'cv-prod', kind: 'database',
+		source_kind: 'database', name: 'sales', location: 'sql01 / MSSQLSERVER', app_type: 'SQL Server',
+		plan: 'Gold', protection: 'protected', verdict: 'stale', last_backup_at: '2026-10-20T01:00:00Z'
+	}),
+	asset({
+		id: 'a4', source_type: 'rubrik', source_name: 'rsc-work', kind: 'vm',
+		source_kind: 'VmwareVirtualMachine', name: 'web01', location: 'vc02', app_type: null,
+		plan: 'Gold', protection: 'protected', verdict: 'protected', last_backup_at: '2026-11-20T02:00:00Z'
+	}),
+	asset({
+		id: 'a5', source_type: 'rubrik', source_name: 'rsc-work', kind: 'database', source_kind: 'Mssql',
+		name: 'crm', location: 'sql02', app_type: null, plan: null, protection: 'unprotected',
+		verdict: 'unprotected', last_backup_at: null
+	})
+];

@@ -225,6 +225,25 @@ test('sources: each source with its week', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'rsc-work' })).toBeVisible();
 });
 
+test('assets: the gaps first, then any verdict and kind', async ({ page }) => {
+	await page.goto('/assets');
+	await expect(page.getByRole('heading', { name: 'Assets', exact: true })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Assets' }).first()).toHaveAttribute('aria-current', 'page');
+	// By default: what nothing protects, from every source.
+	await expect(page.getByRole('row', { name: /test-vm/ })).toContainText('Not protected');
+	await expect(page.getByRole('row', { name: /crm/ })).toContainText('rsc-work');
+	await expect(page.getByRole('row', { name: /sales/ })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: /Not protected\s*3/ })).toBeVisible();
+
+	await page.getByRole('group', { name: 'Kind' }).getByRole('link', { name: 'VMs' }).click();
+	await expect(page.getByRole('row', { name: /hr/ })).toHaveCount(0);
+	await expect(page.getByRole('row', { name: /test-vm/ })).toBeVisible();
+
+	await page.goto('/assets?verdict=stale');
+	await expect(page.getByRole('row', { name: /sales/ })).toContainText('Gold');
+	await expect(page.getByRole('row', { name: /sales/ })).toContainText('Stale');
+});
+
 test('storage: totals, each target with how full it is', async ({ page }) => {
 	await page.goto('/storage');
 	await expect(page.getByRole('heading', { name: 'Storage', exact: true })).toBeVisible();

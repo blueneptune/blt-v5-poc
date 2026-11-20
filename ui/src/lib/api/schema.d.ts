@@ -203,6 +203,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every asset every source knows of, with its verdict
+         * @description By source, kind, then name. Worst first is the reader's choice:
+         *     filter on `verdict`.
+         */
+        get: operations["list_assets_v1_assets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/assets/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many assets of each kind, by source and verdict
+         * @description Counts of what the latest inventories list (present rows only).
+         */
+        get: operations["summary_v1_assets_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/sources": {
         parameters: {
             query?: never;
@@ -1125,6 +1166,149 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Asset
+         * @description One thing one source says exists.
+         */
+        Asset: {
+            /**
+             * Id
+             * @description blt's id for the row, in its product's inventory.
+             */
+            id: string;
+            /**
+             * Source Type
+             * @description The product: commvault or rubrik.
+             * @enum {string}
+             */
+            source_type: "commvault" | "rubrik";
+            /**
+             * Source Name
+             * @description The CommCell or RSC account.
+             */
+            source_name: string;
+            /**
+             * Kind
+             * @description What it is: host, vm, database, instance, file_system, m365 or other.
+             * @enum {string}
+             */
+            kind: "host" | "vm" | "database" | "instance" | "file_system" | "m365" | "other";
+            /**
+             * Source Kind
+             * @description What the product calls it: client, VmwareVirtualMachine, Mssql, ...
+             */
+            source_kind: string | null;
+            /**
+             * Name
+             * @description Its name, as the source shows it.
+             */
+            name: string;
+            /**
+             * Location
+             * @description Where it is: a database's instance and host, a VM's hypervisor, ...
+             */
+            location: string | null;
+            /**
+             * App Type
+             * @description Its engine or platform: "SQL Server", "Oracle", "VMW", ...
+             */
+            app_type: string | null;
+            /**
+             * Plan
+             * @description The plan or SLA domain protecting it.
+             */
+            plan: string | null;
+            /**
+             * Protection
+             * @description protected, unprotected or excluded, as the source sees it.
+             */
+            protection: string | null;
+            /**
+             * Verdict
+             * @description See the tag's description.
+             * @enum {string}
+             */
+            verdict: "protected" | "stale" | "unprotected" | "excluded" | "unknown";
+            /**
+             * Last Backup At
+             * @description Its latest backup.
+             */
+            last_backup_at: string | null;
+            /**
+             * Present
+             * @description Listed by the source's latest inventory.
+             */
+            present: boolean;
+            /**
+             * First Seen At
+             * Format: date-time
+             * @description When an inventory first listed it.
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             * @description When an inventory last listed it.
+             */
+            last_seen_at: string;
+        };
+        /**
+         * AssetCount
+         * @description How many of one source's assets of one kind have one verdict.
+         */
+        AssetCount: {
+            /**
+             * Source Type
+             * @description The product.
+             * @enum {string}
+             */
+            source_type: "commvault" | "rubrik";
+            /**
+             * Source Name
+             * @description The CommCell or RSC account.
+             */
+            source_name: string;
+            /**
+             * Kind
+             * @description What they are.
+             * @enum {string}
+             */
+            kind: "host" | "vm" | "database" | "instance" | "file_system" | "m365" | "other";
+            /**
+             * Verdict
+             * @description Their verdict.
+             * @enum {string}
+             */
+            verdict: "protected" | "stale" | "unprotected" | "excluded" | "unknown";
+            /**
+             * Count
+             * @description How many.
+             */
+            count: number;
+        };
+        /**
+         * AssetSummary
+         * @description How many assets each source has of each kind, by verdict.
+         */
+        AssetSummary: {
+            /**
+             * Stale Days
+             * @description The window the verdicts used.
+             */
+            stale_days: number;
+            /**
+             * Counts
+             * @description One row per source, kind and verdict.
+             */
+            counts: components["schemas"]["AssetCount"][];
+            /**
+             * Last Inventory
+             * @description Each source (type/name) and when its inventory last listed anything.
+             */
+            last_inventory: {
+                [key: string]: string | null;
+            };
+        };
         /**
          * BackfillState
          * @description How far back a CommCell's history has been collected.
@@ -3187,10 +3371,10 @@ export interface components {
         ObjectIn: {
             /**
              * Kind
-             * @description client, instance or database.
+             * @description client, instance, database or vm.
              * @enum {string}
              */
-            kind: "client" | "instance" | "database";
+            kind: "client" | "instance" | "database" | "vm";
             /**
              * Source Key
              * @description The source's own stable id for it, unique per kind.
@@ -3205,7 +3389,7 @@ export interface components {
              * Parent Kind
              * @description The parent's kind. The parent must already have been sent.
              */
-            parent_kind?: ("client" | "instance" | "database") | null;
+            parent_kind?: ("client" | "instance" | "database" | "vm") | null;
             /**
              * Parent Key
              * @description The parent's source_key.
@@ -3232,6 +3416,16 @@ export interface components {
              */
             last_full_job_id?: number | null;
             /**
+             * Plan
+             * @description The plan (or policy, SLA) the source protects it under.
+             */
+            plan?: string | null;
+            /**
+             * Protection
+             * @description protected, unprotected or excluded, as the source sees it. Null where the source does not say (an instance).
+             */
+            protection?: ("protected" | "unprotected" | "excluded") | null;
+            /**
              * Attributes
              * @description Anything else the source says about it.
              */
@@ -3251,10 +3445,10 @@ export interface components {
             id: string;
             /**
              * Kind
-             * @description client, instance or database.
+             * @description client, instance, database or vm.
              * @enum {string}
              */
-            kind: "client" | "instance" | "database";
+            kind: "client" | "instance" | "database" | "vm";
             /**
              * Source Key
              * @description The source's own stable id for it, unique per kind.
@@ -3285,6 +3479,16 @@ export interface components {
              * @description The job that took that backup.
              */
             last_backup_job_id?: number | null;
+            /**
+             * Plan
+             * @description The plan (or policy, SLA) the source protects it under.
+             */
+            plan?: string | null;
+            /**
+             * Protection
+             * @description protected, unprotected or excluded, as the source sees it.
+             */
+            protection?: ("protected" | "unprotected" | "excluded") | null;
             /**
              * Present
              * @description Listed by the latest inventory. False: it was known, and is gone.
@@ -5433,10 +5637,10 @@ export interface components {
             instance?: string | null;
             /**
              * Kind
-             * @description client, instance or database.
+             * @description client, instance, database or vm.
              * @enum {string}
              */
-            kind: "client" | "instance" | "database";
+            kind: "client" | "instance" | "database" | "vm";
             /**
              * Name
              * @description Its name, as the source shows it.
@@ -5893,6 +6097,104 @@ export interface operations {
             };
             /** @description Unknown storage target */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_assets_v1_assets_get: {
+        parameters: {
+            query?: {
+                /** @description A protected asset with no backup this recent is stale. */
+                stale_days?: number;
+                /** @description One product. */
+                source_type?: ("commvault" | "rubrik") | null;
+                /** @description One CommCell or account. */
+                source?: string | null;
+                /** @description Repeat for several. */
+                kind?: ("host" | "vm" | "database" | "instance" | "file_system" | "m365" | "other")[] | null;
+                /** @description Repeat for several: `?verdict=unprotected`. */
+                verdict?: ("protected" | "stale" | "unprotected" | "excluded" | "unknown")[] | null;
+                /** @description Part of its name, any case. */
+                name?: string | null;
+                /** @description false: things the latest inventory no longer lists. */
+                present?: boolean;
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asset"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summary_v1_assets_summary_get: {
+        parameters: {
+            query?: {
+                /** @description A protected asset with no backup this recent is stale. */
+                stale_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetSummary"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7244,7 +7546,7 @@ export interface operations {
     list_objects_v1_sources_commvault__source_name__objects_get: {
         parameters: {
             query?: {
-                /** @description client, instance or database. */
+                /** @description client, instance, database or vm. */
                 kind?: string | null;
                 /** @description false: things the latest inventory no longer lists. */
                 present?: boolean | null;

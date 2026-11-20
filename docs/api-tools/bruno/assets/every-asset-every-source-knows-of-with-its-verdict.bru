@@ -1,0 +1,16 @@
+meta {
+  name: Every asset every source knows of, with its verdict
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/v1/assets
+  body: none
+  auth: inherit
+}
+
+docs {
+  By source, kind, then name. Worst first is the reader's choice:
+  filter on `verdict`.
+}

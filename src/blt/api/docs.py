@@ -98,6 +98,11 @@ TAGS = [
         "See docs/common-jobs.md.",
     },
     {
+        "name": "assets",
+        "description": "What every backup source says exists, in one shape, each with a "
+        "verdict: protected, stale, unprotected or excluded. See docs/assets.md.",
+    },
+    {
         "name": "sources",
         "description": "Every source blt collects from, of any product, with its id. "
         "See docs/common-jobs.md.",

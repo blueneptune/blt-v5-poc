@@ -50,10 +50,11 @@ def test_each_endpoint_is_in_exactly_one_group() -> None:
 def test_every_path_but_the_health_check_is_versioned_and_named_by_source() -> None:
     for path in openapi.spec()["paths"]:
         # /v1/sources itself lists every source, and /v1/jobs reads every
-        # product's jobs, /v1/storage every product's storage: blt's own
-        # resources, beside the sources; /v1/admin is blt's own management.
+        # product's jobs, /v1/storage every product's storage, /v1/assets
+        # every product's inventory: blt's own resources, beside the
+        # sources; /v1/admin is blt's own management.
         if path in ("/healthz", "/v1/sources") or path.startswith(
-            ("/v1/jobs", "/v1/storage", "/v1/admin")
+            ("/v1/jobs", "/v1/storage", "/v1/assets", "/v1/admin")
         ):
             continue
         assert path.startswith(

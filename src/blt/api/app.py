@@ -53,6 +53,7 @@ from blt.schemas import (
 
 from . import jobs as common_jobs
 from .admin import admin_router
+from .assets import assets_router
 from .docs import (
     API_V1,
     COLLECTION,
@@ -522,6 +523,8 @@ def create_app(settings: ApiSettings | None = None, prefect: PrefectApi | None =
             app_type=item.app_type,
             last_backup_at=item.last_backup_at,
             last_backup_job_id=item.last_backup_job_id,
+            plan=item.plan,
+            protection=item.protection,  # type: ignore[arg-type]
             present=item.present,
             first_seen_at=item.first_seen_at,
             last_seen_at=item.last_seen_at,
@@ -534,7 +537,7 @@ def create_app(settings: ApiSettings | None = None, prefect: PrefectApi | None =
     def list_objects(
         source_name: CommCellName,
         session: SessionDep,
-        kind: Annotated[str | None, Query(description="client, instance or database.")] = None,
+        kind: Annotated[str | None, Query(description="client, instance, database or vm.")] = None,
         present: Annotated[
             bool | None,
             Query(description="false: things the latest inventory no longer lists."),
@@ -818,6 +821,7 @@ def create_app(settings: ApiSettings | None = None, prefect: PrefectApi | None =
     v1.include_router(sources_router(get_session, require_api_key))
     v1.include_router(jobs_router(get_session, require_api_key))
     v1.include_router(storage_router(get_session, require_api_key))
+    v1.include_router(assets_router(get_session, require_api_key))
     v1.include_router(admin_router(get_prefect, require_api_key))
     v1.include_router(router, prefix="/sources/commvault/{source_name}")
     v1.include_router(
