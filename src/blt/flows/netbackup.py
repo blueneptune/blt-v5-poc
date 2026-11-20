@@ -16,6 +16,12 @@ key does not renew, so as for Rubrik there is nothing to write back.
 - netbackup_collect_storage - every primary block, one flow run each, at
                               the same time (blt-netbackup-collect-
                               storage/hourly).
+- netbackup_inventory_primary - one primary's inventory: hosts, VMs, SQL
+                              Server instances and databases (blt-netbackup-
+                              inventory-primary/per-primary).
+- netbackup_collect_inventory - every primary block's inventory, one flow
+                              run each (blt-netbackup-collect-inventory/
+                              twice-daily).
 - netbackup_check           - one primary's key and reads, for the admin
                               pages (blt-netbackup-check/by-hand).
 - netbackup_fetch_ca        - a primary's CA certificate, by address,
@@ -47,6 +53,7 @@ from prefect.deployments import run_deployment
 from pydantic import Field, SecretStr
 from sdk_primer import APIClient
 
+from blt.netbackup.assets import iter_netbackup_inventory, run_netbackup_inventory
 from blt.netbackup.check import (
     answers,
     check_primary,
@@ -70,6 +77,8 @@ from .rubrik import BltApiSettings
 BLOCK_TYPE_SLUG = "blt-netbackup-primary"
 STORAGE_ONE = "blt-netbackup-storage-primary/per-primary"
 JOBS_ONE = "blt-netbackup-jobs-primary/per-primary"
+INVENTORY_ONE = "blt-netbackup-inventory-primary/per-primary"
+_LABELS = {JOBS_ONE: "netbackup-jobs", INVENTORY_ONE: "netbackup-inventory"}
 
 
 class NetBackupPrimaryBlock(Block):
@@ -220,6 +229,37 @@ def netbackup_storage_primary(primary: str) -> str:
         return storage_primary(primary, block)
 
 
+def inventory_primary(name: str, block: NetBackupPrimaryBlock) -> str:
+    """One primary's inventory, under its own lock: a flow run of its
+    own, so however it fails, the primary's jobs and storage are
+    collected regardless - as its SLPs are beside storage."""
+    with source_lock(f"netbackup-{name}.inventory") as held:
+        if not held:
+            logger.warning("An inventory for NetBackup {} is already running, skipping.", name)
+            return "skipped: already running"
+        api = BltApiSettings()  # type: ignore[call-arg]
+        problems: list[str] = []
+        with block.client() as nbu, api.client() as blt:
+            run = run_netbackup_inventory(
+                lambda: iter_netbackup_inventory(nbu, problems),
+                NetBackupStore(blt, name),
+                problems=problems,
+            )
+    return f"inventory run {run.id}: {run.status}, {run.jobs_collected} objects"
+
+
+@flow(
+    name="blt-netbackup-inventory-primary",
+    flow_run_name="netbackup-inventory-{primary}",
+    retries=1,
+    retry_delay_seconds=300,
+)
+def netbackup_inventory_primary(primary: str) -> str:
+    with logs_to_prefect(), concurrency(SLOTS, occupy=1, strict=False):
+        block = cast(NetBackupPrimaryBlock, NetBackupPrimaryBlock.load(primary))
+        return inventory_primary(primary, block)
+
+
 def collectable_primaries() -> list[str]:
     with get_client(sync_client=True) as client:
         documents = client.read_block_documents_by_type(BLOCK_TYPE_SLUG, include_secrets=False)
@@ -231,7 +271,7 @@ def collectable_primaries() -> list[str]:
 
 
 def _start_run(deployment: str, primary: str, delay_seconds: float = 0) -> str:
-    label = "netbackup-jobs" if deployment == JOBS_ONE else "netbackup-storage"
+    label = _LABELS.get(deployment, "netbackup-storage")
     run = cast(
         FlowRun,
         run_deployment(
@@ -284,6 +324,26 @@ def netbackup_collect_jobs(
         block_type_slug=BLOCK_TYPE_SLUG,
         start=_start_run,
         nothing="No NetBackup primary blocks - see docs/netbackup.md",
+    )
+
+
+@flow(name="blt-netbackup-collect-inventory")
+def netbackup_collect_inventory(
+    primaries: list[str] | None = None, wait_minutes: float = 110, interval_minutes: float = 720
+) -> dict[str, str]:
+    """Inventory from every NetBackup primary block (or the ones named),
+    each in its own flow run, spread over the start of the interval."""
+    return fan_out_due(
+        primaries,
+        INVENTORY_ONE,
+        "collect NetBackup inventory",
+        "inventory",
+        wait_minutes=wait_minutes,
+        interval_minutes=interval_minutes,
+        collectable=collectable_primaries,
+        block_type_slug=BLOCK_TYPE_SLUG,
+        start=_start_run,
+        nothing="No NetBackup primary blocks to inventory - see docs/assets.md",
     )
 
 

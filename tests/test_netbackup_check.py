@@ -42,6 +42,13 @@ def _raise(error: Exception) -> Any:
     return call
 
 
+def _first_asset(workload: str, page_limit: int | None = None) -> dict[str, Any]:
+    """One VM discovered, no SQL Server yet, and no RHV workload at all."""
+    if workload == "rhv":
+        raise NotFoundError("404", status_code=404)
+    return {"data": [{"id": "a"}] if workload == "vmware" else []}
+
+
 def _nbu(**overrides: Any) -> NetBackupClient:
     fake = SimpleNamespace(
         api_version="12.0",
@@ -51,7 +58,10 @@ def _nbu(**overrides: Any) -> NetBackupClient:
         jobs=SimpleNamespace(
             sample=lambda limit=5, updated_after=None: (42 if updated_after is None else 7, [])
         ),
+        policies=SimpleNamespace(list=lambda: [{"id": "fs-daily"}, {"id": "vm-gold"}]),
+        hosts=SimpleNamespace(list=lambda: [{"hostName": "nbu01"}]),
         raw=SimpleNamespace(
+            assetservice=SimpleNamespace(list_workload_assets=_first_asset),
             catalog=SimpleNamespace(list_slp_images=lambda page_limit=None: {"data": []}),
             config=SimpleNamespace(
                 list_slps=lambda page_limit, page_offset: {
@@ -102,6 +112,8 @@ def test_every_read_is_tried_and_said() -> None:
         "OK   storage (disk pools, storage units): 1 storage targets (MSDP)",
         "OK   SLPs (to trace copies on the Storage page): 1 SLPs, 2 steps",
         "OK   SLP images (for the SLP backlog): readable (none waiting or kept just now)",
+        "OK   inventory (policies, hosts, VM and SQL Server assets): 2 policies, 1 hosts, "
+        "vmware readable, rhv not on this primary, mssql none discovered",
         "OK   jobs: readable (42 jobs); 7 changed in the last 24 h",
     ]
 
@@ -122,7 +134,7 @@ def test_a_missing_permission_or_endpoint_is_one_failed_line() -> None:
             }
         )
     )
-    assert [c.ok for c in checks] == [True, False, True, True, True]
+    assert [c.ok for c in checks] == [True, False, True, True, True, True]
     assert "read access" in checks[1].detail
     # NetBackup 10.0 has no SLP images listing: said, not failed - nothing collects it yet.
     assert "not on this NetBackup version" in checks[3].detail

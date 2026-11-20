@@ -448,6 +448,7 @@ def test_each_parent_s_interval_is_its_schedule_s() -> None:
         (rubrik, "rubrik_collect_inventory"),
         (netbackup, "netbackup_collect_jobs"),
         (netbackup, "netbackup_collect_storage"),
+        (netbackup, "netbackup_collect_inventory"),
     ]:
         target = getattr(module, name)
         cron = by_entry[f"{module.__name__}:{name}"]

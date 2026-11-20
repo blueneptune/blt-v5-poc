@@ -1,0 +1,42 @@
+meta {
+  name: Store a batch of inventory
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/objects
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "collected_at": "2026-11-20T05:57:00Z",
+    "objects": [
+      {
+        "app_type": "Standard",
+        "kind": "host",
+        "name": "sql01.example.com",
+        "plan": "fs-daily",
+        "protection": "protected",
+        "source_key": "sql01.example.com"
+      },
+      {
+        "app_type": "SQL Server",
+        "kind": "instance",
+        "name": "MSSQLSERVER",
+        "parent_key": "sql01.example.com",
+        "parent_kind": "host",
+        "source_key": "6f1c0e5a-0d5e-4c7e-9a41-2b7f0e1d9c11"
+      }
+    ],
+    "run_id": 812
+  }
+}
+
+docs {
+  Hosts, VMs, instances and databases as the primary lists them,
+  during an inventory run, keyed by (kind, source_key). Parents go
+  before their children: hosts, then instances, then databases.
+}

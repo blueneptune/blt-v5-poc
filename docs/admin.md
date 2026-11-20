@@ -75,8 +75,8 @@ collection on there once the reads pass.
 4. **API key** - for a read-only service account (below), never shown
    again once saved.
 5. **Save and check.** The block is saved with collection **off**, and a
-   check runs on a worker: sign-in and server version, storage, SLP images,
-   jobs - one OK/FAIL line each, with why (a refused key, a permission the
+   check runs on a worker: sign-in and server version, storage, SLPs, SLP images,
+   inventory, jobs - one OK/FAIL line each, with why (a refused key, a permission the
    key's role lacks, an endpoint this NetBackup version does not have).
 6. **Turn on** collection once storage passes.
 
@@ -160,7 +160,8 @@ account for blt rather than using a person's:
    `blt_r`).
 2. A role for it in the web UI (Security -> RBAC) that may only read:
    storage (disk pools, storage units, storage servers, storage lifecycle
-   policies), the catalog (images, SLP images) and jobs.
+   policies), the catalog (images, SLP images), jobs, and for the inventory
+   assets (VMware, RHV, Microsoft SQL Server), hosts and protection policies.
 3. An API key for that user (Security -> API keys -> Add, choosing the
    user), with an expiry you will remember to renew.
 

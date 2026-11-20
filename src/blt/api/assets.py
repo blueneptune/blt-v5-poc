@@ -1,7 +1,8 @@
 """`/v1/assets`: what every backup source says exists, in one shape.
 
 Each product keeps its own inventory table (commvault.source_object,
-rubrik.source_object), as each says it: this reads them side by side and
+rubrik.source_object, netbackup.source_object), as each says it: this
+reads them side by side and
 says, of every row, the one thing the Assets page asks - is it backed
 up? Nothing is merged across sources here: a server that is a Commvault
 client and a Rubrik VM is two rows (docs/asset-refinery.md is about
@@ -15,9 +16,14 @@ The verdict:
 - **unprotected**: the source knows of it and nothing protects it - the
   "discovered, not backed up" list;
 - **excluded**: deliberately left out (Commvault's excluded SLA,
-  Rubrik's Do Not Protect);
+  Rubrik's Do Not Protect, SQL Server's tempdb in NetBackup);
 - **unknown**: the source does not say (a Commvault instance, or a row
   inventoried before blt recorded protection).
+
+A NetBackup host's or VM's last backup is the asset service's own where
+it gives one, else the newest successful backup job blt holds for it
+(blt.api.netbackup.last_backup_from_jobs): NetBackup's asset service
+says nothing of a host's backups.
 """
 
 # No `from __future__ import annotations`: see app.py - the routes are
@@ -35,15 +41,18 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from .docs import UNAUTHORIZED
+from .netbackup import job_backups, last_backup_from_jobs
 
 Kind = Literal["host", "vm", "database", "instance", "file_system", "m365", "other"]
 Verdict = Literal["protected", "stale", "unprotected", "excluded", "unknown"]
 VERDICTS: tuple[Verdict, ...] = ("protected", "stale", "unprotected", "excluded", "unknown")
-SourceType = Literal["commvault", "rubrik"]
+SourceType = Literal["commvault", "rubrik", "netbackup"]
 
 # Commvault's kinds, and Rubrik's protection statuses, in blt's words.
 _COMMVAULT_KIND = {"client": "host", "instance": "instance", "database": "database", "vm": "vm"}
 _RUBRIK_PROTECTION = {"protected": "protected", "nosla": "unprotected", "donotprotect": "excluded"}
+# NetBackup's kinds are blt's already (blt.netbackup.assets).
+_NETBACKUP_KIND = {"host": "host", "vm": "vm", "instance": "instance", "database": "database"}
 
 
 def rubrik_kind(object_type: str | None) -> Kind:
@@ -94,8 +103,10 @@ class Asset(BaseModel):
     """One thing one source says exists."""
 
     id: str = PydanticField(description="blt's id for the row, in its product's inventory.")
-    source_type: SourceType = PydanticField(description="The product: commvault or rubrik.")
-    source_name: str = PydanticField(description="The CommCell or RSC account.")
+    source_type: SourceType = PydanticField(
+        description="The product: commvault, rubrik or netbackup."
+    )
+    source_name: str = PydanticField(description="The CommCell, RSC account or primary.")
     kind: Kind = PydanticField(
         description="What it is: host, vm, database, instance, file_system, m365 or other."
     )
@@ -124,7 +135,7 @@ class AssetCount(BaseModel):
     """How many of one source's assets of one kind have one verdict."""
 
     source_type: SourceType = PydanticField(description="The product.")
-    source_name: str = PydanticField(description="The CommCell or RSC account.")
+    source_name: str = PydanticField(description="The CommCell, RSC account or primary.")
     kind: Kind = PydanticField(description="What they are.")
     verdict: Verdict = PydanticField(description="Their verdict.")
     count: int = PydanticField(description="How many.")
@@ -140,7 +151,7 @@ class AssetSummary(BaseModel):
     )
 
 
-# Both inventories, in one shape. A Commvault row's location is its
+# Every inventory, in one shape. A Commvault row's location is its
 # parent's name, and that one's parent's.
 _ROWS = text("""
     SELECT o.id::text AS id, 'commvault' AS source_type, c.name AS source_name,
@@ -157,15 +168,42 @@ _ROWS = text("""
            o.last_seen_at, o.location
     FROM rubrik.source_object o
     JOIN rubrik.account a ON a.id = o.account_id
+    UNION ALL
+    SELECT o.id::text, 'netbackup', p.name, o.kind, o.name, o.app_type, o.plan, o.protection,
+           o.last_backup_at, o.present, o.first_seen_at, o.last_seen_at, o.location
+    FROM netbackup.source_object o
+    JOIN netbackup.primary_server p ON p.id = o.primary_id
+""")
+# What a NetBackup row's last backup is derived from when the asset
+# service gives none: its kind, primary, and identifiers.
+_NETBACKUP_EXTRA = text("""
+    SELECT id::text AS id, primary_id, kind, name, attributes
+    FROM netbackup.source_object
+    WHERE last_backup_at IS NULL AND kind IN ('host', 'vm')
 """)
 
 
 def _assets(session: Session, now: datetime, stale_days: float) -> list[Asset]:
     out = []
+    derived: dict[str, datetime] = {}
+    extra = session.execute(_NETBACKUP_EXTRA).mappings().all()
+    if extra:
+        backups = job_backups(session)
+        for row in extra:
+            found = last_backup_from_jobs(
+                backups, row["primary_id"], row["kind"], row["name"], row["attributes"] or {}
+            )
+            if found is not None:
+                derived[row["id"]] = found[0]
     for row in session.execute(_ROWS).mappings():
+        last_backup_at = row["last_backup_at"]
         if row["source_type"] == "commvault":
             kind: Kind = _COMMVAULT_KIND.get(row["source_kind"], "other")  # type: ignore[assignment]
             protection = row["protection"]
+        elif row["source_type"] == "netbackup":
+            kind = _NETBACKUP_KIND.get(row["source_kind"], "other")  # type: ignore[assignment]
+            protection = row["protection"]
+            last_backup_at = last_backup_at or derived.get(row["id"])
         else:
             kind = rubrik_kind(row["source_kind"])
             protection = _RUBRIK_PROTECTION.get(row["protection"] or "")
@@ -181,8 +219,8 @@ def _assets(session: Session, now: datetime, stale_days: float) -> list[Asset]:
                 app_type=row["app_type"],
                 plan=row["plan"],
                 protection=protection,
-                verdict=verdict(protection, row["last_backup_at"], now, stale_days),
-                last_backup_at=row["last_backup_at"],
+                verdict=verdict(protection, last_backup_at, now, stale_days),
+                last_backup_at=last_backup_at,
                 present=row["present"],
                 first_seen_at=row["first_seen_at"],
                 last_seen_at=row["last_seen_at"],
@@ -213,7 +251,9 @@ def assets_router(
         session: SessionDep,
         stale_days: StaleDays = 7,
         source_type: Annotated[SourceType | None, Query(description="One product.")] = None,
-        source: Annotated[str | None, Query(description="One CommCell or account.")] = None,
+        source: Annotated[
+            str | None, Query(description="One CommCell, account or primary.")
+        ] = None,
         kind: Annotated[list[Kind] | None, Query(description="Repeat for several.")] = None,
         verdict_: Annotated[
             list[Verdict] | None,

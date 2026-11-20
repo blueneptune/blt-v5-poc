@@ -15,6 +15,8 @@ from .schemas import (
     NetBackupJobBatch,
     NetBackupJobIn,
     NetBackupLastRun,
+    NetBackupObjectBatch,
+    NetBackupObjectIn,
     NetBackupRunFinish,
     NetBackupRunOut,
     NetBackupRunStart,
@@ -44,4 +46,11 @@ class NetBackupStore:
     ) -> UpsertResult:
         batch = NetBackupJobBatch(run_id=run_id, collected_at=collected_at, jobs=jobs)
         response = self._client.post(f"{self._base}/jobs", json=batch.model_dump(mode="json"))
+        return UpsertResult.model_validate(response.json())
+
+    def upsert_objects(
+        self, run_id: int, collected_at: datetime, objects: list[NetBackupObjectIn]
+    ) -> UpsertResult:
+        batch = NetBackupObjectBatch(run_id=run_id, collected_at=collected_at, objects=objects)
+        response = self._client.post(f"{self._base}/objects", json=batch.model_dump(mode="json"))
         return UpsertResult.model_validate(response.json())

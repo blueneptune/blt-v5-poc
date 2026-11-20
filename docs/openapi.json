@@ -1117,7 +1117,8 @@
                 {
                   "enum": [
                     "commvault",
-                    "rubrik"
+                    "rubrik",
+                    "netbackup"
                   ],
                   "type": "string"
                 },
@@ -1143,10 +1144,10 @@
                   "type": "null"
                 }
               ],
-              "description": "One CommCell or account.",
+              "description": "One CommCell, account or primary.",
               "title": "Source"
             },
-            "description": "One CommCell or account."
+            "description": "One CommCell, account or primary."
           },
           {
             "name": "kind",
@@ -4732,7 +4733,7 @@
           "netbackup"
         ],
         "summary": "Where the last job collection got to",
-        "description": "The primary's watermark and its most recent job run. An unknown\nprimary is not an error: no watermark means do an initial run.",
+        "description": "The primary's watermark and its most recent job run. An unknown\nprimary is not an error: no watermark means do an initial run.\nInventory runs do not count.",
         "operationId": "last_run_v1_sources_netbackup__source_name__last_run_get",
         "security": [
           {
@@ -4868,7 +4869,7 @@
           "netbackup"
         ],
         "summary": "Close a job collection run",
-        "description": "Records how the run went. A succeeded run becomes the new\nwatermark.",
+        "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present.",
         "operationId": "finish_run_v1_sources_netbackup__source_name__runs__run_id__finish_post",
         "security": [
           {
@@ -5409,6 +5410,262 @@
         }
       }
     },
+    "/v1/sources/netbackup/{source_name}/objects": {
+      "post": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "Store a batch of inventory",
+        "description": "Hosts, VMs, instances and databases as the primary lists them,\nduring an inventory run, keyed by (kind, source_key). Parents go\nbefore their children: hosts, then instances, then databases.",
+        "operationId": "upsert_objects_v1_sources_netbackup__source_name__objects_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetBackupObjectBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsertResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown primary or run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parent the batch names has not been sent yet"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "netbackup"
+        ],
+        "summary": "List inventory",
+        "description": "What the primary says exists, by kind then name. A host's or\nVM's last backup is NetBackup's own where its asset service gives\none, else the newest successful backup job blt has for it\n(`last_backup_from`).",
+        "operationId": "list_objects_v1_sources_netbackup__source_name__objects_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it.",
+              "examples": [
+                "nbu-work-01"
+              ],
+              "title": "Source Name"
+            },
+            "description": "blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "host",
+                    "vm",
+                    "instance",
+                    "database"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "host, vm, instance or database.",
+              "title": "Kind"
+            },
+            "description": "host, vm, instance or database."
+          },
+          {
+            "name": "protection",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "protected, unprotected or excluded.",
+              "title": "Protection"
+            },
+            "description": "protected, unprotected or excluded."
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Part of its name, any case.",
+              "title": "Name"
+            },
+            "description": "Part of its name, any case."
+          },
+          {
+            "name": "present",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "false: things the latest inventory no longer lists.",
+              "title": "Present"
+            },
+            "description": "false: things the latest inventory no longer lists."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Page size.",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Rows to skip."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NetBackupObjectOut"
+                  },
+                  "title": "Response List Objects V1 Sources Netbackup  Source Name  Objects Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid `X-API-Key`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown primary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/netbackup/{source_name}/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -5583,15 +5840,16 @@
             "type": "string",
             "enum": [
               "commvault",
-              "rubrik"
+              "rubrik",
+              "netbackup"
             ],
             "title": "Source Type",
-            "description": "The product: commvault or rubrik."
+            "description": "The product: commvault, rubrik or netbackup."
           },
           "source_name": {
             "type": "string",
             "title": "Source Name",
-            "description": "The CommCell or RSC account."
+            "description": "The CommCell, RSC account or primary."
           },
           "kind": {
             "type": "string",
@@ -5742,7 +6000,8 @@
             "type": "string",
             "enum": [
               "commvault",
-              "rubrik"
+              "rubrik",
+              "netbackup"
             ],
             "title": "Source Type",
             "description": "The product."
@@ -5750,7 +6009,7 @@
           "source_name": {
             "type": "string",
             "title": "Source Name",
-            "description": "The CommCell or RSC account."
+            "description": "The CommCell, RSC account or primary."
           },
           "kind": {
             "type": "string",
@@ -8988,6 +9247,379 @@
         "title": "NetBackupLastRun",
         "description": "Where a primary's collection got to."
       },
+      "NetBackupObjectBatch": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id",
+            "description": "The inventory run it belongs to."
+          },
+          "collected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Collected At",
+            "description": "When it was read."
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/NetBackupObjectIn"
+            },
+            "type": "array",
+            "title": "Objects",
+            "description": "Parents before their children."
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "collected_at",
+          "objects"
+        ],
+        "title": "NetBackupObjectBatch",
+        "description": "Inventory sent during an inventory run, parents first.",
+        "examples": [
+          {
+            "collected_at": "2026-11-20T05:57:00Z",
+            "objects": [
+              {
+                "app_type": "Standard",
+                "kind": "host",
+                "name": "sql01.example.com",
+                "plan": "fs-daily",
+                "protection": "protected",
+                "source_key": "sql01.example.com"
+              },
+              {
+                "app_type": "SQL Server",
+                "kind": "instance",
+                "name": "MSSQLSERVER",
+                "parent_key": "sql01.example.com",
+                "parent_kind": "host",
+                "source_key": "6f1c0e5a-0d5e-4c7e-9a41-2b7f0e1d9c11"
+              }
+            ],
+            "run_id": 812
+          }
+        ]
+      },
+      "NetBackupObjectIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "host",
+              "vm",
+              "instance",
+              "database"
+            ],
+            "title": "Kind",
+            "description": "host, vm, instance or database."
+          },
+          "source_key": {
+            "type": "string",
+            "title": "Source Key",
+            "description": "NetBackup's own id for it, unique per kind."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name, as NetBackup shows it."
+          },
+          "parent_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "host",
+                  "vm",
+                  "instance",
+                  "database"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Kind",
+            "description": "The parent's kind. The parent must already have been sent."
+          },
+          "parent_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Key",
+            "description": "The parent's source_key."
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type",
+            "description": "Its workload: \"VMware\", \"SQL Server\", \"Standard\", ..."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it is: a VM's vCenter and cluster, a database's host."
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan",
+            "description": "The protection plans or policies protecting it."
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "protected",
+                  "unprotected",
+                  "excluded"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "protected, unprotected or excluded, as NetBackup sees it (blt.netbackup.assets). Null where it does not say."
+          },
+          "last_backup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup At",
+            "description": "Its last successful backup, where NetBackup says per asset."
+          },
+          "last_backup_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup Job Id",
+            "description": "The job that took it."
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes",
+            "description": "The rest, and `identifiers`: instance and BIOS UUIDs, host and DNS names, instance name - what another source would match it by."
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "source_key",
+          "name"
+        ],
+        "title": "NetBackupObjectIn",
+        "description": "One thing a primary says exists, as blt.netbackup.assets reads it.\n\n`source_key` is NetBackup's own id for it: an asset's id in the asset\nservice, or a host's name (NetBackup names a client by its host name\neverywhere - policies, jobs, images). A parent is named by its own\n(kind, source_key) and must already have been sent."
+      },
+      "NetBackupObjectOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "blt's id for it (a UUID)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "host",
+              "vm",
+              "instance",
+              "database"
+            ],
+            "title": "Kind",
+            "description": "host, vm, instance or database."
+          },
+          "source_key": {
+            "type": "string",
+            "title": "Source Key",
+            "description": "NetBackup's own id for it, unique per kind."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Its name, as NetBackup shows it."
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "blt's id for its parent."
+          },
+          "app_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Type",
+            "description": "Its workload."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it is."
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan",
+            "description": "The plans or policies protecting it."
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "protected",
+                  "unprotected",
+                  "excluded"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection",
+            "description": "protected, unprotected or excluded, as NetBackup sees it."
+          },
+          "last_backup_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup At",
+            "description": "Its last successful backup: NetBackup's own, else the newest successful backup job blt has for it (`last_backup_from`)."
+          },
+          "last_backup_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "netbackup",
+                  "jobs"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup From",
+            "description": "Where last_backup_at came from."
+          },
+          "last_backup_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Backup Job Id",
+            "description": "The job that took it."
+          },
+          "present": {
+            "type": "boolean",
+            "title": "Present",
+            "description": "Listed by the latest inventory."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "First Seen At",
+            "description": "When an inventory first listed it."
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Seen At",
+            "description": "When an inventory last listed it."
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes",
+            "description": "The rest."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "source_key",
+          "name",
+          "present",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "NetBackupObjectOut",
+        "description": "Something a primary says exists, as of its latest inventory."
+      },
       "NetBackupPrimaryIn": {
         "properties": {
           "name": {
@@ -9139,10 +9771,11 @@
             "enum": [
               "initial",
               "delta",
-              "full"
+              "full",
+              "inventory"
             ],
             "title": "Mode",
-            "description": "initial, delta or full."
+            "description": "initial, delta, full or inventory."
           },
           "status": {
             "type": "string",
@@ -9215,10 +9848,11 @@
             "enum": [
               "initial",
               "delta",
-              "full"
+              "full",
+              "inventory"
             ],
             "title": "Mode",
-            "description": "initial, delta or full."
+            "description": "initial, delta, full or inventory."
           },
           "started_at": {
             "type": "string",

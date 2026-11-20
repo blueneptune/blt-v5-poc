@@ -1,0 +1,18 @@
+meta {
+  name: List inventory
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/v1/sources/netbackup/{{source_name}}/objects
+  body: none
+  auth: inherit
+}
+
+docs {
+  What the primary says exists, by kind then name. A host's or
+  VM's last backup is NetBackup's own where its asset service gives
+  one, else the newest successful backup job blt has for it
+  (`last_backup_from`).
+}
