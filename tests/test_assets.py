@@ -143,6 +143,15 @@ def test_commvault_assets_with_their_verdicts(http: TestClient, blt_api: APIClie
     vms = http.get("/v1/assets", params={"kind": "vm", "source_type": "commvault"}).json()
     assert [r["name"] for r in vms] == ["test-vm"]
 
+    # Paged, with the count of everything that matches.
+    first = http.get("/v1/assets", params={"limit": 2})
+    assert first.headers["X-Total-Count"] == "6" and len(first.json()) == 2
+    beyond = http.get("/v1/assets", params={"limit": 2, "offset": 50, "kind": "database"})
+    assert beyond.json() == [] and beyond.headers["X-Total-Count"] == "2"
+    # A name's own % and _ are taken literally.
+    assert http.get("/v1/assets", params={"name": "%"}).json() == []
+    assert [r["name"] for r in http.get("/v1/assets", params={"name": "SAL"}).json()] == ["sales"]
+
     summary = http.get("/v1/assets/summary").json()
     counts = {(c["kind"], c["verdict"]): c["count"] for c in summary["counts"]}
     assert counts[("database", "unprotected")] == 1
@@ -198,3 +207,33 @@ def test_rubrik_assets_read_their_sla(http: TestClient) -> None:
     )
     assert (rows["sales"]["kind"], rows["sales"]["verdict"]) == ("database", "unprotected")
     assert rows["lab"]["verdict"] == "excluded"
+
+
+def test_postgres_sorts_rubrik_types_as_python_does(http: TestClient) -> None:
+    types = [
+        "VmwareVirtualMachine",
+        "HypervVirtualMachine",
+        "Ec2Instance",
+        "AzureNativeVm",
+        "Mssql",
+        "OracleDatabase",
+        "SapHanaDatabase",
+        "LinuxFileset",
+        "NasShare",
+        "O365Mailbox",
+        "ExchangeDatabase",
+        "PhysicalHost",
+        "SomethingNew",
+    ]
+    now = datetime.now(UTC)
+    run = http.post(
+        "/v1/sources/rubrik/kinds/runs",
+        json={"mode": "inventory", "started_at": now.isoformat(), "lookup_seconds": 0},
+    ).json()
+    objects = [{"source_key": t, "rsc_id": t, "name": t, "kind": t} for t in types]
+    http.post(
+        "/v1/sources/rubrik/kinds/objects",
+        json={"run_id": run["id"], "collected_at": now.isoformat(), "objects": objects},
+    )
+    rows = http.get("/v1/assets", params={"source": "kinds", "verdict": "unknown"}).json()
+    assert {r["name"]: r["kind"] for r in rows} == {t: rubrik_kind(t) for t in types}
