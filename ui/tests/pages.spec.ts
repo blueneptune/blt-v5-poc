@@ -234,6 +234,7 @@ test('assets: the gaps first, then any verdict and kind', async ({ page }) => {
 	await expect(page.getByRole('row', { name: /crm/ })).toContainText('rsc-work');
 	await expect(page.getByRole('row', { name: /sales/ })).toHaveCount(0);
 	await expect(page.getByRole('link', { name: /Not protected\s*3/ })).toBeVisible();
+	await expect(page.getByText('3 assets')).toBeVisible();
 
 	await page.getByRole('group', { name: 'Kind' }).getByRole('link', { name: 'VMs' }).click();
 	await expect(page.getByRole('row', { name: /hr/ })).toHaveCount(0);

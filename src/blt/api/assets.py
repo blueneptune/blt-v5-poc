@@ -24,11 +24,12 @@ The verdict:
 # defined inside a factory, and FastAPI resolves their annotations at
 # runtime.
 
+import re
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import AwareDatetime, BaseModel
 from pydantic import Field as PydanticField
 from sqlalchemy import text
@@ -41,39 +42,51 @@ Verdict = Literal["protected", "stale", "unprotected", "excluded", "unknown"]
 VERDICTS: tuple[Verdict, ...] = ("protected", "stale", "unprotected", "excluded", "unknown")
 SourceType = Literal["commvault", "rubrik"]
 
-# Commvault's kinds, and Rubrik's protection statuses, in blt's words.
-_COMMVAULT_KIND = {"client": "host", "instance": "instance", "database": "database", "vm": "vm"}
-_RUBRIK_PROTECTION = {"protected": "protected", "nosla": "unprotected", "donotprotect": "excluded"}
+# Rubrik's object types (VmwareVirtualMachine, Mssql, O365Mailbox,
+# LinuxFileset, Ec2Instance, ...) by what they are: the first rule with a
+# pattern matching the lower-cased type wins. LIKE patterns, so the same
+# rules sort a row in Postgres (_rubrik_kind_sql) and here (rubrik_kind).
+_RUBRIK_KINDS: tuple[tuple[Kind, tuple[str, ...]], ...] = (
+    ("m365", ("o365%", "exchange%", "microsoft365%")),
+    ("file_system", ("%fileset%", "%volumegroup%", "nasshare", "nas")),
+    ("vm", ("%virtualmachine%", "%vm", "%instance", "%ec2%")),
+    (
+        "database",
+        (
+            "%mssql%",
+            "%oracle%",
+            "%database%",
+            "%db2%",
+            "%saphana%",
+            "%mongo%",
+            "%postgres%",
+            "%mysql%",
+            "%sql%",
+        ),
+    ),
+    ("host", ("physicalhost", "windowshost", "linuxhost", "host")),
+)
+
+
+def _like(pattern: str) -> re.Pattern[str]:
+    return re.compile("^" + ".*".join(re.escape(p) for p in pattern.split("%")) + "$")
 
 
 def rubrik_kind(object_type: str | None) -> Kind:
-    """RSC's object types (VmwareVirtualMachine, Mssql, O365Mailbox,
-    LinuxFileset, Ec2Instance, ...) by what they are."""
     t = (object_type or "").lower()
-    if t.startswith(("o365", "exchange", "microsoft365")):
-        return "m365"
-    if "fileset" in t or "volumegroup" in t or t in ("nasshare", "nas"):
-        return "file_system"
-    if "virtualmachine" in t or t.endswith(("vm", "instance")) or "ec2" in t:
-        return "vm"
-    if any(
-        w in t
-        for w in (
-            "mssql",
-            "oracle",
-            "database",
-            "db2",
-            "saphana",
-            "mongo",
-            "postgres",
-            "mysql",
-            "sql",
-        )
-    ):
-        return "database"
-    if t in ("physicalhost", "windowshost", "linuxhost", "host"):
-        return "host"
+    for kind, patterns in _RUBRIK_KINDS:
+        if any(_like(p).match(t) for p in patterns):
+            return kind
     return "other"
+
+
+def _rubrik_kind_sql(column: str) -> str:
+    whens = " ".join(
+        f"WHEN {' OR '.join(f'lower({column}) LIKE {chr(39)}{p}{chr(39)}' for p in patterns)} "
+        f"THEN '{kind}'"
+        for kind, patterns in _RUBRIK_KINDS
+    )
+    return f"CASE {whens} ELSE 'other' END"
 
 
 def verdict(
@@ -140,55 +153,71 @@ class AssetSummary(BaseModel):
     )
 
 
-# Both inventories, in one shape. A Commvault row's location is its
-# parent's name, and that one's parent's.
-_ROWS = text("""
+# Both inventories, in one shape, each row with its kind, protection and
+# verdict worked out in Postgres. A Commvault row's location is its
+# parent's name, and that one's parent's. :since is now - stale_days.
+_ASSETS = f"""
+WITH rows AS (
     SELECT o.id::text AS id, 'commvault' AS source_type, c.name AS source_name,
+           CASE o.kind WHEN 'client' THEN 'host' WHEN 'instance' THEN 'instance'
+                WHEN 'database' THEN 'database' WHEN 'vm' THEN 'vm' ELSE 'other' END AS kind,
            o.kind AS source_kind, o.name, o.app_type, o.plan, o.protection,
            o.last_backup_at, o.present, o.first_seen_at, o.last_seen_at,
-           concat_ws(' / ', NULLIF(gp.name, ''), NULLIF(p.name, '')) AS location
+           NULLIF(concat_ws(' / ', NULLIF(gp.name, ''), NULLIF(p.name, '')), '') AS location
     FROM commvault.source_object o
     JOIN commvault.commcell c ON c.id = o.commcell_id
     LEFT JOIN commvault.source_object p ON p.id = o.parent_id
     LEFT JOIN commvault.source_object gp ON gp.id = p.parent_id
     UNION ALL
-    SELECT o.id::text, 'rubrik', a.name, o.kind, o.name, NULL, o.sla_domain_name,
-           lower(o.protection_status), o.last_snapshot, o.present, o.first_seen_at,
-           o.last_seen_at, o.location
+    SELECT o.id::text, 'rubrik', a.name, {_rubrik_kind_sql("o.kind")}, o.kind, o.name, NULL,
+           o.sla_domain_name,
+           CASE lower(o.protection_status) WHEN 'protected' THEN 'protected'
+                WHEN 'nosla' THEN 'unprotected' WHEN 'donotprotect' THEN 'excluded' END,
+           o.last_snapshot, o.present, o.first_seen_at, o.last_seen_at, o.location
     FROM rubrik.source_object o
     JOIN rubrik.account a ON a.id = o.account_id
-""")
+),
+assets AS (
+    SELECT *,
+           CASE WHEN protection = 'excluded' THEN 'excluded'
+                WHEN protection = 'unprotected' THEN 'unprotected'
+                WHEN protection IS DISTINCT FROM 'protected' THEN 'unknown'
+                WHEN last_backup_at IS NULL OR last_backup_at < :since THEN 'stale'
+                ELSE 'protected' END AS verdict
+    FROM rows
+)
+"""
+
+_WHERE = """
+WHERE present = :present
+  AND (CAST(:source_type AS text) IS NULL OR source_type = :source_type)
+  AND (CAST(:source AS text) IS NULL OR source_name = :source)
+  AND (CAST(:kinds AS text[]) IS NULL OR kind = ANY(CAST(:kinds AS text[])))
+  AND (CAST(:verdicts AS text[]) IS NULL OR verdict = ANY(CAST(:verdicts AS text[])))
+  AND (CAST(:name AS text) IS NULL OR name ILIKE :name ESCAPE '\\')
+"""
+_LIST = text(
+    _ASSETS
+    + "SELECT *, count(*) OVER () AS total FROM assets"
+    + _WHERE
+    + "ORDER BY source_type, source_name, kind, lower(name), id LIMIT :limit OFFSET :offset"
+)
+_TOTAL = text(_ASSETS + "SELECT count(*) FROM assets" + _WHERE)
+
+_COUNTS = text(
+    _ASSETS
+    + """
+SELECT source_type, source_name, kind, verdict, count(*) FILTER (WHERE present) AS count,
+       max(last_seen_at) AS last_seen
+FROM assets GROUP BY 1, 2, 3, 4 ORDER BY 1, 2, 3, 4
+"""
+)
 
 
-def _assets(session: Session, now: datetime, stale_days: float) -> list[Asset]:
-    out = []
-    for row in session.execute(_ROWS).mappings():
-        if row["source_type"] == "commvault":
-            kind: Kind = _COMMVAULT_KIND.get(row["source_kind"], "other")  # type: ignore[assignment]
-            protection = row["protection"]
-        else:
-            kind = rubrik_kind(row["source_kind"])
-            protection = _RUBRIK_PROTECTION.get(row["protection"] or "")
-        out.append(
-            Asset(
-                id=row["id"],
-                source_type=row["source_type"],
-                source_name=row["source_name"],
-                kind=kind,
-                source_kind=row["source_kind"],
-                name=row["name"],
-                location=row["location"] or None,
-                app_type=row["app_type"],
-                plan=row["plan"],
-                protection=protection,
-                verdict=verdict(protection, row["last_backup_at"], now, stale_days),
-                last_backup_at=row["last_backup_at"],
-                present=row["present"],
-                first_seen_at=row["first_seen_at"],
-                last_seen_at=row["last_seen_at"],
-            )
-        )
-    return out
+def _contains(value: str) -> str:
+    """A LIKE pattern for "contains value", its own % and _ taken literally."""
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 StaleDays = Annotated[
@@ -211,6 +240,7 @@ def assets_router(
     @router.get("", summary="Every asset every source knows of, with its verdict")
     def list_assets(
         session: SessionDep,
+        response: Response,
         stale_days: StaleDays = 7,
         source_type: Annotated[SourceType | None, Query(description="One product.")] = None,
         source: Annotated[str | None, Query(description="One CommCell or account.")] = None,
@@ -226,41 +256,47 @@ def assets_router(
         limit: Annotated[int, Query(ge=1, le=5000, description="Page size.")] = 1000,
         offset: Annotated[int, Query(ge=0, description="Rows to skip.")] = 0,
     ) -> list[Asset]:
-        """By source, kind, then name. Worst first is the reader's choice:
-        filter on `verdict`."""
-        rows = _assets(session, datetime.now(UTC), stale_days)
-        wanted = name.lower() if name else None
-        rows = [
-            r
-            for r in rows
-            if r.present == present
-            and (source_type is None or r.source_type == source_type)
-            and (source is None or r.source_name == source)
-            and (not kind or r.kind in kind)
-            and (not verdict_ or r.verdict in verdict_)
-            and (wanted is None or wanted in r.name.lower())
-        ]
-        rows.sort(key=lambda r: (r.source_type, r.source_name, r.kind, r.name.lower()))
-        return rows[offset : offset + limit]
+        """By source, kind, then name. The `X-Total-Count` header holds
+        how many match, for paging."""
+        params = {
+            "since": datetime.now(UTC) - timedelta(days=stale_days),
+            "present": present,
+            "source_type": source_type,
+            "source": source,
+            "kinds": list(kind) if kind else None,
+            "verdicts": list(verdict_) if verdict_ else None,
+            "name": _contains(name) if name else None,
+        }
+        rows = session.execute(_LIST, {**params, "limit": limit, "offset": offset}).mappings().all()
+        # Past the end there is no row to carry the count; a pager still wants it.
+        total = rows[0]["total"] if rows else session.execute(_TOTAL, params).scalar_one()
+        response.headers["X-Total-Count"] = str(total)
+        return [Asset.model_validate({k: v for k, v in r.items() if k != "total"}) for r in rows]
 
     @router.get("/summary", summary="How many assets of each kind, by source and verdict")
     def summary(session: SessionDep, stale_days: StaleDays = 7) -> AssetSummary:
         """Counts of what the latest inventories list (present rows only)."""
-        counts: dict[tuple[Any, ...], int] = {}
+        rows = session.execute(
+            _COUNTS, {"since": datetime.now(UTC) - timedelta(days=stale_days)}
+        ).mappings()
+        counts: list[AssetCount] = []
         last: dict[str, datetime | None] = {}
-        for r in _assets(session, datetime.now(UTC), stale_days):
-            key = f"{r.source_type}/{r.source_name}"
-            last[key] = max(filter(None, (last.get(key), r.last_seen_at)), default=None)
-            if not r.present:
-                continue
-            k = (r.source_type, r.source_name, r.kind, r.verdict)
-            counts[k] = counts.get(k, 0) + 1
+        for r in rows:
+            key = f"{r['source_type']}/{r['source_name']}"
+            last[key] = max(filter(None, (last.get(key), r["last_seen"])), default=None)
+            if r["count"]:
+                counts.append(
+                    AssetCount(
+                        source_type=r["source_type"],
+                        source_name=r["source_name"],
+                        kind=r["kind"],
+                        verdict=r["verdict"],
+                        count=r["count"],
+                    )
+                )
         return AssetSummary(
             stale_days=stale_days,
-            counts=[
-                AssetCount(source_type=t, source_name=n, kind=k, verdict=v, count=c)
-                for (t, n, k, v), c in sorted(counts.items())
-            ],
+            counts=counts,
             last_inventory=last,  # type: ignore[arg-type]
         )
 
