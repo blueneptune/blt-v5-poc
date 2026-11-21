@@ -514,7 +514,7 @@
               ],
               "query": []
             },
-            "description": "By source, kind, then name. Worst first is the reader's choice:\nfilter on `verdict`."
+            "description": "By source, kind, then name. The `X-Total-Count` header holds\nhow many match, for paging."
           }
         },
         {

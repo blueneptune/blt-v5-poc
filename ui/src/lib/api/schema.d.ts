@@ -212,8 +212,8 @@ export interface paths {
         };
         /**
          * Every asset every source knows of, with its verdict
-         * @description By source, kind, then name. Worst first is the reader's choice:
-         *     filter on `verdict`.
+         * @description By source, kind, then name. The `X-Total-Count` header holds
+         *     how many match, for paging.
          */
         get: operations["list_assets_v1_assets_get"];
         put?: never;
@@ -6362,7 +6362,7 @@ export interface operations {
                 stale_days?: number;
                 /** @description One product. */
                 source_type?: ("commvault" | "rubrik" | "netbackup") | null;
-                /** @description One CommCell, account or primary. */
+                /** @description One CommCell or account. */
                 source?: string | null;
                 /** @description Repeat for several. */
                 kind?: ("host" | "vm" | "database" | "instance" | "file_system" | "m365" | "other")[] | null;

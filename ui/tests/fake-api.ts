@@ -99,17 +99,16 @@ createServer(async (req, res) => {
 		const kinds = q.getAll('kind');
 		const name = q.get('name')?.toLowerCase();
 		const source = q.get('source');
-		return send(
-			res,
-			200,
-			ASSETS.filter(
-				(a) =>
-					(!verdicts.length || verdicts.includes(a.verdict)) &&
-					(!kinds.length || kinds.includes(a.kind)) &&
-					(!source || a.source_name === source) &&
-					(!name || a.name.toLowerCase().includes(name))
-			)
+		const found = ASSETS.filter(
+			(a) =>
+				(!verdicts.length || verdicts.includes(a.verdict)) &&
+				(!kinds.length || kinds.includes(a.kind)) &&
+				(!source || a.source_name === source) &&
+				(!name || a.name.toLowerCase().includes(name))
 		);
+		const offset = Number(q.get('offset') ?? 0);
+		const limit = Number(q.get('limit') ?? 1000);
+		return send(res, 200, found.slice(offset, offset + limit), { 'X-Total-Count': String(found.length) });
 	}
 	if (path === '/v1/assets/summary') {
 		const counts = new Map<string, components['schemas']['AssetCount']>();

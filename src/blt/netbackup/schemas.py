@@ -312,7 +312,7 @@ _HOST_POLICY_TYPES = {
     "NDMP",
     "NASDATAPROTECTION",
 }
-_VM_POLICY_TYPES = {"VMWARE", "HYPERV", "HYPERVISOR"}
+VM_POLICY_TYPES = {"VMWARE", "HYPERV", "HYPERVISOR"}
 _MSSQL_POLICY_TYPES = {"MSSQLSERVER"}
 
 
@@ -321,7 +321,7 @@ def policy_family(policy_type: str | None) -> PolicyFamily:
     t = (policy_type or "").upper().replace("-", "").replace("_", "").replace(" ", "")
     if t in _HOST_POLICY_TYPES:
         return "host"
-    if t in _VM_POLICY_TYPES:
+    if t in VM_POLICY_TYPES:
         return "vm"
     if t in _MSSQL_POLICY_TYPES:
         return "mssql"

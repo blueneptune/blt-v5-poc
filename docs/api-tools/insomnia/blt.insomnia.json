@@ -463,7 +463,7 @@
       "_type": "request",
       "parentId": "fld_0af63ae8e2da5edc9186",
       "name": "Every asset every source knows of, with its verdict",
-      "description": "By source, kind, then name. Worst first is the reader's choice:\nfilter on `verdict`.",
+      "description": "By source, kind, then name. The `X-Total-Count` header holds\nhow many match, for paging.",
       "method": "GET",
       "url": "{{ _.baseUrl }}/v1/assets",
       "parameters": [],

@@ -25,7 +25,14 @@
 	);
 
 	// The page's address with one thing changed, the others kept.
-	const at = (change: { days?: number; kind?: Kind[]; verdict?: Verdict[]; source?: string | null }) => {
+	// Back to page 1 unless a page is given.
+	const at = (change: {
+		days?: number;
+		kind?: Kind[];
+		verdict?: Verdict[];
+		source?: string | null;
+		page?: number;
+	}) => {
 		const q = new URLSearchParams({ days: String(change.days ?? data.days) });
 		for (const k of change.kind ?? data.kind) q.append('kind', k);
 		const verdict = change.verdict ?? data.verdict;
@@ -35,6 +42,7 @@
 		const source = change.source === undefined ? data.source : change.source;
 		if (source) q.set('source', source);
 		if (data.name) q.set('name', data.name);
+		if (change.page && change.page > 1) q.set('page', String(change.page));
 		return `?${q}`;
 	};
 	const toggle = <T,>(list: T[], item: T) =>
@@ -169,8 +177,19 @@
 		</tbody>
 	</table>
 </div>
-{#if data.assets.length === 1000}
-	<p class="text-muted-foreground mt-2 text-xs">The first 1,000 shown: narrow it down to see the rest.</p>
+{#if data.total > 0}
+	<div class="text-muted-foreground mt-2 flex flex-wrap items-center gap-3 text-xs">
+		<span>{data.total.toLocaleString()} {data.total === 1 ? 'asset' : 'assets'}</span>
+		{#if data.pages > 1}
+			{#if data.page > 1}
+				<a class="hover:text-foreground underline" href={at({ page: data.page - 1 })}>Previous</a>
+			{/if}
+			<span>Page {data.page} of {data.pages}</span>
+			{#if data.page < data.pages}
+				<a class="hover:text-foreground underline" href={at({ page: data.page + 1 })}>Next</a>
+			{/if}
+		{/if}
+	</div>
 {/if}
 
 {#if sources.length}

@@ -2,8 +2,7 @@
 
 Each product keeps its own inventory table (commvault.source_object,
 rubrik.source_object, netbackup.source_object), as each says it: this
-reads them side by side and
-says, of every row, the one thing the Assets page asks - is it backed
+reads them side by side and says, of every row, the one thing the Assets page asks - is it backed
 up? Nothing is merged across sources here: a server that is a Commvault
 client and a Rubrik VM is two rows (docs/asset-refinery.md is about
 linking them).
@@ -22,67 +21,79 @@ The verdict:
 
 A NetBackup host's or VM's last backup is the asset service's own where
 it gives one, else the newest successful backup job blt holds for it
-(blt.api.netbackup.last_backup_from_jobs): NetBackup's asset service
-says nothing of a host's backups.
+(the same rules as blt.api.netbackup.last_backup_from_jobs, here in
+SQL): NetBackup's asset service says nothing of a host's backups.
 """
 
 # No `from __future__ import annotations`: see app.py - the routes are
 # defined inside a factory, and FastAPI resolves their annotations at
 # runtime.
 
+import re
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import AwareDatetime, BaseModel
 from pydantic import Field as PydanticField
 from sqlalchemy import text
 from sqlmodel import Session
 
+from blt.netbackup.schemas import VM_POLICY_TYPES
+
 from .docs import UNAUTHORIZED
-from .netbackup import job_backups, last_backup_from_jobs
 
 Kind = Literal["host", "vm", "database", "instance", "file_system", "m365", "other"]
 Verdict = Literal["protected", "stale", "unprotected", "excluded", "unknown"]
 VERDICTS: tuple[Verdict, ...] = ("protected", "stale", "unprotected", "excluded", "unknown")
 SourceType = Literal["commvault", "rubrik", "netbackup"]
 
-# Commvault's kinds, and Rubrik's protection statuses, in blt's words.
-_COMMVAULT_KIND = {"client": "host", "instance": "instance", "database": "database", "vm": "vm"}
-_RUBRIK_PROTECTION = {"protected": "protected", "nosla": "unprotected", "donotprotect": "excluded"}
-# NetBackup's kinds are blt's already (blt.netbackup.assets).
-_NETBACKUP_KIND = {"host": "host", "vm": "vm", "instance": "instance", "database": "database"}
+# Rubrik's object types (VmwareVirtualMachine, Mssql, O365Mailbox,
+# LinuxFileset, Ec2Instance, ...) by what they are: the first rule with a
+# pattern matching the lower-cased type wins. LIKE patterns, so the same
+# rules sort a row in Postgres (_rubrik_kind_sql) and here (rubrik_kind).
+_RUBRIK_KINDS: tuple[tuple[Kind, tuple[str, ...]], ...] = (
+    ("m365", ("o365%", "exchange%", "microsoft365%")),
+    ("file_system", ("%fileset%", "%volumegroup%", "nasshare", "nas")),
+    ("vm", ("%virtualmachine%", "%vm", "%instance", "%ec2%")),
+    (
+        "database",
+        (
+            "%mssql%",
+            "%oracle%",
+            "%database%",
+            "%db2%",
+            "%saphana%",
+            "%mongo%",
+            "%postgres%",
+            "%mysql%",
+            "%sql%",
+        ),
+    ),
+    ("host", ("physicalhost", "windowshost", "linuxhost", "host")),
+)
+
+
+def _like(pattern: str) -> re.Pattern[str]:
+    return re.compile("^" + ".*".join(re.escape(p) for p in pattern.split("%")) + "$")
 
 
 def rubrik_kind(object_type: str | None) -> Kind:
-    """RSC's object types (VmwareVirtualMachine, Mssql, O365Mailbox,
-    LinuxFileset, Ec2Instance, ...) by what they are."""
     t = (object_type or "").lower()
-    if t.startswith(("o365", "exchange", "microsoft365")):
-        return "m365"
-    if "fileset" in t or "volumegroup" in t or t in ("nasshare", "nas"):
-        return "file_system"
-    if "virtualmachine" in t or t.endswith(("vm", "instance")) or "ec2" in t:
-        return "vm"
-    if any(
-        w in t
-        for w in (
-            "mssql",
-            "oracle",
-            "database",
-            "db2",
-            "saphana",
-            "mongo",
-            "postgres",
-            "mysql",
-            "sql",
-        )
-    ):
-        return "database"
-    if t in ("physicalhost", "windowshost", "linuxhost", "host"):
-        return "host"
+    for kind, patterns in _RUBRIK_KINDS:
+        if any(_like(p).match(t) for p in patterns):
+            return kind
     return "other"
+
+
+def _rubrik_kind_sql(column: str) -> str:
+    whens = " ".join(
+        f"WHEN {' OR '.join(f'lower({column}) LIKE {chr(39)}{p}{chr(39)}' for p in patterns)} "
+        f"THEN '{kind}'"
+        for kind, patterns in _RUBRIK_KINDS
+    )
+    return f"CASE {whens} ELSE 'other' END"
 
 
 def verdict(
@@ -151,82 +162,113 @@ class AssetSummary(BaseModel):
     )
 
 
-# Every inventory, in one shape. A Commvault row's location is its
-# parent's name, and that one's parent's.
-_ROWS = text("""
+# A NetBackup host's or VM's newest successful backup job, for those the
+# asset service gives no last backup: by the names its jobs would carry
+# as their client - a host's name and aliases, in jobs of the host
+# policies it is a client of; a VM's display, host or DNS name, in jobs
+# of VM policies.
+_VM_TYPES = ", ".join(f"'{t}'" for t in sorted(VM_POLICY_TYPES))
+_NETBACKUP_LAST = f"""
+nb_names AS (
+    SELECT o.id, o.primary_id, o.kind, o.attributes, lower(n) AS client
+    FROM netbackup.source_object o,
+         LATERAL unnest(CASE o.kind
+             WHEN 'host' THEN ARRAY[o.name] || ARRAY(
+                 SELECT jsonb_array_elements_text(CASE
+                     WHEN jsonb_typeof(o.attributes->'identifiers'->'aliases') = 'array'
+                     THEN o.attributes->'identifiers'->'aliases' ELSE '[]'::jsonb END))
+             ELSE ARRAY[o.name, o.attributes->'identifiers'->>'host_name',
+                        o.attributes->'identifiers'->>'dns_name',
+                        o.attributes->'identifiers'->>'display_name'] END) AS n
+    WHERE o.last_backup_at IS NULL AND o.kind IN ('host', 'vm') AND n <> ''
+),
+nb_last AS (
+    SELECT n.id, max(j.end_time) AS ended_at
+    FROM nb_names n
+    JOIN netbackup.job j ON j.primary_id = n.primary_id AND lower(j.client_name) = n.client
+    WHERE upper(j.job_type) IN ('BACKUP', 'DBBACKUP', 'SNAPSHOT')
+      AND upper(j.state) = 'DONE' AND j.status IN (0, 1) AND j.end_time IS NOT NULL
+      AND CASE n.kind
+          WHEN 'host' THEN jsonb_typeof(n.attributes->'policies') = 'array'
+                           AND n.attributes->'policies' @> to_jsonb(j.policy_name)
+          ELSE regexp_replace(upper(coalesce(j.policy_type, '')), '[-_ ]', '', 'g')
+               IN ({_VM_TYPES}) END
+    GROUP BY n.id
+),"""
+
+# Every inventory, in one shape, each row with its kind, protection and
+# verdict worked out in Postgres. A Commvault row's location is its
+# parent's name, and that one's parent's. :since is now - stale_days.
+_ASSETS = f"""
+WITH {_NETBACKUP_LAST}
+rows AS (
     SELECT o.id::text AS id, 'commvault' AS source_type, c.name AS source_name,
+           CASE o.kind WHEN 'client' THEN 'host' WHEN 'instance' THEN 'instance'
+                WHEN 'database' THEN 'database' WHEN 'vm' THEN 'vm' ELSE 'other' END AS kind,
            o.kind AS source_kind, o.name, o.app_type, o.plan, o.protection,
            o.last_backup_at, o.present, o.first_seen_at, o.last_seen_at,
-           concat_ws(' / ', NULLIF(gp.name, ''), NULLIF(p.name, '')) AS location
+           NULLIF(concat_ws(' / ', NULLIF(gp.name, ''), NULLIF(p.name, '')), '') AS location
     FROM commvault.source_object o
     JOIN commvault.commcell c ON c.id = o.commcell_id
     LEFT JOIN commvault.source_object p ON p.id = o.parent_id
     LEFT JOIN commvault.source_object gp ON gp.id = p.parent_id
     UNION ALL
-    SELECT o.id::text, 'rubrik', a.name, o.kind, o.name, NULL, o.sla_domain_name,
-           lower(o.protection_status), o.last_snapshot, o.present, o.first_seen_at,
-           o.last_seen_at, o.location
+    SELECT o.id::text, 'rubrik', a.name, {_rubrik_kind_sql("o.kind")}, o.kind, o.name, NULL,
+           o.sla_domain_name,
+           CASE lower(o.protection_status) WHEN 'protected' THEN 'protected'
+                WHEN 'nosla' THEN 'unprotected' WHEN 'donotprotect' THEN 'excluded' END,
+           o.last_snapshot, o.present, o.first_seen_at, o.last_seen_at, o.location
     FROM rubrik.source_object o
     JOIN rubrik.account a ON a.id = o.account_id
     UNION ALL
-    SELECT o.id::text, 'netbackup', p.name, o.kind, o.name, o.app_type, o.plan, o.protection,
-           o.last_backup_at, o.present, o.first_seen_at, o.last_seen_at, o.location
+    SELECT o.id::text, 'netbackup', p.name, o.kind, o.kind, o.name, o.app_type, o.plan,
+           o.protection, coalesce(o.last_backup_at, l.ended_at), o.present, o.first_seen_at,
+           o.last_seen_at, o.location
     FROM netbackup.source_object o
     JOIN netbackup.primary_server p ON p.id = o.primary_id
-""")
-# What a NetBackup row's last backup is derived from when the asset
-# service gives none: its kind, primary, and identifiers.
-_NETBACKUP_EXTRA = text("""
-    SELECT id::text AS id, primary_id, kind, name, attributes
-    FROM netbackup.source_object
-    WHERE last_backup_at IS NULL AND kind IN ('host', 'vm')
-""")
+    LEFT JOIN nb_last l ON l.id = o.id
+),
+assets AS (
+    SELECT *,
+           CASE WHEN protection = 'excluded' THEN 'excluded'
+                WHEN protection = 'unprotected' THEN 'unprotected'
+                WHEN protection IS DISTINCT FROM 'protected' THEN 'unknown'
+                WHEN last_backup_at IS NULL OR last_backup_at < :since THEN 'stale'
+                ELSE 'protected' END AS verdict
+    FROM rows
+)
+"""
+
+_WHERE = """
+WHERE present = :present
+  AND (CAST(:source_type AS text) IS NULL OR source_type = :source_type)
+  AND (CAST(:source AS text) IS NULL OR source_name = :source)
+  AND (CAST(:kinds AS text[]) IS NULL OR kind = ANY(CAST(:kinds AS text[])))
+  AND (CAST(:verdicts AS text[]) IS NULL OR verdict = ANY(CAST(:verdicts AS text[])))
+  AND (CAST(:name AS text) IS NULL OR name ILIKE :name ESCAPE '\\')
+"""
+_LIST = text(
+    _ASSETS
+    + "SELECT *, count(*) OVER () AS total FROM assets"
+    + _WHERE
+    + "ORDER BY source_type, source_name, kind, lower(name), id LIMIT :limit OFFSET :offset"
+)
+_TOTAL = text(_ASSETS + "SELECT count(*) FROM assets" + _WHERE)
+
+_COUNTS = text(
+    _ASSETS
+    + """
+SELECT source_type, source_name, kind, verdict, count(*) FILTER (WHERE present) AS count,
+       max(last_seen_at) AS last_seen
+FROM assets GROUP BY 1, 2, 3, 4 ORDER BY 1, 2, 3, 4
+"""
+)
 
 
-def _assets(session: Session, now: datetime, stale_days: float) -> list[Asset]:
-    out = []
-    derived: dict[str, datetime] = {}
-    extra = session.execute(_NETBACKUP_EXTRA).mappings().all()
-    if extra:
-        backups = job_backups(session)
-        for row in extra:
-            found = last_backup_from_jobs(
-                backups, row["primary_id"], row["kind"], row["name"], row["attributes"] or {}
-            )
-            if found is not None:
-                derived[row["id"]] = found[0]
-    for row in session.execute(_ROWS).mappings():
-        last_backup_at = row["last_backup_at"]
-        if row["source_type"] == "commvault":
-            kind: Kind = _COMMVAULT_KIND.get(row["source_kind"], "other")  # type: ignore[assignment]
-            protection = row["protection"]
-        elif row["source_type"] == "netbackup":
-            kind = _NETBACKUP_KIND.get(row["source_kind"], "other")  # type: ignore[assignment]
-            protection = row["protection"]
-            last_backup_at = last_backup_at or derived.get(row["id"])
-        else:
-            kind = rubrik_kind(row["source_kind"])
-            protection = _RUBRIK_PROTECTION.get(row["protection"] or "")
-        out.append(
-            Asset(
-                id=row["id"],
-                source_type=row["source_type"],
-                source_name=row["source_name"],
-                kind=kind,
-                source_kind=row["source_kind"],
-                name=row["name"],
-                location=row["location"] or None,
-                app_type=row["app_type"],
-                plan=row["plan"],
-                protection=protection,
-                verdict=verdict(protection, last_backup_at, now, stale_days),
-                last_backup_at=last_backup_at,
-                present=row["present"],
-                first_seen_at=row["first_seen_at"],
-                last_seen_at=row["last_seen_at"],
-            )
-        )
-    return out
+def _contains(value: str) -> str:
+    """A LIKE pattern for "contains value", its own % and _ taken literally."""
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 StaleDays = Annotated[
@@ -249,11 +291,10 @@ def assets_router(
     @router.get("", summary="Every asset every source knows of, with its verdict")
     def list_assets(
         session: SessionDep,
+        response: Response,
         stale_days: StaleDays = 7,
         source_type: Annotated[SourceType | None, Query(description="One product.")] = None,
-        source: Annotated[
-            str | None, Query(description="One CommCell, account or primary.")
-        ] = None,
+        source: Annotated[str | None, Query(description="One CommCell or account.")] = None,
         kind: Annotated[list[Kind] | None, Query(description="Repeat for several.")] = None,
         verdict_: Annotated[
             list[Verdict] | None,
@@ -266,41 +307,47 @@ def assets_router(
         limit: Annotated[int, Query(ge=1, le=5000, description="Page size.")] = 1000,
         offset: Annotated[int, Query(ge=0, description="Rows to skip.")] = 0,
     ) -> list[Asset]:
-        """By source, kind, then name. Worst first is the reader's choice:
-        filter on `verdict`."""
-        rows = _assets(session, datetime.now(UTC), stale_days)
-        wanted = name.lower() if name else None
-        rows = [
-            r
-            for r in rows
-            if r.present == present
-            and (source_type is None or r.source_type == source_type)
-            and (source is None or r.source_name == source)
-            and (not kind or r.kind in kind)
-            and (not verdict_ or r.verdict in verdict_)
-            and (wanted is None or wanted in r.name.lower())
-        ]
-        rows.sort(key=lambda r: (r.source_type, r.source_name, r.kind, r.name.lower()))
-        return rows[offset : offset + limit]
+        """By source, kind, then name. The `X-Total-Count` header holds
+        how many match, for paging."""
+        params = {
+            "since": datetime.now(UTC) - timedelta(days=stale_days),
+            "present": present,
+            "source_type": source_type,
+            "source": source,
+            "kinds": list(kind) if kind else None,
+            "verdicts": list(verdict_) if verdict_ else None,
+            "name": _contains(name) if name else None,
+        }
+        rows = session.execute(_LIST, {**params, "limit": limit, "offset": offset}).mappings().all()
+        # Past the end there is no row to carry the count; a pager still wants it.
+        total = rows[0]["total"] if rows else session.execute(_TOTAL, params).scalar_one()
+        response.headers["X-Total-Count"] = str(total)
+        return [Asset.model_validate({k: v for k, v in r.items() if k != "total"}) for r in rows]
 
     @router.get("/summary", summary="How many assets of each kind, by source and verdict")
     def summary(session: SessionDep, stale_days: StaleDays = 7) -> AssetSummary:
         """Counts of what the latest inventories list (present rows only)."""
-        counts: dict[tuple[Any, ...], int] = {}
+        rows = session.execute(
+            _COUNTS, {"since": datetime.now(UTC) - timedelta(days=stale_days)}
+        ).mappings()
+        counts: list[AssetCount] = []
         last: dict[str, datetime | None] = {}
-        for r in _assets(session, datetime.now(UTC), stale_days):
-            key = f"{r.source_type}/{r.source_name}"
-            last[key] = max(filter(None, (last.get(key), r.last_seen_at)), default=None)
-            if not r.present:
-                continue
-            k = (r.source_type, r.source_name, r.kind, r.verdict)
-            counts[k] = counts.get(k, 0) + 1
+        for r in rows:
+            key = f"{r['source_type']}/{r['source_name']}"
+            last[key] = max(filter(None, (last.get(key), r["last_seen"])), default=None)
+            if r["count"]:
+                counts.append(
+                    AssetCount(
+                        source_type=r["source_type"],
+                        source_name=r["source_name"],
+                        kind=r["kind"],
+                        verdict=r["verdict"],
+                        count=r["count"],
+                    )
+                )
         return AssetSummary(
             stale_days=stale_days,
-            counts=[
-                AssetCount(source_type=t, source_name=n, kind=k, verdict=v, count=c)
-                for (t, n, k, v), c in sorted(counts.items())
-            ],
+            counts=counts,
             last_inventory=last,  # type: ignore[arg-type]
         )
 
