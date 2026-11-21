@@ -215,5 +215,10 @@ export const ASSETS: Asset[] = [
 		id: 'a5', source_type: 'rubrik', source_name: 'rsc-work', kind: 'database', source_kind: 'Mssql',
 		name: 'crm', location: 'sql02', app_type: null, plan: null, protection: 'unprotected',
 		verdict: 'unprotected', last_backup_at: null
+	}),
+	asset({
+		id: 'a6', source_type: 'netbackup', source_name: 'nbu-lab', kind: 'host', source_kind: 'host',
+		name: 'app02', location: null, app_type: null, plan: null, protection: 'unprotected',
+		verdict: 'unprotected', last_backup_at: null, deactivated_policies: ['fs-old']
 	})
 ];

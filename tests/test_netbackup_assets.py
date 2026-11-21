@@ -379,6 +379,10 @@ def test_netbackup_assets_appear_beside_the_others(http: TestClient, blt_api: AP
     assert rows[("vm", "test03")]["verdict"] == "unprotected"
     assert rows[("host", "sql01")]["verdict"] == "stale"
     assert rows[("host", "app02")]["verdict"] == "unprotected"
+    # Only in a deactivated policy: still a gap, but one that says which.
+    assert rows[("host", "app02")]["deactivated_policies"] == ["fs-old"]
+    assert rows[("host", "sql01")]["deactivated_policies"] is None
+    assert rows[("vm", "test03")]["deactivated_policies"] is None
 
     summary = http.get("/v1/assets/summary").json()
     counts = {

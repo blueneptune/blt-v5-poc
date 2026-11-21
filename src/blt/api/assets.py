@@ -13,7 +13,9 @@ The verdict:
   `stale_days`;
 - **stale**: the source protects it, but has no backup that recent;
 - **unprotected**: the source knows of it and nothing protects it - the
-  "discovered, not backed up" list;
+  "discovered, not backed up" list. A NetBackup client only in
+  deactivated policies is unprotected, its `deactivated_policies`
+  naming them;
 - **excluded**: deliberately left out (Commvault's excluded SLA,
   Rubrik's Do Not Protect, SQL Server's tempdb in NetBackup);
 - **unknown**: the source does not say (a Commvault instance, or a row
@@ -136,6 +138,13 @@ class Asset(BaseModel):
         description="protected, unprotected or excluded, as the source sees it."
     )
     verdict: Verdict = PydanticField(description="See the tag's description.")
+    deactivated_policies: list[str] | None = PydanticField(
+        default=None,
+        description=(
+            "Unprotected, but named in these deactivated policies (NetBackup): "
+            "turning one back on would protect it."
+        ),
+    )
     last_backup_at: AwareDatetime | None = PydanticField(description="Its latest backup.")
     present: bool = PydanticField(description="Listed by the source's latest inventory.")
     first_seen_at: AwareDatetime = PydanticField(description="When an inventory first listed it.")
@@ -207,7 +216,8 @@ rows AS (
                 WHEN 'database' THEN 'database' WHEN 'vm' THEN 'vm' ELSE 'other' END AS kind,
            o.kind AS source_kind, o.name, o.app_type, o.plan, o.protection,
            o.last_backup_at, o.present, o.first_seen_at, o.last_seen_at,
-           NULLIF(concat_ws(' / ', NULLIF(gp.name, ''), NULLIF(p.name, '')), '') AS location
+           NULLIF(concat_ws(' / ', NULLIF(gp.name, ''), NULLIF(p.name, '')), '') AS location,
+           NULL::text[] AS deactivated_policies
     FROM commvault.source_object o
     JOIN commvault.commcell c ON c.id = o.commcell_id
     LEFT JOIN commvault.source_object p ON p.id = o.parent_id
@@ -217,13 +227,18 @@ rows AS (
            o.sla_domain_name,
            CASE lower(o.protection_status) WHEN 'protected' THEN 'protected'
                 WHEN 'nosla' THEN 'unprotected' WHEN 'donotprotect' THEN 'excluded' END,
-           o.last_snapshot, o.present, o.first_seen_at, o.last_seen_at, o.location
+           o.last_snapshot, o.present, o.first_seen_at, o.last_seen_at, o.location, NULL
     FROM rubrik.source_object o
     JOIN rubrik.account a ON a.id = o.account_id
     UNION ALL
     SELECT o.id::text, 'netbackup', p.name, o.kind, o.kind, o.name, o.app_type, o.plan,
            o.protection, coalesce(o.last_backup_at, l.ended_at), o.present, o.first_seen_at,
-           o.last_seen_at, o.location
+           o.last_seen_at, o.location,
+           CASE WHEN o.protection = 'unprotected'
+                 AND jsonb_typeof(o.attributes->'inactive_policies') = 'array'
+                 AND jsonb_array_length(o.attributes->'inactive_policies') > 0
+                THEN ARRAY(SELECT jsonb_array_elements_text(o.attributes->'inactive_policies')
+                           ORDER BY 1) END
     FROM netbackup.source_object o
     JOIN netbackup.primary_server p ON p.id = o.primary_id
     LEFT JOIN nb_last l ON l.id = o.id

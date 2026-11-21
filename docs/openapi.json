@@ -5942,6 +5942,21 @@
             "title": "Verdict",
             "description": "See the tag's description."
           },
+          "deactivated_policies": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated Policies",
+            "description": "Unprotected, but named in these deactivated policies (NetBackup): turning one back on would protect it."
+          },
           "last_backup_at": {
             "anyOf": [
               {

@@ -48,7 +48,8 @@ SLA domain (`plan`):
   else it knows of is unprotected: a VM vCenter discovery found in no
   plan or policy, a database on a registered instance in no policy, a
   host with a certificate and no policy, a client only in deactivated
-  policies. `tempdb`, which SQL Server cannot back up, is excluded. An
+  policies (its `deactivated_policies` names them, and the Assets page
+  marks it *in a deactivated policy*). `tempdb`, which SQL Server cannot back up, is excluded. An
   instance protected database by database has no protection of its own
   (unknown: its databases carry the verdicts). The last backup is the
   asset service's `lastSuccessfulBackupTime`; NetBackup gives none for a
