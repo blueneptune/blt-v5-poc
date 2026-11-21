@@ -16,21 +16,26 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import BigInteger, Column, DateTime, Index
+from sqlalchemy import BigInteger, Column, DateTime, Index, UniqueConstraint, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Field, Session, SQLModel, col, func, select
 
 from blt.common.mapping import netbackup_job
 from blt.netbackup.schemas import (
+    JOB_MODES,
     NetBackupJobBatch,
     NetBackupJobOut,
     NetBackupLastRun,
+    NetBackupObjectBatch,
+    NetBackupObjectKind,
+    NetBackupObjectOut,
     NetBackupRunFinish,
     NetBackupRunOut,
     NetBackupRunStart,
     NetBackupSlpBatch,
     NetBackupSlpOut,
+    policy_family,
 )
 from blt.schemas import UpsertResult
 
@@ -153,6 +158,118 @@ class NetBackupSlp(SQLModel, table=True):
     collected_at: datetime = _ts(nullable=False)
 
 
+class NetBackupSourceObject(SQLModel, table=True):
+    """Something a primary says exists: a host, a VM, a SQL Server
+    instance, a database (blt.netbackup.assets). Named, keyed and tracked
+    as Commvault's and Rubrik's `source_object` are (id, kind, source_key,
+    present, first/last seen), so the three read side by side
+    (blt.api.assets)."""
+
+    __tablename__ = "source_object"
+    __table_args__ = (
+        UniqueConstraint("primary_id", "kind", "source_key", name="uq_netbackup_source_object_key"),
+        Index("ix_netbackup_source_object_kind_present", "primary_id", "kind", "present"),
+        {"schema": SCHEMA},
+    )
+
+    # A UUID, so an object can be referred to from outside this database.
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    primary_id: int = Field(foreign_key=f"{SCHEMA}.primary_server.id")
+    kind: str
+    source_key: str
+    name: str = Field(index=True)
+    parent_id: uuid.UUID | None = Field(
+        default=None, foreign_key=f"{SCHEMA}.source_object.id", index=True
+    )
+    app_type: str | None = None
+    location: str | None = None
+    plan: str | None = None
+    protection: str | None = None
+    last_backup_at: datetime | None = _ts()
+    last_backup_job_id: int | None = _big()
+    attributes: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSONB, nullable=False)
+    )
+
+    # False once an inventory run completes without having seen it.
+    present: bool = True
+    first_seen_at: datetime = _ts(nullable=False)
+    last_seen_at: datetime = _ts(nullable=False)
+    last_seen_run_id: int | None = Field(default=None, foreign_key=f"{SCHEMA}.collection_run.id")
+
+
+# The newest successful backup job blt holds per client and policy: what
+# a host's or VM's last backup is when NetBackup's asset service does not
+# say (it never does for a host). Status 0 is success, 1 partial success
+# - something was backed up.
+_JOB_BACKUPS = text("""
+    SELECT primary_id, lower(client_name) AS client, policy_name, policy_type,
+           max(end_time) AS ended_at,
+           (array_agg(job_id ORDER BY end_time DESC NULLS LAST))[1] AS job_id
+    FROM netbackup.job
+    WHERE upper(job_type) IN ('BACKUP', 'DBBACKUP', 'SNAPSHOT')
+      AND upper(state) = 'DONE' AND status IN (0, 1)
+      AND client_name IS NOT NULL AND end_time IS NOT NULL
+    GROUP BY 1, 2, 3, 4
+""")
+
+JobBackups = dict[tuple[int, str], list[tuple[str | None, str | None, datetime, int]]]
+
+
+def job_backups(session: Session) -> JobBackups:
+    """(primary, client name in lower case) -> its successful backups'
+    (policy, policy type, newest end, that job's id)."""
+    out: JobBackups = {}
+    for row in session.execute(_JOB_BACKUPS):
+        out.setdefault((row.primary_id, row.client), []).append(
+            (row.policy_name, row.policy_type, row.ended_at, row.job_id)
+        )
+    return out
+
+
+def last_backup_from_jobs(
+    backups: JobBackups,
+    primary_id: int,
+    kind: str,
+    name: str,
+    attributes: dict[str, Any],
+) -> tuple[datetime, int] | None:
+    """A host's or VM's newest successful backup job, by the names its
+    jobs would carry as their client.
+
+    - A host: jobs of the host policies it is a client of
+      (`attributes.policies`) - not its SQL Server or VM backups, which
+      say nothing about its file systems. A host in no policy has none.
+    - A VM: jobs of VM policies (VMware, Hyper-V, Hypervisor) under its
+      display name, host name or DNS name, whichever the policy's
+      primary VM identifier makes the job's client.
+
+    Instances and databases: a job names only the host, not which
+    database it backed up, so there is nothing to derive."""
+    ids = attributes.get("identifiers") or {}
+    if kind == "host":
+        policies = set(attributes.get("policies") or [])
+        names = {name, *(ids.get("aliases") or [])}
+
+        def wanted(policy: str | None, policy_type: str | None) -> bool:
+            return policy in policies
+
+    elif kind == "vm":
+        names = {name, ids.get("host_name"), ids.get("dns_name"), ids.get("display_name")}
+
+        def wanted(policy: str | None, policy_type: str | None) -> bool:
+            return policy_family(policy_type) == "vm"
+
+    else:
+        return None
+    best: tuple[datetime, int] | None = None
+    for candidate in {n.lower() for n in names if isinstance(n, str) and n}:
+        for policy, policy_type, ended_at, job_id in backups.get((primary_id, candidate), []):
+            if wanted(policy, policy_type) and (best is None or ended_at > best[0]):
+                best = (ended_at, job_id)
+    return best
+
+
 def netbackup_router(
     get_session: Callable[[], Iterator[Session]], require_api_key: Callable[..., None]
 ) -> APIRouter:
@@ -193,7 +310,8 @@ def netbackup_router(
     @router.get("/last-run", summary="Where the last job collection got to")
     def last_run(source_name: NetBackupPrimaryName, session: SessionDep) -> NetBackupLastRun:
         """The primary's watermark and its most recent job run. An unknown
-        primary is not an error: no watermark means do an initial run."""
+        primary is not an error: no watermark means do an initial run.
+        Inventory runs do not count."""
         primary = session.exec(
             select(NetBackupPrimary).where(NetBackupPrimary.name == source_name)
         ).first()
@@ -201,12 +319,14 @@ def netbackup_router(
             return NetBackupLastRun(primary=source_name)
         watermark = session.exec(
             select(func.max(NetBackupRun.started_at)).where(
-                NetBackupRun.primary_id == primary.id, NetBackupRun.status == "succeeded"
+                NetBackupRun.primary_id == primary.id,
+                NetBackupRun.status == "succeeded",
+                col(NetBackupRun.mode).in_(JOB_MODES),
             )
         ).one()
         latest = session.exec(
             select(NetBackupRun)
-            .where(NetBackupRun.primary_id == primary.id)
+            .where(NetBackupRun.primary_id == primary.id, col(NetBackupRun.mode).in_(JOB_MODES))
             .order_by(col(NetBackupRun.started_at).desc())
             .limit(1)
         ).first()
@@ -247,10 +367,23 @@ def netbackup_router(
         body: NetBackupRunFinish,
         session: SessionDep,
     ) -> NetBackupRunOut:
-        """Records how the run went. A succeeded run becomes the new
-        watermark."""
+        """Records how the run went. A succeeded job run becomes the new
+        watermark; a succeeded inventory run marks every object it did not
+        list as no longer present."""
         primary = find_primary(session, source_name)
         run = find_run(session, primary, run_id)
+        if run.mode == "inventory" and body.status == "succeeded":
+            # Only a complete inventory may say something has gone: a
+            # partial one saw less because it stopped.
+            session.execute(
+                update(NetBackupSourceObject)
+                .where(
+                    col(NetBackupSourceObject.primary_id) == run.primary_id,
+                    col(NetBackupSourceObject.present).is_(True),
+                    col(NetBackupSourceObject.last_seen_run_id).is_distinct_from(run.id),
+                )
+                .values(present=False)
+            )
         run.status = body.status
         run.finished_at = body.finished_at
         run.jobs_collected = body.jobs_collected
@@ -341,6 +474,141 @@ def netbackup_router(
             .order_by(col(NetBackupSlp.name))
         )
         return [NetBackupSlpOut.model_validate(r, from_attributes=True) for r in rows]
+
+    @router.post(
+        "/objects",
+        summary="Store a batch of inventory",
+        responses={
+            **not_found("primary or run"),
+            422: {"description": "A parent the batch names has not been sent yet"},
+        },
+    )
+    def upsert_objects(
+        source_name: NetBackupPrimaryName, body: NetBackupObjectBatch, session: SessionDep
+    ) -> UpsertResult:
+        """Hosts, VMs, instances and databases as the primary lists them,
+        during an inventory run, keyed by (kind, source_key). Parents go
+        before their children: hosts, then instances, then databases."""
+        primary = find_primary(session, source_name)
+        find_run(session, primary, body.run_id)
+        if not body.objects:
+            return UpsertResult(received=0, written=0)
+
+        # Parents are named by (kind, key); turn those into ids.
+        wanted = {(o.parent_kind, o.parent_key) for o in body.objects if o.parent_key}
+        parents: dict[tuple[str | None, str | None], uuid.UUID] = {}
+        if wanted:
+            known = session.exec(
+                select(
+                    NetBackupSourceObject.kind,
+                    NetBackupSourceObject.source_key,
+                    NetBackupSourceObject.id,
+                ).where(
+                    NetBackupSourceObject.primary_id == primary.id,
+                    col(NetBackupSourceObject.source_key).in_({key for _, key in wanted}),
+                )
+            ).all()
+            parents = {(kind, key): object_id for kind, key, object_id in known}
+        missing = wanted - set(parents)
+        if missing:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"Unknown parent(s) {sorted(str(m) for m in missing)} - send parents first",
+            )
+
+        rows: dict[tuple[str, str], dict[str, object]] = {}
+        for item in body.objects:
+            rows[(item.kind, item.source_key)] = {
+                **item.model_dump(exclude={"parent_kind", "parent_key"}),
+                "id": uuid.uuid4(),
+                "primary_id": primary.id,
+                "parent_id": parents.get((item.parent_kind, item.parent_key)),
+                "present": True,
+                "first_seen_at": body.collected_at,
+                "last_seen_at": body.collected_at,
+                "last_seen_run_id": body.run_id,
+            }
+        stmt = pg_insert(NetBackupSourceObject).values(list(rows.values()))
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_netbackup_source_object_key",
+            set_={
+                name: stmt.excluded[name]
+                for name in next(iter(rows.values()))
+                if name not in {"id", "primary_id", "kind", "source_key", "first_seen_at"}
+            },
+        )
+        written = len(session.execute(stmt.returning(col(NetBackupSourceObject.id))).all())
+        session.commit()
+        return UpsertResult(received=len(body.objects), written=written)
+
+    @router.get("/objects", summary="List inventory", responses=not_found("primary"))
+    def list_objects(
+        source_name: NetBackupPrimaryName,
+        session: SessionDep,
+        kind: Annotated[
+            NetBackupObjectKind | None, Query(description="host, vm, instance or database.")
+        ] = None,
+        protection: Annotated[
+            str | None, Query(description="protected, unprotected or excluded.")
+        ] = None,
+        name: Annotated[str | None, Query(description="Part of its name, any case.")] = None,
+        present: Annotated[
+            bool | None,
+            Query(description="false: things the latest inventory no longer lists."),
+        ] = None,
+        limit: Annotated[int, Query(ge=1, le=5000, description="Page size.")] = 1000,
+        offset: Annotated[int, Query(ge=0, description="Rows to skip.")] = 0,
+    ) -> list[NetBackupObjectOut]:
+        """What the primary says exists, by kind then name. A host's or
+        VM's last backup is NetBackup's own where its asset service gives
+        one, else the newest successful backup job blt has for it
+        (`last_backup_from`)."""
+        primary = find_primary(session, source_name)
+        assert primary.id is not None
+        query = select(NetBackupSourceObject).where(NetBackupSourceObject.primary_id == primary.id)
+        if kind is not None:
+            query = query.where(NetBackupSourceObject.kind == kind)
+        if protection is not None:
+            query = query.where(NetBackupSourceObject.protection == protection.lower())
+        if name:
+            query = query.where(col(NetBackupSourceObject.name).ilike(f"%{name}%"))
+        if present is not None:
+            query = query.where(col(NetBackupSourceObject.present) == present)
+        query = query.order_by(col(NetBackupSourceObject.kind), col(NetBackupSourceObject.name))
+        found = session.exec(query.limit(limit).offset(offset)).all()
+        backups = job_backups(session) if found else {}
+        out = []
+        for item in found:
+            last, job_id, origin = item.last_backup_at, item.last_backup_job_id, None
+            if last is not None:
+                origin = "netbackup"
+            else:
+                derived = last_backup_from_jobs(
+                    backups, primary.id, item.kind, item.name, item.attributes
+                )
+                if derived is not None:
+                    (last, job_id), origin = derived, "jobs"
+            out.append(
+                NetBackupObjectOut(
+                    id=str(item.id),
+                    kind=item.kind,  # type: ignore[arg-type]
+                    source_key=item.source_key,
+                    name=item.name,
+                    parent_id=str(item.parent_id) if item.parent_id else None,
+                    app_type=item.app_type,
+                    location=item.location,
+                    plan=item.plan,
+                    protection=item.protection,  # type: ignore[arg-type]
+                    last_backup_at=last,
+                    last_backup_from=origin,  # type: ignore[arg-type]
+                    last_backup_job_id=job_id,
+                    present=item.present,
+                    first_seen_at=item.first_seen_at,
+                    last_seen_at=item.last_seen_at,
+                    attributes=item.attributes,
+                )
+            )
+        return out
 
     @router.get("/jobs", summary="List jobs", responses=not_found("primary"))
     def list_jobs(

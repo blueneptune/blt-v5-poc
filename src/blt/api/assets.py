@@ -1,8 +1,8 @@
 """`/v1/assets`: what every backup source says exists, in one shape.
 
 Each product keeps its own inventory table (commvault.source_object,
-rubrik.source_object), as each says it: this reads them side by side and
-says, of every row, the one thing the Assets page asks - is it backed
+rubrik.source_object, netbackup.source_object), as each says it: this
+reads them side by side and says, of every row, the one thing the Assets page asks - is it backed
 up? Nothing is merged across sources here: a server that is a Commvault
 client and a Rubrik VM is two rows (docs/asset-refinery.md is about
 linking them).
@@ -15,9 +15,14 @@ The verdict:
 - **unprotected**: the source knows of it and nothing protects it - the
   "discovered, not backed up" list;
 - **excluded**: deliberately left out (Commvault's excluded SLA,
-  Rubrik's Do Not Protect);
+  Rubrik's Do Not Protect, SQL Server's tempdb in NetBackup);
 - **unknown**: the source does not say (a Commvault instance, or a row
   inventoried before blt recorded protection).
+
+A NetBackup host's or VM's last backup is the asset service's own where
+it gives one, else the newest successful backup job blt holds for it
+(the same rules as blt.api.netbackup.last_backup_from_jobs, here in
+SQL): NetBackup's asset service says nothing of a host's backups.
 """
 
 # No `from __future__ import annotations`: see app.py - the routes are
@@ -35,12 +40,14 @@ from pydantic import Field as PydanticField
 from sqlalchemy import text
 from sqlmodel import Session
 
+from blt.netbackup.schemas import VM_POLICY_TYPES
+
 from .docs import UNAUTHORIZED
 
 Kind = Literal["host", "vm", "database", "instance", "file_system", "m365", "other"]
 Verdict = Literal["protected", "stale", "unprotected", "excluded", "unknown"]
 VERDICTS: tuple[Verdict, ...] = ("protected", "stale", "unprotected", "excluded", "unknown")
-SourceType = Literal["commvault", "rubrik"]
+SourceType = Literal["commvault", "rubrik", "netbackup"]
 
 # Rubrik's object types (VmwareVirtualMachine, Mssql, O365Mailbox,
 # LinuxFileset, Ec2Instance, ...) by what they are: the first rule with a
@@ -107,8 +114,10 @@ class Asset(BaseModel):
     """One thing one source says exists."""
 
     id: str = PydanticField(description="blt's id for the row, in its product's inventory.")
-    source_type: SourceType = PydanticField(description="The product: commvault or rubrik.")
-    source_name: str = PydanticField(description="The CommCell or RSC account.")
+    source_type: SourceType = PydanticField(
+        description="The product: commvault, rubrik or netbackup."
+    )
+    source_name: str = PydanticField(description="The CommCell, RSC account or primary.")
     kind: Kind = PydanticField(
         description="What it is: host, vm, database, instance, file_system, m365 or other."
     )
@@ -137,7 +146,7 @@ class AssetCount(BaseModel):
     """How many of one source's assets of one kind have one verdict."""
 
     source_type: SourceType = PydanticField(description="The product.")
-    source_name: str = PydanticField(description="The CommCell or RSC account.")
+    source_name: str = PydanticField(description="The CommCell, RSC account or primary.")
     kind: Kind = PydanticField(description="What they are.")
     verdict: Verdict = PydanticField(description="Their verdict.")
     count: int = PydanticField(description="How many.")
@@ -153,11 +162,46 @@ class AssetSummary(BaseModel):
     )
 
 
-# Both inventories, in one shape, each row with its kind, protection and
+# A NetBackup host's or VM's newest successful backup job, for those the
+# asset service gives no last backup: by the names its jobs would carry
+# as their client - a host's name and aliases, in jobs of the host
+# policies it is a client of; a VM's display, host or DNS name, in jobs
+# of VM policies.
+_VM_TYPES = ", ".join(f"'{t}'" for t in sorted(VM_POLICY_TYPES))
+_NETBACKUP_LAST = f"""
+nb_names AS (
+    SELECT o.id, o.primary_id, o.kind, o.attributes, lower(n) AS client
+    FROM netbackup.source_object o,
+         LATERAL unnest(CASE o.kind
+             WHEN 'host' THEN ARRAY[o.name] || ARRAY(
+                 SELECT jsonb_array_elements_text(CASE
+                     WHEN jsonb_typeof(o.attributes->'identifiers'->'aliases') = 'array'
+                     THEN o.attributes->'identifiers'->'aliases' ELSE '[]'::jsonb END))
+             ELSE ARRAY[o.name, o.attributes->'identifiers'->>'host_name',
+                        o.attributes->'identifiers'->>'dns_name',
+                        o.attributes->'identifiers'->>'display_name'] END) AS n
+    WHERE o.last_backup_at IS NULL AND o.kind IN ('host', 'vm') AND n <> ''
+),
+nb_last AS (
+    SELECT n.id, max(j.end_time) AS ended_at
+    FROM nb_names n
+    JOIN netbackup.job j ON j.primary_id = n.primary_id AND lower(j.client_name) = n.client
+    WHERE upper(j.job_type) IN ('BACKUP', 'DBBACKUP', 'SNAPSHOT')
+      AND upper(j.state) = 'DONE' AND j.status IN (0, 1) AND j.end_time IS NOT NULL
+      AND CASE n.kind
+          WHEN 'host' THEN jsonb_typeof(n.attributes->'policies') = 'array'
+                           AND n.attributes->'policies' @> to_jsonb(j.policy_name)
+          ELSE regexp_replace(upper(coalesce(j.policy_type, '')), '[-_ ]', '', 'g')
+               IN ({_VM_TYPES}) END
+    GROUP BY n.id
+),"""
+
+# Every inventory, in one shape, each row with its kind, protection and
 # verdict worked out in Postgres. A Commvault row's location is its
 # parent's name, and that one's parent's. :since is now - stale_days.
 _ASSETS = f"""
-WITH rows AS (
+WITH {_NETBACKUP_LAST}
+rows AS (
     SELECT o.id::text AS id, 'commvault' AS source_type, c.name AS source_name,
            CASE o.kind WHEN 'client' THEN 'host' WHEN 'instance' THEN 'instance'
                 WHEN 'database' THEN 'database' WHEN 'vm' THEN 'vm' ELSE 'other' END AS kind,
@@ -176,6 +220,13 @@ WITH rows AS (
            o.last_snapshot, o.present, o.first_seen_at, o.last_seen_at, o.location
     FROM rubrik.source_object o
     JOIN rubrik.account a ON a.id = o.account_id
+    UNION ALL
+    SELECT o.id::text, 'netbackup', p.name, o.kind, o.kind, o.name, o.app_type, o.plan,
+           o.protection, coalesce(o.last_backup_at, l.ended_at), o.present, o.first_seen_at,
+           o.last_seen_at, o.location
+    FROM netbackup.source_object o
+    JOIN netbackup.primary_server p ON p.id = o.primary_id
+    LEFT JOIN nb_last l ON l.id = o.id
 ),
 assets AS (
     SELECT *,

@@ -3,7 +3,7 @@
 is its CA certificate.
 
 - `check_primary(nbu)` - each read blt makes, once: who the server is,
-  storage, SLP images (for the SLP backlog), jobs. Each gives a line
+  storage, SLPs, SLP images (for the SLP backlog), jobs, inventory. Each gives a line
   saying what was found, or why it failed - most often a key whose user
   lacks a permission, or an endpoint the NetBackup version does not have.
 - `fetch_ca_certificates(url)` - GET /security/cacert, which NetBackup
@@ -108,6 +108,20 @@ def check_primary(nbu: NetBackupClient) -> list[Check]:
         steps = sum(len(s.operations) for s in found)
         return f"{len(found)} SLPs, {steps} steps"
 
+    def inventory() -> str:
+        # What the inventory reads (blt.netbackup.assets), a page each.
+        from blt.netbackup.assets import HYPERVISORS, MSSQL
+
+        parts = [f"{len(nbu.policies.list())} policies", f"{len(nbu.hosts.list())} hosts"]
+        for workload in (*HYPERVISORS, MSSQL):
+            try:
+                answer = nbu.raw.assetservice.list_workload_assets(workload, page_limit=1) or {}
+            except NotFoundError:
+                parts.append(f"{workload} not on this primary")
+                continue
+            parts.append(f"{workload} {'readable' if answer.get('data') else 'none discovered'}")
+        return ", ".join(parts)
+
     def jobs() -> str:
         total, recent = nbu.jobs.sample(1)
         line = f"readable ({total if total is not None else len(recent)} jobs)"
@@ -132,6 +146,7 @@ def check_primary(nbu: NetBackupClient) -> list[Check]:
         _attempt("storage (disk pools, storage units)", storage),
         _attempt("SLPs (to trace copies on the Storage page)", slps),
         _attempt("SLP images (for the SLP backlog)", slp_images),
+        _attempt("inventory (policies, hosts, VM and SQL Server assets)", inventory),
         _attempt("jobs", jobs),
     ]
 

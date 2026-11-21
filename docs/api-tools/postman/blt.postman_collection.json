@@ -1585,7 +1585,7 @@
               ],
               "query": []
             },
-            "description": "The primary's watermark and its most recent job run. An unknown\nprimary is not an error: no watermark means do an initial run."
+            "description": "The primary's watermark and its most recent job run. An unknown\nprimary is not an error: no watermark means do an initial run.\nInventory runs do not count."
           }
         },
         {
@@ -1645,7 +1645,7 @@
               ],
               "query": []
             },
-            "description": "Records how the run went. A succeeded run becomes the new\nwatermark.",
+            "description": "Records how the run went. A succeeded job run becomes the new\nwatermark; a succeeded inventory run marks every object it did not\nlist as no longer present.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"finished_at\": \"2026-11-08T14:03:10Z\",\n  \"jobs_collected\": 37,\n  \"status\": \"succeeded\"\n}"
@@ -1756,6 +1756,59 @@
               "query": []
             },
             "description": "Its storage lifecycle policies as last collected, by name."
+          }
+        },
+        {
+          "name": "Store a batch of inventory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "objects"
+              ],
+              "query": []
+            },
+            "description": "Hosts, VMs, instances and databases as the primary lists them,\nduring an inventory run, keyed by (kind, source_key). Parents go\nbefore their children: hosts, then instances, then databases.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collected_at\": \"2026-11-20T05:57:00Z\",\n  \"objects\": [\n    {\n      \"app_type\": \"Standard\",\n      \"kind\": \"host\",\n      \"name\": \"sql01.example.com\",\n      \"plan\": \"fs-daily\",\n      \"protection\": \"protected\",\n      \"source_key\": \"sql01.example.com\"\n    },\n    {\n      \"app_type\": \"SQL Server\",\n      \"kind\": \"instance\",\n      \"name\": \"MSSQLSERVER\",\n      \"parent_key\": \"sql01.example.com\",\n      \"parent_kind\": \"host\",\n      \"source_key\": \"6f1c0e5a-0d5e-4c7e-9a41-2b7f0e1d9c11\"\n    }\n  ],\n  \"run_id\": 812\n}"
+            }
+          }
+        },
+        {
+          "name": "List inventory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sources/netbackup/{{source_name}}/objects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "sources",
+                "netbackup",
+                "{{source_name}}",
+                "objects"
+              ],
+              "query": []
+            },
+            "description": "What the primary says exists, by kind then name. A host's or\nVM's last backup is NetBackup's own where its asset service gives\none, else the newest successful backup job blt has for it\n(`last_backup_from`)."
           }
         },
         {

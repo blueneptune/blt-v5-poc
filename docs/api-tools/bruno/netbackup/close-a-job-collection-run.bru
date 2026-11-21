@@ -19,6 +19,7 @@ body:json {
 }
 
 docs {
-  Records how the run went. A succeeded run becomes the new
-  watermark.
+  Records how the run went. A succeeded job run becomes the new
+  watermark; a succeeded inventory run marks every object it did not
+  list as no longer present.
 }

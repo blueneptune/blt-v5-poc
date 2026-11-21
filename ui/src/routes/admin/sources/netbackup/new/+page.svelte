@@ -31,7 +31,7 @@
 <a href="/admin/sources" class="text-muted-foreground text-sm hover:underline">← Sources</a>
 <h1 class="mt-2 text-2xl font-semibold tracking-tight">Add a NetBackup primary</h1>
 <p class="text-muted-foreground mt-1 max-w-2xl text-sm">
-	blt reads storage, SLP images and jobs from it with an API key. Make the key in NetBackup's web UI
+	blt reads storage, SLPs, jobs and its inventory (assets, hosts, policies) from it with an API key. Make the key in NetBackup's web UI
 	for a user whose role may only <em>read</em> - a service account such as blt_r, not your own. It is
 	saved in Prefect and never shown again.
 </p>

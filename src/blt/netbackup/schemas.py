@@ -1,4 +1,5 @@
-"""The wire contract for NetBackup jobs, between its collector and the API.
+"""The wire contract for NetBackup jobs and inventory, between their
+collectors and the API.
 
 As blt.rubrik.schemas is for Rubrik: both halves import these, so what
 the collector sends is checked by the model the API reads it with.
@@ -20,7 +21,10 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 #           NetBackup's own job retention usually cuts shorter)
 # delta   - every job changed since the watermark, less an overlap
 # full    - forced: every job changed in the history limit
-NetBackupRunMode = Literal["initial", "delta", "full"]
+# inventory - what the primary knows of (blt.netbackup.assets), not jobs:
+#           never a watermark
+NetBackupRunMode = Literal["initial", "delta", "full", "inventory"]
+JOB_MODES: tuple[NetBackupRunMode, ...] = ("initial", "delta", "full")
 NetBackupRunStatus = Literal["running", "succeeded", "failed"]
 
 
@@ -155,7 +159,7 @@ class NetBackupRunStart(BaseModel):
         }
     )
 
-    mode: NetBackupRunMode = Field(description="initial, delta or full.")
+    mode: NetBackupRunMode = Field(description="initial, delta, full or inventory.")
     started_at: AwareDatetime = Field(
         description="When the collector started; a succeeded run's start is the next watermark."
     )
@@ -187,7 +191,7 @@ class NetBackupRunOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(description="The run's id.")
-    mode: NetBackupRunMode = Field(description="initial, delta or full.")
+    mode: NetBackupRunMode = Field(description="initial, delta, full or inventory.")
     status: NetBackupRunStatus = Field(description="running, succeeded or failed.")
     started_at: AwareDatetime = Field(description="When the collector started.")
     finished_at: AwareDatetime | None = Field(default=None, description="When it ended.")
@@ -286,3 +290,148 @@ class NetBackupSlpOut(NetBackupSlpIn):
     """One SLP as blt holds it."""
 
     collected_at: AwareDatetime = Field(description="When it was last read.")
+
+
+# What a primary's inventory lists, in NetBackup's terms: a host (a
+# client, media server or the primary), a VM, a SQL Server instance, a
+# database in one.
+NetBackupObjectKind = Literal["host", "vm", "instance", "database"]
+PolicyFamily = Literal["host", "vm", "mssql", "other"]
+
+# Policy types by what their clients are, in NetBackup's spellings once
+# case, "-" and "_" are dropped: a policy says "MS-Windows", a job
+# "MS_WINDOWS". A host policy backs up the host itself (its file
+# systems); a VM policy, VMs; an MS-SQL-Server policy, instances and
+# databases. Every other type (Oracle, Exchange, Deployment, ...) is not
+# read for the inventory.
+_HOST_POLICY_TYPES = {
+    "STANDARD",
+    "MSWINDOWS",
+    "FLASHBACKUP",
+    "FLASHBACKUPWINDOWS",
+    "NDMP",
+    "NASDATAPROTECTION",
+}
+VM_POLICY_TYPES = {"VMWARE", "HYPERV", "HYPERVISOR"}
+_MSSQL_POLICY_TYPES = {"MSSQLSERVER"}
+
+
+def policy_family(policy_type: str | None) -> PolicyFamily:
+    """What a policy type's clients are: hosts, VMs, SQL Server, other."""
+    t = (policy_type or "").upper().replace("-", "").replace("_", "").replace(" ", "")
+    if t in _HOST_POLICY_TYPES:
+        return "host"
+    if t in VM_POLICY_TYPES:
+        return "vm"
+    if t in _MSSQL_POLICY_TYPES:
+        return "mssql"
+    return "other"
+
+
+NetBackupProtection = Literal["protected", "unprotected", "excluded"]
+
+
+class NetBackupObjectIn(BaseModel):
+    """One thing a primary says exists, as blt.netbackup.assets reads it.
+
+    `source_key` is NetBackup's own id for it: an asset's id in the asset
+    service, or a host's name (NetBackup names a client by its host name
+    everywhere - policies, jobs, images). A parent is named by its own
+    (kind, source_key) and must already have been sent."""
+
+    kind: NetBackupObjectKind = Field(description="host, vm, instance or database.")
+    source_key: str = Field(description="NetBackup's own id for it, unique per kind.")
+    name: str = Field(description="Its name, as NetBackup shows it.")
+    parent_kind: NetBackupObjectKind | None = Field(
+        default=None, description="The parent's kind. The parent must already have been sent."
+    )
+    parent_key: str | None = Field(default=None, description="The parent's source_key.")
+    app_type: str | None = Field(
+        default=None, description='Its workload: "VMware", "SQL Server", "Standard", ...'
+    )
+    location: str | None = Field(
+        default=None, description="Where it is: a VM's vCenter and cluster, a database's host."
+    )
+    plan: str | None = Field(
+        default=None, description="The protection plans or policies protecting it."
+    )
+    protection: NetBackupProtection | None = Field(
+        default=None,
+        description="protected, unprotected or excluded, as NetBackup sees it "
+        "(blt.netbackup.assets). Null where it does not say.",
+    )
+    last_backup_at: AwareDatetime | None = Field(
+        default=None, description="Its last successful backup, where NetBackup says per asset."
+    )
+    last_backup_job_id: int | None = Field(default=None, description="The job that took it.")
+    attributes: dict[str, Any] = Field(
+        default_factory=dict,
+        description="The rest, and `identifiers`: instance and BIOS UUIDs, host and DNS "
+        "names, instance name - what another source would match it by.",
+    )
+
+
+class NetBackupObjectBatch(BaseModel):
+    """Inventory sent during an inventory run, parents first."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "run_id": 812,
+                    "collected_at": "2026-11-20T05:57:00Z",
+                    "objects": [
+                        {
+                            "kind": "host",
+                            "source_key": "sql01.example.com",
+                            "name": "sql01.example.com",
+                            "app_type": "Standard",
+                            "plan": "fs-daily",
+                            "protection": "protected",
+                        },
+                        {
+                            "kind": "instance",
+                            "source_key": "6f1c0e5a-0d5e-4c7e-9a41-2b7f0e1d9c11",
+                            "name": "MSSQLSERVER",
+                            "parent_kind": "host",
+                            "parent_key": "sql01.example.com",
+                            "app_type": "SQL Server",
+                        },
+                    ],
+                }
+            ]
+        }
+    )
+
+    run_id: int = Field(description="The inventory run it belongs to.")
+    collected_at: AwareDatetime = Field(description="When it was read.")
+    objects: list[NetBackupObjectIn] = Field(description="Parents before their children.")
+
+
+class NetBackupObjectOut(BaseModel):
+    """Something a primary says exists, as of its latest inventory."""
+
+    id: str = Field(description="blt's id for it (a UUID).")
+    kind: NetBackupObjectKind = Field(description="host, vm, instance or database.")
+    source_key: str = Field(description="NetBackup's own id for it, unique per kind.")
+    name: str = Field(description="Its name, as NetBackup shows it.")
+    parent_id: str | None = Field(default=None, description="blt's id for its parent.")
+    app_type: str | None = Field(default=None, description="Its workload.")
+    location: str | None = Field(default=None, description="Where it is.")
+    plan: str | None = Field(default=None, description="The plans or policies protecting it.")
+    protection: NetBackupProtection | None = Field(
+        default=None, description="protected, unprotected or excluded, as NetBackup sees it."
+    )
+    last_backup_at: AwareDatetime | None = Field(
+        default=None,
+        description="Its last successful backup: NetBackup's own, else the newest successful "
+        "backup job blt has for it (`last_backup_from`).",
+    )
+    last_backup_from: Literal["netbackup", "jobs"] | None = Field(
+        default=None, description="Where last_backup_at came from."
+    )
+    last_backup_job_id: int | None = Field(default=None, description="The job that took it.")
+    present: bool = Field(description="Listed by the latest inventory.")
+    first_seen_at: AwareDatetime = Field(description="When an inventory first listed it.")
+    last_seen_at: AwareDatetime = Field(description="When an inventory last listed it.")
+    attributes: dict[str, Any] = Field(default_factory=dict, description="The rest.")

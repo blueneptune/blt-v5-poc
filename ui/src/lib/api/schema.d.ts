@@ -1015,6 +1015,7 @@ export interface paths {
          * Where the last job collection got to
          * @description The primary's watermark and its most recent job run. An unknown
          *     primary is not an error: no watermark means do an initial run.
+         *     Inventory runs do not count.
          */
         get: operations["last_run_v1_sources_netbackup__source_name__last_run_get"];
         put?: never;
@@ -1057,8 +1058,9 @@ export interface paths {
         put?: never;
         /**
          * Close a job collection run
-         * @description Records how the run went. A succeeded run becomes the new
-         *     watermark.
+         * @description Records how the run went. A succeeded job run becomes the new
+         *     watermark; a succeeded inventory run marks every object it did not
+         *     list as no longer present.
          */
         post: operations["finish_run_v1_sources_netbackup__source_name__runs__run_id__finish_post"];
         delete?: never;
@@ -1112,6 +1114,35 @@ export interface paths {
          *     older than what is stored is left alone.
          */
         post: operations["replace_slps_v1_sources_netbackup__source_name__slps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sources/netbackup/{source_name}/objects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List inventory
+         * @description What the primary says exists, by kind then name. A host's or
+         *     VM's last backup is NetBackup's own where its asset service gives
+         *     one, else the newest successful backup job blt has for it
+         *     (`last_backup_from`).
+         */
+        get: operations["list_objects_v1_sources_netbackup__source_name__objects_get"];
+        put?: never;
+        /**
+         * Store a batch of inventory
+         * @description Hosts, VMs, instances and databases as the primary lists them,
+         *     during an inventory run, keyed by (kind, source_key). Parents go
+         *     before their children: hosts, then instances, then databases.
+         */
+        post: operations["upsert_objects_v1_sources_netbackup__source_name__objects_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1178,13 +1209,13 @@ export interface components {
             id: string;
             /**
              * Source Type
-             * @description The product: commvault or rubrik.
+             * @description The product: commvault, rubrik or netbackup.
              * @enum {string}
              */
-            source_type: "commvault" | "rubrik";
+            source_type: "commvault" | "rubrik" | "netbackup";
             /**
              * Source Name
-             * @description The CommCell or RSC account.
+             * @description The CommCell, RSC account or primary.
              */
             source_name: string;
             /**
@@ -1262,10 +1293,10 @@ export interface components {
              * @description The product.
              * @enum {string}
              */
-            source_type: "commvault" | "rubrik";
+            source_type: "commvault" | "rubrik" | "netbackup";
             /**
              * Source Name
-             * @description The CommCell or RSC account.
+             * @description The CommCell, RSC account or primary.
              */
             source_name: string;
             /**
@@ -2998,6 +3029,215 @@ export interface components {
             last_run?: components["schemas"]["NetBackupRunOut"] | null;
         };
         /**
+         * NetBackupObjectBatch
+         * @description Inventory sent during an inventory run, parents first.
+         * @example {
+         *       "collected_at": "2026-11-20T05:57:00Z",
+         *       "objects": [
+         *         {
+         *           "app_type": "Standard",
+         *           "kind": "host",
+         *           "name": "sql01.example.com",
+         *           "plan": "fs-daily",
+         *           "protection": "protected",
+         *           "source_key": "sql01.example.com"
+         *         },
+         *         {
+         *           "app_type": "SQL Server",
+         *           "kind": "instance",
+         *           "name": "MSSQLSERVER",
+         *           "parent_key": "sql01.example.com",
+         *           "parent_kind": "host",
+         *           "source_key": "6f1c0e5a-0d5e-4c7e-9a41-2b7f0e1d9c11"
+         *         }
+         *       ],
+         *       "run_id": 812
+         *     }
+         */
+        NetBackupObjectBatch: {
+            /**
+             * Run Id
+             * @description The inventory run it belongs to.
+             */
+            run_id: number;
+            /**
+             * Collected At
+             * Format: date-time
+             * @description When it was read.
+             */
+            collected_at: string;
+            /**
+             * Objects
+             * @description Parents before their children.
+             */
+            objects: components["schemas"]["NetBackupObjectIn"][];
+        };
+        /**
+         * NetBackupObjectIn
+         * @description One thing a primary says exists, as blt.netbackup.assets reads it.
+         *
+         *     `source_key` is NetBackup's own id for it: an asset's id in the asset
+         *     service, or a host's name (NetBackup names a client by its host name
+         *     everywhere - policies, jobs, images). A parent is named by its own
+         *     (kind, source_key) and must already have been sent.
+         */
+        NetBackupObjectIn: {
+            /**
+             * Kind
+             * @description host, vm, instance or database.
+             * @enum {string}
+             */
+            kind: "host" | "vm" | "instance" | "database";
+            /**
+             * Source Key
+             * @description NetBackup's own id for it, unique per kind.
+             */
+            source_key: string;
+            /**
+             * Name
+             * @description Its name, as NetBackup shows it.
+             */
+            name: string;
+            /**
+             * Parent Kind
+             * @description The parent's kind. The parent must already have been sent.
+             */
+            parent_kind?: ("host" | "vm" | "instance" | "database") | null;
+            /**
+             * Parent Key
+             * @description The parent's source_key.
+             */
+            parent_key?: string | null;
+            /**
+             * App Type
+             * @description Its workload: "VMware", "SQL Server", "Standard", ...
+             */
+            app_type?: string | null;
+            /**
+             * Location
+             * @description Where it is: a VM's vCenter and cluster, a database's host.
+             */
+            location?: string | null;
+            /**
+             * Plan
+             * @description The protection plans or policies protecting it.
+             */
+            plan?: string | null;
+            /**
+             * Protection
+             * @description protected, unprotected or excluded, as NetBackup sees it (blt.netbackup.assets). Null where it does not say.
+             */
+            protection?: ("protected" | "unprotected" | "excluded") | null;
+            /**
+             * Last Backup At
+             * @description Its last successful backup, where NetBackup says per asset.
+             */
+            last_backup_at?: string | null;
+            /**
+             * Last Backup Job Id
+             * @description The job that took it.
+             */
+            last_backup_job_id?: number | null;
+            /**
+             * Attributes
+             * @description The rest, and `identifiers`: instance and BIOS UUIDs, host and DNS names, instance name - what another source would match it by.
+             */
+            attributes?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * NetBackupObjectOut
+         * @description Something a primary says exists, as of its latest inventory.
+         */
+        NetBackupObjectOut: {
+            /**
+             * Id
+             * @description blt's id for it (a UUID).
+             */
+            id: string;
+            /**
+             * Kind
+             * @description host, vm, instance or database.
+             * @enum {string}
+             */
+            kind: "host" | "vm" | "instance" | "database";
+            /**
+             * Source Key
+             * @description NetBackup's own id for it, unique per kind.
+             */
+            source_key: string;
+            /**
+             * Name
+             * @description Its name, as NetBackup shows it.
+             */
+            name: string;
+            /**
+             * Parent Id
+             * @description blt's id for its parent.
+             */
+            parent_id?: string | null;
+            /**
+             * App Type
+             * @description Its workload.
+             */
+            app_type?: string | null;
+            /**
+             * Location
+             * @description Where it is.
+             */
+            location?: string | null;
+            /**
+             * Plan
+             * @description The plans or policies protecting it.
+             */
+            plan?: string | null;
+            /**
+             * Protection
+             * @description protected, unprotected or excluded, as NetBackup sees it.
+             */
+            protection?: ("protected" | "unprotected" | "excluded") | null;
+            /**
+             * Last Backup At
+             * @description Its last successful backup: NetBackup's own, else the newest successful backup job blt has for it (`last_backup_from`).
+             */
+            last_backup_at?: string | null;
+            /**
+             * Last Backup From
+             * @description Where last_backup_at came from.
+             */
+            last_backup_from?: ("netbackup" | "jobs") | null;
+            /**
+             * Last Backup Job Id
+             * @description The job that took it.
+             */
+            last_backup_job_id?: number | null;
+            /**
+             * Present
+             * @description Listed by the latest inventory.
+             */
+            present: boolean;
+            /**
+             * First Seen At
+             * Format: date-time
+             * @description When an inventory first listed it.
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             * @description When an inventory last listed it.
+             */
+            last_seen_at: string;
+            /**
+             * Attributes
+             * @description The rest.
+             */
+            attributes?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * NetBackupPrimaryIn
          * @description A NetBackup primary to add. It starts with collection off, so it
          *     can be checked first.
@@ -3102,10 +3342,10 @@ export interface components {
             id: number;
             /**
              * Mode
-             * @description initial, delta or full.
+             * @description initial, delta, full or inventory.
              * @enum {string}
              */
-            mode: "initial" | "delta" | "full";
+            mode: "initial" | "delta" | "full" | "inventory";
             /**
              * Status
              * @description running, succeeded or failed.
@@ -3151,10 +3391,10 @@ export interface components {
         NetBackupRunStart: {
             /**
              * Mode
-             * @description initial, delta or full.
+             * @description initial, delta, full or inventory.
              * @enum {string}
              */
-            mode: "initial" | "delta" | "full";
+            mode: "initial" | "delta" | "full" | "inventory";
             /**
              * Started At
              * Format: date-time
@@ -6121,7 +6361,7 @@ export interface operations {
                 /** @description A protected asset with no backup this recent is stale. */
                 stale_days?: number;
                 /** @description One product. */
-                source_type?: ("commvault" | "rubrik") | null;
+                source_type?: ("commvault" | "rubrik" | "netbackup") | null;
                 /** @description One CommCell or account. */
                 source?: string | null;
                 /** @description Repeat for several. */
@@ -8578,6 +8818,121 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    list_objects_v1_sources_netbackup__source_name__objects_get: {
+        parameters: {
+            query?: {
+                /** @description host, vm, instance or database. */
+                kind?: ("host" | "vm" | "instance" | "database") | null;
+                /** @description protected, unprotected or excluded. */
+                protection?: string | null;
+                /** @description Part of its name, any case. */
+                name?: string | null;
+                /** @description false: things the latest inventory no longer lists. */
+                present?: boolean | null;
+                /** @description Page size. */
+                limit?: number;
+                /** @description Rows to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetBackupObjectOut"][];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown primary */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_objects_v1_sources_netbackup__source_name__objects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description blt's name for the NetBackup primary - its Prefect block's name, not necessarily the primary's host name. Made the first time a run is started for it. */
+                source_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetBackupObjectBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsertResult"];
+                };
+            };
+            /** @description Missing or invalid `X-API-Key` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Unknown primary or run */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A parent the batch names has not been sent yet */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

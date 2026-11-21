@@ -79,11 +79,27 @@ The SDK picks the API version for 10.0 (7.0), 10.2 (9.0), 10.5 (12.0) and
 10.5 there is no `kilobytesDataTransferred`; blt uses
 `kilobytesTransferred` there.
 
+## Inventory
+
+Twice a day (`blt-netbackup-collect-inventory/twice-daily`, 05:57 and
+17:57 UTC) each primary's hosts, VMs, SQL Server instances and databases
+- protected or only discovered - go into `netbackup.source_object`, and
+from there onto the **Assets** page beside Commvault's and Rubrik's
+([assets.md](assets.md) says what counts as protected).
+`GET /v1/sources/netbackup/{name}/objects` lists them in NetBackup's
+terms. It reads the asset service (`/asset-service/workloads/vmware`,
+`rhv` and `mssql` assets), `/config/hosts` and every host, VM and SQL
+Server policy; the key needs view access to those (assets, hosts,
+policies). An area the key may not read makes the run *failed*: what it
+did read is kept, and nothing is marked gone until a complete run. The
+primary's **Check** has an `inventory` line for it.
+
 ## From a host, without waiting for the schedule
 
 ```
 blt-netbackup jobs nbu-work-01           # one job collection now
 blt-netbackup jobs nbu-work-01 --full    # read back 30 days
+blt-netbackup inventory nbu-work-01      # one inventory now
 ```
 
 It uses the primary's Prefect block, like the flows, and needs blt's API
