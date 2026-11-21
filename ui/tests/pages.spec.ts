@@ -233,8 +233,10 @@ test('assets: the gaps first, then any verdict and kind', async ({ page }) => {
 	await expect(page.getByRole('row', { name: /test-vm/ })).toContainText('Not protected');
 	await expect(page.getByRole('row', { name: /crm/ })).toContainText('rsc-work');
 	await expect(page.getByRole('row', { name: /sales/ })).toHaveCount(0);
-	await expect(page.getByRole('link', { name: /Not protected\s*3/ })).toBeVisible();
-	await expect(page.getByText('3 assets')).toBeVisible();
+	// A NetBackup client only in a deactivated policy says which.
+	await expect(page.getByRole('row', { name: /app02/ })).toContainText('In deactivated policy: fs-old');
+	await expect(page.getByRole('link', { name: /Not protected\s*4/ })).toBeVisible();
+	await expect(page.getByText('4 assets')).toBeVisible();
 
 	await page.getByRole('group', { name: 'Kind' }).getByRole('link', { name: 'VMs' }).click();
 	await expect(page.getByRole('row', { name: /hr/ })).toHaveCount(0);

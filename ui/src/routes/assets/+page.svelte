@@ -162,6 +162,15 @@
 							class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {verdictClass(asset.verdict)}"
 							title={VERDICT_HELP[asset.verdict]}>{VERDICT_LABEL[asset.verdict]}</span
 						>
+						{#if asset.deactivated_policies?.length}
+							<div
+								class="text-muted-foreground mt-0.5 text-xs"
+								title="Turning one of these back on would protect it"
+							>
+								In deactivated {asset.deactivated_policies.length === 1 ? 'policy' : 'policies'}:
+								{asset.deactivated_policies.join(', ')}
+							</div>
+						{/if}
 					</td>
 					<td class="px-3 py-2 text-right whitespace-nowrap" title={when(asset.last_backup_at)}>
 						{asset.last_backup_at ? ago(asset.last_backup_at) : 'never'}

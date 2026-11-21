@@ -1261,6 +1261,11 @@ export interface components {
              */
             verdict: "protected" | "stale" | "unprotected" | "excluded" | "unknown";
             /**
+             * Deactivated Policies
+             * @description Unprotected, but named in these deactivated policies (NetBackup): turning one back on would protect it.
+             */
+            deactivated_policies?: string[] | null;
+            /**
              * Last Backup At
              * @description Its latest backup.
              */
