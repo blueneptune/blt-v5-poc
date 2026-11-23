@@ -8,6 +8,7 @@
 	import { bytes, duration, when } from '$lib/format';
 	import {
 		KINDS,
+		KIND_NAME,
 		PAGE_SIZE,
 		STATES,
 		WINDOWS,
@@ -433,10 +434,17 @@
 		<a
 			href="/jobs/{job.id}"
 			class="block truncate font-medium hover:underline"
-			title={job.asset_name ?? job.product_job_key}
+			title={job.asset_name ?? `${KIND_NAME[job.kind] ?? job.kind} job ${job.product_job_key}`}
 			onclick={(e) => e.stopPropagation()}
 		>
-			{job.asset_name ?? job.product_job_key}
+			{#if job.asset_name}
+				{job.asset_name}
+			{:else}
+				<!-- Nothing named (an image cleanup, an SLP copy of no one image): say what it is. -->
+				<span class="text-muted-foreground font-normal"
+					>{KIND_NAME[job.kind] ?? job.kind} job {job.product_job_key}</span
+				>
+			{/if}
 		</a>
 		{#if job.message && !prefs.shown.includes('message')}
 			<p class="text-muted-foreground truncate text-xs" title={job.message}>{job.message}</p>

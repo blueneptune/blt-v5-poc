@@ -327,6 +327,30 @@ def test_the_common_shape_of_a_netbackup_job() -> None:
     assert unknown_code["message"] == "status 4207"
 
 
+def test_a_netbackup_job_s_asset_is_what_it_worked_on() -> None:
+    base = {
+        **job(7).model_dump(),
+        "first_seen_at": T0,
+        "last_collected_at": T0,
+    }
+
+    def asset(**changes: object) -> str | None:
+        return netbackup_job({**base, **changes})["asset_name"]
+
+    # A backup: its client; a catalog backup's client is the primary.
+    assert asset(job_type="BACKUP", client_name="app05.example.com") == "app05.example.com"
+    assert asset(job_type="DBBACKUP", client_name="nbu-primary", raw={}) == "nbu-primary"
+    # The workload's own name for it wins (a VM's display name).
+    assert asset(job_type="BACKUP", raw={"assetDisplayableName": "web01"}) == "web01"
+    # An SLP copy runs on the primary or a media server: its image's client.
+    copy = {"job_type": "DUPLICATE", "client_name": "nbu-primary", "raw": {}}
+    assert asset(**copy, backup_id="db_01.example.com_1794150000") == "db_01.example.com"
+    assert asset(**copy, backup_id="") is None
+    assert asset(**copy, backup_id="not-an-image-id") is None
+    # Image cleanup names nothing.
+    assert asset(job_type="IMAGEDELETE", client_name="", backup_id="", raw={}) is None
+
+
 def test_a_run_says_where_it_starts_and_how_it_ended(store: NetBackupStore) -> None:
     said: list[str] = []
     sink = logger.add(lambda message: said.append(message.record["message"]), level="INFO")

@@ -313,8 +313,35 @@ def netbackup_state(state: str | None, status: int | None) -> str:
     return "failed"
 
 
+def _backup_id_client(backup_id: str | None) -> str | None:
+    """The client a backup image is of: its backup id is the client's
+    name, "_", and the image's ctime (app01.example.com_1794150000)."""
+    name, _, ctime = (backup_id or "").strip().rpartition("_")
+    return name if name and ctime.isdigit() else None
+
+
+def netbackup_asset(row: Mapping[str, Any], kind: str) -> str | None:
+    """What a NetBackup job worked on, or None when nothing is named.
+
+    The workload's own name for its asset (a VM's display name, a
+    database) where NetBackup gives one; a backup's or restore's client
+    (a catalog backup's client is the primary itself, and that is what
+    it backs up); a copy's (SLP duplication, replication, import) image's
+    client, from its backup id - its clientName is the primary or media
+    server running the copy, or empty. Image cleanup and other
+    maintenance name no asset."""
+    raw = row.get("raw") or {}
+    named = raw.get("assetDisplayableName") if isinstance(raw, Mapping) else None
+    if isinstance(named, str) and named.strip():
+        return named.strip()
+    if kind in ("backup", "restore"):
+        return row.get("client_name") or _backup_id_client(row.get("backup_id"))
+    return _backup_id_client(row.get("backup_id"))
+
+
 def netbackup_job(row: Mapping[str, Any]) -> dict[str, Any]:
     state = netbackup_state(row.get("state"), row.get("status"))
+    kind = _lookup(NETBACKUP_KINDS, row.get("job_type"), "other")
     done = (row.get("state") or "").upper() == "DONE"
     code = row.get("status")
     product_status = (row.get("state") or "") + (f" (status {code})" if done else "")
@@ -327,14 +354,14 @@ def netbackup_job(row: Mapping[str, Any]) -> dict[str, Any]:
         kib = row.get("kilobytes_transferred")
     return {
         "product_job_key": str(row["job_id"]),
-        "kind": _lookup(NETBACKUP_KINDS, row.get("job_type"), "other"),
+        "kind": kind,
         "state": state,
         "product_status": product_status,
         "is_active": state in ACTIVE_STATES,
         "started_at": row.get("start_time"),
         "ended_at": row.get("end_time") if done else None,
         "updated_at": row.get("last_update_time"),
-        "asset_name": row.get("client_name"),
+        "asset_name": netbackup_asset(row, kind),
         "asset_type": row.get("policy_type"),
         # The policy is what makes it run (an SLP may copy it on).
         "protection": row.get("policy_name"),

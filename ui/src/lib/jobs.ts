@@ -10,6 +10,15 @@ export type JobDetail = components['schemas']['CommonJobDetail'];
 export type SummaryRow = components['schemas']['SummaryRow'];
 
 export const KINDS = ['backup', 'restore', 'copy', 'maintenance', 'scan', 'other'] as const;
+/** A kind in a sentence: "Maintenance job 1692". */
+export const KIND_NAME: Record<string, string> = {
+	backup: 'Backup',
+	restore: 'Restore',
+	copy: 'Copy',
+	maintenance: 'Maintenance',
+	scan: 'Scan',
+	other: 'Other'
+};
 export const STATES = [
 	'queued',
 	'running',
