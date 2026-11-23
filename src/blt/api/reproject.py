@@ -40,10 +40,17 @@ def _pages(
         yield rows
 
 
-def reproject(engine: Engine, log: Callable[[str], None] = print) -> int:
+def reproject(
+    engine: Engine,
+    log: Callable[[str], None] = print,
+    products: set[str] | None = None,
+) -> int:
+    """Every product's jobs, or only `products`' (commvault, rubrik,
+    netbackup)."""
     total = 0
+    wanted = products or {"commvault", "rubrik", "netbackup"}
     with Session(engine) as session:
-        for commcell in list(session.exec(select(Commcell))):
+        for commcell in list(session.exec(select(Commcell))) if "commvault" in wanted else []:
             count = 0
             for rows in _pages(session, Job, col(Job.commcell_id), commcell.id, col(Job.job_id)):
                 count += common_jobs.project(session, commcell.source_id, rows, commvault_job)
@@ -52,7 +59,7 @@ def reproject(engine: Engine, log: Callable[[str], None] = print) -> int:
             session.commit()
             log(f"commvault {commcell.name}: {count} jobs")
             total += count
-        for account in list(session.exec(select(RubrikAccount))):
+        for account in list(session.exec(select(RubrikAccount))) if "rubrik" in wanted else []:
             count = 0
             for rows in _pages(
                 session,
@@ -67,7 +74,9 @@ def reproject(engine: Engine, log: Callable[[str], None] = print) -> int:
             session.commit()
             log(f"rubrik {account.name}: {count} jobs")
             total += count
-        for primary in list(session.exec(select(NetBackupPrimary))):
+        for primary in (
+            list(session.exec(select(NetBackupPrimary))) if "netbackup" in wanted else []
+        ):
             count = 0
             for rows in _pages(
                 session,

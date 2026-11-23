@@ -50,7 +50,8 @@ export const JOBS: Job[] = Array.from({ length: 130 }, (_, i) => {
 		started_at: new Date(started).toISOString(),
 		ended_at: running ? null : new Date(started + (i % 7 + 1) * 60_000).toISOString(),
 		updated_at: new Date(started + 60_000).toISOString(),
-		asset_name: `lab-host-${String(i % 17).padStart(2, '0')}`,
+		// An image cleanup names no asset.
+		asset_name: KINDS[i % KINDS.length] === 'maintenance' ? null : `lab-host-${String(i % 17).padStart(2, '0')}`,
 		asset_type: 'host',
 		protection: i % 11 === 0 ? null : i % 2 ? 'Gold' : 'Standard Plan',
 		bytes_transferred: (i % 9) * 1024 ** 2,

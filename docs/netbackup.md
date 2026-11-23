@@ -46,7 +46,7 @@ Where they show:
 |---|---|
 | state | `QUEUED` queued; `ACTIVE` running; `REQUEUED`, `SUSPENDED`, `INCOMPLETE` waiting; once `DONE`, the status code: 0 succeeded, 1 partial, 150 cancelled (stopped by an administrator), 196 skipped (backup window closed), any other failed |
 | kind | `jobType`: BACKUP, ARCHIVE, DBBACKUP, SNAPSHOT backup; RESTORE and instant recovery restore; DUPLICATE, REPLICATE, IMPORT, the SNAP copies and VAULT copy; IMAGEDELETE, tape and housekeeping maintenance; VERIFY, INDEXING scan |
-| asset | client |
+| asset | what it worked on: the workload's own name (`assetDisplayableName`), else a backup's or restore's client, else a copy's image client (from `backupId`); none for image cleanup |
 | protection | policy |
 | message | the status code and its meaning, for a job that did not succeed: `status 58: can't connect to client` |
 | bytes transferred | `kilobytesDataTransferred` (10.5 and later: what was actually sent), else `kilobytesTransferred` |

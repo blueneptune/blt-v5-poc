@@ -73,7 +73,7 @@ floor.
 | `is_active` | will it still change | from state | from state | state not Stopped | state not DONE |
 | `started_at`, `ended_at` | | start / end time | start time / (none) | creation / end time | start / end time |
 | `updated_at` | when the product last changed it | last update time | last updated | (none: collected at) | last update |
-| `asset_name`, `asset_type` | what it ran on, in the product's words | client (+ instance) | object name / type | job's object (per task) | client |
+| `asset_name`, `asset_type` | what it ran on, in the product's words | client (+ instance) | object name / type | job's object (per task) | asset, client, or a copy's image client |
 | `protection` | what made it run | subclient + plan / storage policy | SLA domain *(not yet collected)* | backup job name | policy (+ schedule) |
 | `bytes_transferred` | written to backup storage | size of media | data transferred | transferred | kilobytes × 1024 |
 | `bytes_protected` | the data it covered | size of application | logical size | processed size | (none) |
@@ -98,7 +98,9 @@ refinery ([asset-refinery.md](asset-refinery.md)) is a later column
   everything already collected (it does so whenever `common.job` is
   empty and a product table is not). After a mapping changes,
   `blt-migrate reproject` projects every job again - same blt job ids,
-  new kinds and states. Tried on a copy of the lab's data: 1,107 jobs,
+  new kinds and states. A release's migration can do it for one
+  product by itself (`REPROJECT = ("netbackup",)` in the migration,
+  blt.api.migrate). Tried on a copy of the lab's data: 1,107 jobs,
   none `unknown`.
 - `source_object_id`: Commvault jobs link to their **client**
   (`client_id` = the client's `source_key`; jobSummary has no instance

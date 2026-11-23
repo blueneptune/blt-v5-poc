@@ -79,6 +79,12 @@ test('jobs: asset search', async ({ page }) => {
 	await expect(page.locator('tbody tr')).toHaveCount(expected);
 });
 
+test('jobs: one that names no asset says what it is', async ({ page }) => {
+	await page.goto(`${everyJob}&kind=maintenance`);
+	const cleanup = JOBS.find((j) => j.kind === 'maintenance' && j.asset_name === null);
+	await expect(page.getByRole('link', { name: `Maintenance job ${cleanup?.product_job_key}` })).toBeVisible();
+});
+
 test('jobs: pinned, the filters and column headings stay while the table scrolls', async ({ page }) => {
 	await page.setViewportSize({ width: 1400, height: 700 });
 	await page.goto(everyJob);

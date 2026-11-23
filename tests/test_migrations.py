@@ -61,3 +61,14 @@ def test_blt_tables_are_in_their_schema(database_url: str) -> None:
     finally:
         engine.dispose()
     assert tables == {"source", "job", "storage", "storage_sample"}
+
+
+def test_an_upgrade_past_a_mapping_change_projects_that_product_again() -> None:
+    from blt.api.migrate import alembic_config, reprojections
+
+    config = alembic_config()
+    # From the release before the NetBackup job assets change: NetBackup.
+    assert "netbackup" in reprojections(config, "e3b8f1a6c2d9")
+    # Already past it, or a new database: nothing.
+    assert reprojections(config, "d4a7c1e9b3f5") == set()
+    assert reprojections(config, None) == set()
