@@ -231,6 +231,19 @@ test('sources: each source with its week', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'rsc-work' })).toBeVisible();
 });
 
+test('sources: one not collected within the window is called out and marked', async ({ page }) => {
+	await page.goto('/sources');
+	const banner = page.getByRole('alert');
+	await expect(banner).toContainText('1 source has not been collected in over 12 h: rsc-work.');
+	await expect(banner.getByRole('link', { name: 'cv-toaster' })).toHaveCount(0);
+
+	const late = page.locator('[data-overdue]');
+	await expect(late).toHaveCount(1);
+	await expect(late).toContainText('rsc-work');
+	await expect(late).toContainText('Overdue: last collected 26 h ago');
+	await expect(page.getByRole('link', { name: /cv-toaster/ })).toContainText('Last collected 1 h ago');
+});
+
 test('assets: the gaps first, then any verdict and kind', async ({ page }) => {
 	await page.goto('/assets');
 	await expect(page.getByRole('heading', { name: 'Assets', exact: true })).toBeVisible();

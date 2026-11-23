@@ -5,7 +5,7 @@ each source collected before it existed."""
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from alembic import command
 from fastapi.testclient import TestClient
@@ -89,3 +89,39 @@ def test_the_migration_gives_existing_sources_a_row(database_url: str) -> None:
     # And back down again cleanly.
     command.downgrade(config, "d4a2b6c8e9f1")
     command.upgrade(config, "head")
+
+
+def _collect(http: TestClient, path: str, status: str, finished_at: datetime) -> None:
+    run = http.post(f"/v1/sources/{path}/runs", json=RUN).json()
+    finish = {"status": status, "finished_at": finished_at.isoformat(), "jobs_collected": 0}
+    assert http.post(f"/v1/sources/{path}/runs/{run['id']}/finish", json=finish).status_code == 200
+
+
+def test_a_source_is_overdue_when_no_run_succeeded_in_the_window(http: TestClient) -> None:
+    now = datetime.now(UTC)
+    _collect(http, "commvault/fresh", "succeeded", now - timedelta(hours=1))
+    _collect(http, "rubrik/old", "succeeded", now - timedelta(hours=20))
+    _collect(http, "rubrik/old", "failed", now - timedelta(minutes=5))  # a failure does not count
+    _collect(http, "netbackup/nbu", "succeeded", now - timedelta(hours=13))
+
+    sources = {s["name"]: s for s in http.get("/v1/sources").json()}
+    assert {n: s["overdue"] for n, s in sources.items()} == {
+        "fresh": False,
+        "old": True,
+        "nbu": True,
+    }
+    last = datetime.fromisoformat(sources["old"]["last_collected_at"])
+    assert abs(last - (now - timedelta(hours=20))) < timedelta(seconds=1)
+
+    # The window is the caller's: a day leaves the 13- and 20-hour-old ones in time.
+    wide = {
+        s["name"]: s["overdue"]
+        for s in http.get("/v1/sources", params={"overdue_hours": 24}).json()
+    }
+    assert wide == {"fresh": False, "old": False, "nbu": False}
+
+
+def test_a_new_source_is_not_overdue_before_its_first_run_finishes(http: TestClient) -> None:
+    http.post("/v1/sources/commvault/new/runs", json=RUN)
+    [source] = http.get("/v1/sources").json()
+    assert source["last_collected_at"] is None and source["overdue"] is False

@@ -100,7 +100,7 @@ if [[ "$UI_ENABLED" == true ]]; then
         -e "BLT_API_URL=http://${API_IN_POD}:${API_LISTEN_PORT}" \
         -e BLT_API_KEY \
         -e "BLT_UI_SIGN_IN=${UI_SIGN_IN}" -e "BLT_UI_USER=${BLT_UI_USER:-admin}" \
-        -e BLT_UI_PASSWORD_HASH -e BLT_UI_SESSION_SECRET \
+        -e BLT_UI_PASSWORD_HASH -e BLT_UI_SESSION_SECRET -e BLT_UI_COLLECTION_OVERDUE_HOURS \
         localhost/blt-ui
 else
     podman rm -f --ignore blt-ui >/dev/null

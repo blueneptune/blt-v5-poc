@@ -13,13 +13,13 @@ keep using the name (`/v1/sources/rubrik/work`); the id is for the rest.
 
 import uuid
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
-from sqlalchemy import Column, DateTime, UniqueConstraint
+from sqlalchemy import Column, DateTime, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import Field, Session, SQLModel, col, select
 
@@ -70,6 +70,44 @@ class SourceOut(BaseModel):
         examples=["cv-toaster"],
     )
     created_at: datetime = PydanticField(description="When blt first collected from it.")
+    last_collected_at: datetime | None = PydanticField(
+        default=None,
+        description=(
+            "When its latest succeeded collection run (of any mode) finished; null if none has."
+        ),
+    )
+    overdue: bool = PydanticField(
+        default=False,
+        description=(
+            "No collection run has succeeded within `overdue_hours` - counting from when the"
+            " source was first seen, if none ever has."
+        ),
+    )
+
+
+# The latest succeeded run of each source, over every product's runs.
+_LAST_COLLECTED = text("""
+    SELECT c.source_id, max(r.finished_at) AS at
+    FROM commvault.collection_run r JOIN commvault.commcell c ON c.id = r.commcell_id
+    WHERE r.status = 'succeeded' GROUP BY c.source_id
+    UNION ALL
+    SELECT a.source_id, max(r.finished_at)
+    FROM rubrik.collection_run r JOIN rubrik.account a ON a.id = r.account_id
+    WHERE r.status = 'succeeded' GROUP BY a.source_id
+    UNION ALL
+    SELECT p.source_id, max(r.finished_at)
+    FROM netbackup.collection_run r JOIN netbackup.primary_server p ON p.id = r.primary_id
+    WHERE r.status = 'succeeded' GROUP BY p.source_id
+""")
+
+OverdueHours = Annotated[
+    float,
+    Query(
+        gt=0,
+        le=24 * 90,
+        description="A source with no succeeded collection run this recent is overdue.",
+    ),
+]
 
 
 def sources_router(
@@ -86,13 +124,30 @@ def sources_router(
         type: Annotated[
             str | None, Query(description="Only this product's sources.", examples=["rubrik"])
         ] = None,
+        overdue_hours: OverdueHours = 12,
     ) -> list[SourceOut]:
-        """Every CommCell and RSC account blt has collected from, of any
-        product, with the id that stands for it everywhere. A source
-        appears the first time a run is started for it."""
+        """Every CommCell, RSC account and NetBackup primary blt has
+        collected from, with the id that stands for it everywhere, when it
+        was last collected, and whether that is overdue. A source appears
+        the first time a run is started for it."""
         query = select(Source).order_by(col(Source.type), col(Source.name))
         if type is not None:
             query = query.where(Source.type == type)
-        return [SourceOut.model_validate(s, from_attributes=True) for s in session.exec(query)]
+        last = {row.source_id: row.at for row in session.execute(_LAST_COLLECTED)}
+        since = datetime.now(UTC) - timedelta(hours=overdue_hours)
+        out = []
+        for source in session.exec(query):
+            at = last.get(source.id)
+            out.append(
+                SourceOut(
+                    id=source.id,
+                    type=source.type,
+                    name=source.name,
+                    created_at=source.created_at,
+                    last_collected_at=at,
+                    overdue=(at or source.created_at) < since,
+                )
+            )
+        return out
 
     return router

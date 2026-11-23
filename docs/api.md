@@ -38,7 +38,7 @@ no data.
 | commvault: inventory and reports | `/v1/sources/commvault/{source_name}/...` objects, validation, instance-report | inventory runs; "is everything backed up" |
 | rubrik | `/v1/sources/rubrik/{source_name}/...` last-run, runs, jobs | the Rubrik collector; reading Rubrik jobs |
 | jobs | `/v1/jobs`, `/v1/jobs/summary`, `/v1/jobs/{id}` | every product's jobs in one shape (docs/common-jobs.md); the jobs page |
-| sources | `/v1/sources` | every source of any product, with its id |
+| sources | `/v1/sources` | every source of any product, with its id, when it was last collected, and whether that is overdue (`overdue_hours`, default 12) |
 | health | `/healthz` | probes |
 
 Paths are `/v1/sources/{source type}/{source name}/...`: the source type
