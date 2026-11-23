@@ -37,6 +37,7 @@ render() {
         [UI_BIND]="${UI_BIND:-}" [UI_PORT]="${UI_PORT:-}" [UI_ORIGIN]="${UI_ORIGIN:-}"
         [UI_LISTEN_HOST]="${UI_LISTEN_HOST:-}" [UI_LISTEN_PORT]="${UI_LISTEN_PORT:-}"
         [UI_SIGN_IN]="${UI_SIGN_IN:-on}" [UI_USER]="${BLT_UI_USER:-admin}"
+        [UI_OVERDUE_HOURS]="${BLT_UI_COLLECTION_OVERDUE_HOURS:-12}"
         [API_PREFECT_URL]="$API_PREFECT_URL"
     )
     local -A secrets=(

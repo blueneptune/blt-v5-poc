@@ -11,6 +11,7 @@
           valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_API_KEY}}
         - {name: BLT_UI_SIGN_IN, value: "${UI_SIGN_IN}"}
         - {name: BLT_UI_USER, value: "${UI_USER}"}
+        - {name: BLT_UI_COLLECTION_OVERDUE_HOURS, value: "${UI_OVERDUE_HOURS}"}
         - name: BLT_UI_PASSWORD_HASH
           valueFrom: {secretKeyRef: {name: blt-secrets, key: BLT_UI_PASSWORD_HASH}}
         - name: BLT_UI_SESSION_SECRET

@@ -34,9 +34,10 @@ export interface paths {
         };
         /**
          * Every source blt collects from
-         * @description Every CommCell and RSC account blt has collected from, of any
-         *     product, with the id that stands for it everywhere. A source
-         *     appears the first time a run is started for it.
+         * @description Every CommCell, RSC account and NetBackup primary blt has
+         *     collected from, with the id that stands for it everywhere, when it
+         *     was last collected, and whether that is overdue. A source appears
+         *     the first time a run is started for it.
          */
         get: operations["list_sources_v1_sources_get"];
         put?: never;
@@ -5294,6 +5295,17 @@ export interface components {
              * @description When blt first collected from it.
              */
             created_at: string;
+            /**
+             * Last Collected At
+             * @description When its latest succeeded collection run (of any mode) finished; null if none has.
+             */
+            last_collected_at?: string | null;
+            /**
+             * Overdue
+             * @description No collection run has succeeded within `overdue_hours` - counting from when the source was first seen, if none ever has.
+             * @default false
+             */
+            overdue: boolean;
         };
         /**
          * SourceTiming
@@ -5959,6 +5971,8 @@ export interface operations {
             query?: {
                 /** @description Only this product's sources. */
                 type?: string | null;
+                /** @description A source with no succeeded collection run this recent is overdue. */
+                overdue_hours?: number;
             };
             header?: never;
             path?: never;

@@ -38,7 +38,7 @@
           "sources"
         ],
         "summary": "Every source blt collects from",
-        "description": "Every CommCell and RSC account blt has collected from, of any\nproduct, with the id that stands for it everywhere. A source\nappears the first time a run is started for it.",
+        "description": "Every CommCell, RSC account and NetBackup primary blt has\ncollected from, with the id that stands for it everywhere, when it\nwas last collected, and whether that is overdue. A source appears\nthe first time a run is started for it.",
         "operationId": "list_sources_v1_sources_get",
         "security": [
           {
@@ -66,6 +66,20 @@
               "title": "Type"
             },
             "description": "Only this product's sources."
+          },
+          {
+            "name": "overdue_hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 2160,
+              "exclusiveMinimum": 0,
+              "description": "A source with no succeeded collection run this recent is overdue.",
+              "default": 12,
+              "title": "Overdue Hours"
+            },
+            "description": "A source with no succeeded collection run this recent is overdue."
           }
         ],
         "responses": {
@@ -13417,6 +13431,25 @@
             "format": "date-time",
             "title": "Created At",
             "description": "When blt first collected from it."
+          },
+          "last_collected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Collected At",
+            "description": "When its latest succeeded collection run (of any mode) finished; null if none has."
+          },
+          "overdue": {
+            "type": "boolean",
+            "title": "Overdue",
+            "description": "No collection run has succeeded within `overdue_hours` - counting from when the source was first seen, if none ever has.",
+            "default": false
           }
         },
         "type": "object",

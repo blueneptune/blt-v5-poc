@@ -6,6 +6,13 @@ a page per job and the sources page are built (`ui/`), against
 [ui/README.md](../ui/README.md). What it is for: [vision.md](vision.md)
 section 4.
 
+**Overdue sources (2026-11-23).** The sources page puts a banner over
+the cards naming every source with no succeeded collection run (of any
+mode) in the last `BLT_UI_COLLECTION_OVERDUE_HOURS` hours (default 12),
+and colors those cards amber. The API decides (`GET
+/v1/sources?overdue_hours=`): a source never collected counts from when
+it was first seen, so a new one is not flagged before its first run ends.
+
 ## Decisions (2026-11-02)
 
 | | |

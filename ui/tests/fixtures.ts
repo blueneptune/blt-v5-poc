@@ -22,8 +22,23 @@ const uuid = (n: number, kind = 0) =>
 	`00000000-0000-4000-8${kind}00-${n.toString(16).padStart(12, '0')}`;
 
 export const SOURCES: Source[] = [
-	{ id: uuid(1, 1), type: 'commvault', name: 'cv-toaster', created_at: new Date(now - 30 * 24 * HOUR).toISOString() },
-	{ id: uuid(2, 1), type: 'rubrik', name: 'rsc-work', created_at: new Date(now - 30 * 24 * HOUR).toISOString() }
+	{
+		id: uuid(1, 1),
+		type: 'commvault',
+		name: 'cv-toaster',
+		created_at: new Date(now - 30 * 24 * HOUR).toISOString(),
+		last_collected_at: new Date(now - HOUR).toISOString(),
+		overdue: false
+	},
+	// Not collected for a day: past the 12-hour window.
+	{
+		id: uuid(2, 1),
+		type: 'rubrik',
+		name: 'rsc-work',
+		created_at: new Date(now - 30 * 24 * HOUR).toISOString(),
+		last_collected_at: new Date(now - 26 * HOUR).toISOString(),
+		overdue: true
+	}
 ];
 
 // 130 jobs over the last 20 hours: mostly backups that succeeded, some

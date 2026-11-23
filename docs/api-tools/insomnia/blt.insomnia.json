@@ -261,7 +261,7 @@
       "_type": "request",
       "parentId": "fld_4ba30cbac7a159f0b7ae",
       "name": "Every source blt collects from",
-      "description": "Every CommCell and RSC account blt has collected from, of any\nproduct, with the id that stands for it everywhere. A source\nappears the first time a run is started for it.",
+      "description": "Every CommCell, RSC account and NetBackup primary blt has\ncollected from, with the id that stands for it everywhere, when it\nwas last collected, and whether that is overdue. A source appears\nthe first time a run is started for it.",
       "method": "GET",
       "url": "{{ _.baseUrl }}/v1/sources",
       "parameters": [],
