@@ -13450,6 +13450,49 @@
             "title": "Overdue",
             "description": "No collection run has succeeded within `overdue_hours` - counting from when the source was first seen, if none ever has.",
             "default": false
+          },
+          "last_jobs_collected_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jobs Collected At",
+            "description": "When its latest succeeded job-collection run (any mode but inventory) ended."
+          },
+          "jobs_overdue": {
+            "type": "boolean",
+            "title": "Jobs Overdue",
+            "description": "No job-collection run has succeeded within `overdue_hours` (counting from when the source was first seen, if none ever has). With `overdue` false, its inventory runs are getting through while its job collection is not.",
+            "default": false
+          },
+          "last_jobs_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Jobs Status",
+            "description": "How its latest job-collection run went: running, succeeded, failed, ..."
+          },
+          "last_inventory_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Inventory Status",
+            "description": "How its latest inventory run went; null if it never had one."
           }
         },
         "type": "object",

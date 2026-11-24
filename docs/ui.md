@@ -12,6 +12,13 @@ mode) in the last `BLT_UI_COLLECTION_OVERDUE_HOURS` hours (default 12),
 and colors those cards amber. The API decides (`GET
 /v1/sources?overdue_hours=`): a source never collected counts from when
 it was first seen, so a new one is not flagged before its first run ends.
+Job collection (every run mode but inventory) is judged on its own: a
+source whose inventory runs get through while no job-collection run has
+succeeded in the window is named too ("job collection is failing while
+inventory is succeeding ... Please investigate"), with `failing` only
+when its latest job run did fail. Inventory is judged by its latest
+run's status, not the clock - it runs twice a day, so it is often near
+12 h old.
 
 ## Decisions (2026-11-02)
 

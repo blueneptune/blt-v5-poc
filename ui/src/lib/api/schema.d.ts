@@ -5306,6 +5306,27 @@ export interface components {
              * @default false
              */
             overdue: boolean;
+            /**
+             * Last Jobs Collected At
+             * @description When its latest succeeded job-collection run (any mode but inventory) ended.
+             */
+            last_jobs_collected_at?: string | null;
+            /**
+             * Jobs Overdue
+             * @description No job-collection run has succeeded within `overdue_hours` (counting from when the source was first seen, if none ever has). With `overdue` false, its inventory runs are getting through while its job collection is not.
+             * @default false
+             */
+            jobs_overdue: boolean;
+            /**
+             * Last Jobs Status
+             * @description How its latest job-collection run went: running, succeeded, failed, ...
+             */
+            last_jobs_status?: string | null;
+            /**
+             * Last Inventory Status
+             * @description How its latest inventory run went; null if it never had one.
+             */
+            last_inventory_status?: string | null;
         };
         /**
          * SourceTiming
