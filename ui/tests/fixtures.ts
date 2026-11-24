@@ -28,7 +28,11 @@ export const SOURCES: Source[] = [
 		name: 'cv-toaster',
 		created_at: new Date(now - 30 * 24 * HOUR).toISOString(),
 		last_collected_at: new Date(now - HOUR).toISOString(),
-		overdue: false
+		overdue: false,
+		last_jobs_collected_at: new Date(now - HOUR).toISOString(),
+		jobs_overdue: false,
+		last_jobs_status: 'succeeded',
+		last_inventory_status: 'succeeded'
 	},
 	// Not collected for a day: past the 12-hour window.
 	{
@@ -37,7 +41,24 @@ export const SOURCES: Source[] = [
 		name: 'rsc-work',
 		created_at: new Date(now - 30 * 24 * HOUR).toISOString(),
 		last_collected_at: new Date(now - 26 * HOUR).toISOString(),
-		overdue: true
+		overdue: true,
+		last_jobs_collected_at: new Date(now - 26 * HOUR).toISOString(),
+		jobs_overdue: true,
+		last_jobs_status: 'failed',
+		last_inventory_status: 'failed'
+	},
+	// Inventory gets through; job collection has failed for 30 hours.
+	{
+		id: uuid(3, 1),
+		type: 'netbackup',
+		name: 'nbu-bob',
+		created_at: new Date(now - 30 * 24 * HOUR).toISOString(),
+		last_collected_at: new Date(now - 2 * HOUR).toISOString(),
+		overdue: false,
+		last_jobs_collected_at: new Date(now - 30 * HOUR).toISOString(),
+		jobs_overdue: true,
+		last_jobs_status: 'failed',
+		last_inventory_status: 'succeeded'
 	}
 ];
 

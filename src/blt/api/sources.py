@@ -83,22 +83,52 @@ class SourceOut(BaseModel):
             " source was first seen, if none ever has."
         ),
     )
+    last_jobs_collected_at: datetime | None = PydanticField(
+        default=None,
+        description="When its latest succeeded job-collection run (any mode but inventory) ended.",
+    )
+    jobs_overdue: bool = PydanticField(
+        default=False,
+        description=(
+            "No job-collection run has succeeded within `overdue_hours` (counting from when the"
+            " source was first seen, if none ever has). With `overdue` false, its inventory runs"
+            " are getting through while its job collection is not."
+        ),
+    )
+    last_jobs_status: str | None = PydanticField(
+        default=None,
+        description="How its latest job-collection run went: running, succeeded, failed, ...",
+    )
+    last_inventory_status: str | None = PydanticField(
+        default=None, description="How its latest inventory run went; null if it never had one."
+    )
 
 
-# The latest succeeded run of each source, over every product's runs.
-_LAST_COLLECTED = text("""
-    SELECT c.source_id, max(r.finished_at) AS at
-    FROM commvault.collection_run r JOIN commvault.commcell c ON c.id = r.commcell_id
-    WHERE r.status = 'succeeded' GROUP BY c.source_id
-    UNION ALL
-    SELECT a.source_id, max(r.finished_at)
-    FROM rubrik.collection_run r JOIN rubrik.account a ON a.id = r.account_id
-    WHERE r.status = 'succeeded' GROUP BY a.source_id
-    UNION ALL
-    SELECT p.source_id, max(r.finished_at)
-    FROM netbackup.collection_run r JOIN netbackup.primary_server p ON p.id = r.primary_id
-    WHERE r.status = 'succeeded' GROUP BY p.source_id
-""")
+# Per source, over every product's runs: the latest succeeded run of any
+# mode and of job collection (every mode but inventory), and how the
+# latest job-collection and inventory runs went.
+_PER_PRODUCT = """
+    SELECT {parent}.source_id,
+        max(r.finished_at) FILTER (WHERE r.status = 'succeeded') AS at,
+        max(r.finished_at) FILTER (WHERE r.status = 'succeeded' AND r.mode <> 'inventory')
+            AS jobs_at,
+        (array_agg(r.status ORDER BY r.started_at DESC, r.id DESC)
+            FILTER (WHERE r.mode <> 'inventory'))[1] AS jobs_status,
+        (array_agg(r.status ORDER BY r.started_at DESC, r.id DESC)
+            FILTER (WHERE r.mode = 'inventory'))[1] AS inventory_status
+    FROM {schema}.collection_run r JOIN {schema}.{table} {parent} ON {parent}.id = r.{fk}
+    GROUP BY {parent}.source_id
+"""
+_LAST_COLLECTED = text(
+    "\nUNION ALL\n".join(
+        _PER_PRODUCT.format(schema=schema, table=table, parent="o", fk=fk)
+        for schema, table, fk in (
+            ("commvault", "commcell", "commcell_id"),
+            ("rubrik", "account", "account_id"),
+            ("netbackup", "primary_server", "primary_id"),
+        )
+    )
+)
 
 OverdueHours = Annotated[
     float,
@@ -133,11 +163,13 @@ def sources_router(
         query = select(Source).order_by(col(Source.type), col(Source.name))
         if type is not None:
             query = query.where(Source.type == type)
-        last = {row.source_id: row.at for row in session.execute(_LAST_COLLECTED)}
+        runs = {row.source_id: row for row in session.execute(_LAST_COLLECTED)}
         since = datetime.now(UTC) - timedelta(hours=overdue_hours)
         out = []
         for source in session.exec(query):
-            at = last.get(source.id)
+            row = runs.get(source.id)
+            at = row.at if row else None
+            jobs_at = row.jobs_at if row else None
             out.append(
                 SourceOut(
                     id=source.id,
@@ -146,6 +178,10 @@ def sources_router(
                     created_at=source.created_at,
                     last_collected_at=at,
                     overdue=(at or source.created_at) < since,
+                    last_jobs_collected_at=jobs_at,
+                    jobs_overdue=(jobs_at or source.created_at) < since,
+                    last_jobs_status=row.jobs_status if row else None,
+                    last_inventory_status=row.inventory_status if row else None,
                 )
             )
         return out

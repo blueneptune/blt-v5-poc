@@ -231,17 +231,22 @@ test('sources: each source with its week', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'rsc-work' })).toBeVisible();
 });
 
-test('sources: one not collected within the window is called out and marked', async ({ page }) => {
+test('sources: late collection is called out and marked, job collection apart from inventory', async ({ page }) => {
 	await page.goto('/sources');
 	const banner = page.getByRole('alert');
-	await expect(banner).toContainText('1 source has not been collected in over 12 h: rsc-work.');
-	await expect(banner.getByRole('link', { name: 'cv-toaster' })).toHaveCount(0);
+	await expect(banner).toContainText('rsc-work (rubrik) has not been collected in over 12 h (last 26 h ago).');
+	await expect(banner).toContainText(
+		'Source nbu-bob (netbackup): job collection is failing while inventory is succeeding (jobs last collected 30 h ago). Please investigate.'
+	);
+	await expect(banner.getByRole('link', { name: /cv-toaster/ })).toHaveCount(0);
 
 	const late = page.locator('[data-overdue]');
-	await expect(late).toHaveCount(1);
-	await expect(late).toContainText('rsc-work');
-	await expect(late).toContainText('Overdue: last collected 26 h ago');
-	await expect(page.getByRole('link', { name: /cv-toaster/ })).toContainText('Last collected 1 h ago');
+	await expect(late).toHaveCount(2);
+	await expect(late.filter({ hasText: 'rsc-work' })).toContainText('Overdue: last collected 26 h ago');
+	await expect(late.filter({ hasText: 'nbu-bob' })).toContainText(
+		'Job collection failing: jobs last collected 30 h ago; inventory OK'
+	);
+	await expect(page.locator('a[href*="source=cv-toaster"]')).toContainText('Last collected 1 h ago');
 });
 
 test('assets: the gaps first, then any verdict and kind', async ({ page }) => {

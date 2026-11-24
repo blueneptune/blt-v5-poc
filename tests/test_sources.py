@@ -91,8 +91,10 @@ def test_the_migration_gives_existing_sources_a_row(database_url: str) -> None:
     command.upgrade(config, "head")
 
 
-def _collect(http: TestClient, path: str, status: str, finished_at: datetime) -> None:
-    run = http.post(f"/v1/sources/{path}/runs", json=RUN).json()
+def _collect(
+    http: TestClient, path: str, status: str, finished_at: datetime, mode: str = "delta"
+) -> None:
+    run = http.post(f"/v1/sources/{path}/runs", json={**RUN, "mode": mode}).json()
     finish = {"status": status, "finished_at": finished_at.isoformat(), "jobs_collected": 0}
     assert http.post(f"/v1/sources/{path}/runs/{run['id']}/finish", json=finish).status_code == 200
 
@@ -125,3 +127,21 @@ def test_a_new_source_is_not_overdue_before_its_first_run_finishes(http: TestCli
     http.post("/v1/sources/commvault/new/runs", json=RUN)
     [source] = http.get("/v1/sources").json()
     assert source["last_collected_at"] is None and source["overdue"] is False
+
+
+def test_job_collection_failing_while_inventory_succeeds_is_told_apart(http: TestClient) -> None:
+    now = datetime.now(UTC)
+    _collect(http, "netbackup/bob", "succeeded", now - timedelta(hours=30))
+    _collect(http, "netbackup/bob", "failed", now - timedelta(minutes=10))
+    _collect(http, "netbackup/bob", "succeeded", now - timedelta(hours=2), mode="inventory")
+    _collect(http, "commvault/fine", "succeeded", now - timedelta(hours=1))
+    _collect(http, "commvault/fine", "succeeded", now - timedelta(hours=1), mode="inventory")
+
+    sources = {s["name"]: s for s in http.get("/v1/sources").json()}
+    bob, fine = sources["bob"], sources["fine"]
+    # Inventory got through, so bob is not overdue as a whole - but its jobs are.
+    assert bob["overdue"] is False and bob["jobs_overdue"] is True
+    assert bob["last_jobs_status"] == "failed" and bob["last_inventory_status"] == "succeeded"
+    last_jobs = datetime.fromisoformat(bob["last_jobs_collected_at"])
+    assert abs(last_jobs - (now - timedelta(hours=30))) < timedelta(seconds=1)
+    assert fine["jobs_overdue"] is False and fine["last_jobs_status"] == "succeeded"
