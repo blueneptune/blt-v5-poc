@@ -413,7 +413,7 @@ wheels = [
 
 [[package]]
 name = "blt"
-version = "2026.11.23"
+version = "2026.11.24"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
